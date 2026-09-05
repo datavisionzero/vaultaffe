@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { SettingsShell } from "@/settings/SettingsShell";
+import { Users } from "@/settings/Users";
 import { AccountMenu } from "./AccountMenu";
 import { AppSidebar } from "./AppSidebar";
 import { Palette } from "./Palette";
@@ -12,6 +13,11 @@ import { Keys, ShortcutsDialog } from "./ShortcutsDialog";
 import { is, overlaid, typing } from "./shortcuts";
 import { Nowhere, Unbuilt } from "./Unbuilt";
 import { areas, settingsPath, views } from "./views";
+
+/** What an area is for, as the list of areas already says it. */
+function hintOf(id: string): string {
+  return areas.find((area) => area.id === id)!.hint;
+}
 
 /**
  * The frame every screen sits in: the navigation, the header, the palette and
@@ -152,11 +158,18 @@ export function Shell() {
             }
           />
 
+          {/* The settings area, screen by screen rather than by looping over
+              the list: each of these is replaced whole by the one it names, and
+              a loop would hide which of them still is not. */}
           <Route path="/settings" element={<SettingsShell />}>
             <Route index element={<Navigate to={settingsPath} replace />} />
-            {areas.map((area) => (
-              <Route key={area.id} path={area.id} element={<Unbuilt screen={area.label} what={area.hint} />} />
-            ))}
+            <Route path="tokens" element={<Unbuilt screen="Tokens" what={hintOf("tokens")} />} />
+            <Route path="users" element={<Users />} />
+            <Route
+              path="organization"
+              element={<Unbuilt screen="Organization" what={hintOf("organization")} />}
+            />
+            <Route path="profile" element={<Unbuilt screen="Profile" what={hintOf("profile")} />} />
           </Route>
 
           <Route path="*" element={<Nowhere />} />

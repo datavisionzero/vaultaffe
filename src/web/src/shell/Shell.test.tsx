@@ -49,13 +49,15 @@ describe("the frame", () => {
   });
 
   it("keeps the settings areas beside each other, each with its own address", async () => {
-    installInstance({});
+    installInstance({ "GET /api/v1/users": [], "GET /api/v1/invitations": [] });
 
     renderUnderShell("/settings/users", <Shell />);
 
     const nav = screen.getByRole("navigation", { name: "Settings" });
     expect(within(nav).getByRole("link", { name: "Tokens" })).toHaveAttribute("href", "/settings/tokens");
-    expect(await screen.findByRole("heading", { name: "Users" })).toBeInTheDocument();
+    // The area that is open is the screen standing there — the people of the
+    // organization, where an unbuilt placeholder used to be.
+    expect(await screen.findByRole("heading", { name: "People" })).toBeInTheDocument();
   });
 });
 

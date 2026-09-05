@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { api, whenSignedOut, type Me } from "@/api/client";
+import { Doorway } from "@/entry/Doorway";
 import { SessionProvider } from "@/session/Session";
-import { dropToken } from "@/session/token";
+import { dropToken, holdToken } from "@/session/token";
 import { Shell } from "@/shell/Shell";
 
 /**
@@ -98,20 +99,17 @@ export function App() {
       );
 
     case "stranger":
-      // The first run and signing in are the screens the next piece of work
-      // builds; the frame only has to know that they are where a stranger goes.
+      // Signing in, and the link that invites somebody. Whichever of the two
+      // hands over a token, this tab holds it and asks the instance again — so
+      // there is exactly one place that decides who is signed in, and it is the
+      // answer to `me` rather than the answer that carried the token.
       return (
-        <main className="flex min-h-svh flex-col items-center justify-center gap-3 p-6 text-center">
-          <div className="flex items-center gap-2 text-base font-semibold">
-            <span aria-hidden className="size-4.5 rounded-sm bg-brand" />
-            vaultaffe
-          </div>
-          <p className="font-medium">The sign-in screen is not built yet.</p>
-          <p className="max-w-prose text-sm text-muted-foreground">
-            Starting an instance and signing in arrive with the screens for them. The device-code login already has
-            its page: the CLI prints the address, and a person confirms it there.
-          </p>
-        </main>
+        <Doorway
+          onSignedIn={(token) => {
+            holdToken(token);
+            setStanding({ at: "asking" });
+          }}
+        />
       );
 
     case "known":

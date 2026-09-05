@@ -31,6 +31,9 @@ export type Environment = Schemas["Environment"];
 export type Secret = Schemas["Secret"];
 export type Change = Schemas["Change"];
 export type Token = Schemas["Token"];
+export type User = Schemas["User"];
+export type Invitation = Schemas["Invitation"];
+export type InvitationOffer = Schemas["InvitationOffer"];
 export type Problem = Schemas["ProblemDetails"];
 
 /**
@@ -79,7 +82,15 @@ export function whenSignedOut(listener: SignedOutListener): () => void {
   };
 }
 
-const asking = ["/api/v1/me", "/api/v1/sessions", "/api/v1/sessions/current"];
+const asking = [
+  "/api/v1/me",
+  "/api/v1/sessions",
+  "/api/v1/sessions/current",
+  // The two an invited person calls before they are anybody here. A `401` from
+  // either is the answer to the question, and there is no session to end.
+  "/api/v1/invitations/offer",
+  "/api/v1/invitations/acceptance",
+];
 
 api.use({
   // Which endpoint answered is read from the request rather than from
@@ -102,6 +113,26 @@ api.use({
  */
 export function codeOf(problem: Problem | undefined): string | undefined {
   return problem?.code;
+}
+
+/** What the generated client answers, whichever endpoint was asked. */
+export type Answer<T> = { data?: T; error?: unknown; response: Response };
+
+/**
+ * The answer, or the instance's own refusal as something to catch.
+ *
+ * Every act that changes something reads this way, because the two are one
+ * decision: either it happened, or a dialog shows the sentence the instance
+ * answered with, at the act that asked (`docs/human-interface.md`).
+ */
+export async function answered<T>(asking: Promise<Answer<T>>): Promise<T> {
+  const { data, error, response } = await asking;
+
+  if (data === undefined) {
+    throw new Error(describe(error as Problem | undefined, response.status));
+  }
+
+  return data;
 }
 
 /**

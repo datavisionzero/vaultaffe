@@ -55,7 +55,8 @@ more would be a promise the product does not keep.
 | route | screen | primary content | narrow-screen behaviour |
 |---|---|---|---|
 | `/start` | First run | organization name, the first person, their password | centred single column; the only screen reachable before an instance is started |
-| `/login` | Sign in | email and password, and the sentence that a reset is done by an administrator | centred single column |
+| `/login` | Sign in | email and password, and the sentence that a reset is done by an administrator | centred single column; it also stands at **any** address a signed-out reader asks for, so signing in lands where they were going |
+| `/invite` | Join | what the link is for, the address it was written to, a name and a password — or the sentence saying it was used, withdrawn or ran out | centred single column; the code is in the fragment and never in a request line |
 | `/device` | Confirm a login | the eight-consonant code, the password, confirm or deny | centred single column; the code field is the first focus |
 | `/projects` | Projects | every project this session reaches, each with its environments, and a switch for what is deleted and recoverable | one card per project, environments as chips that wrap |
 | `/projects/:project` | Project | the project's environments, each with a key count and its last change, and the project's own acts | environments stack; the acts move into the row's menu |
@@ -63,7 +64,7 @@ more would be a promise the product does not keep.
 | `/projects/:project/:environment/:KEY` | Secret | the masked value with its reveal, the bounded version history, and this key's own change log | one column; the value block stays above the history |
 | `/changes` | Change log | what was changed, by whom and **by what kind of thing**, filtered by project, environment and key | the identity and its type stay; the filters open as a dismissible sheet |
 | `/settings/tokens` | Settings · Tokens | the organization's tokens with kind, name, scopes, binding and standing; creating one; the value of a new one, once | area list folds above the area |
-| `/settings/users` | Settings · Users | the people of the organization, the invitation link to copy, and an administrator's password reset | area list folds above the area |
+| `/settings/users` | Settings · Users | the people of the organization, the invitation link to copy, an administrator's password reset, and the invitations that are still open | area list folds above the area |
 | `/settings/organization` | Settings · Organization | the organization's name | area list folds above the area |
 | `/settings/profile` | Settings · Profile | own name, own password | area list folds above the area |
 
@@ -82,6 +83,14 @@ organization sees and changes everything in it
 ([§6.4](../Specification.md#64-permissions-in-the-mvp)) — the only line is the
 short list of administrative acts, and hiding a control is never the
 authorization check.
+
+**`/login` and `/invite` are not inside the shell either**, and for the same
+reason: there is no session behind them yet. `/invite` is its own address because
+the link an administrator hands over has to lead somewhere on its own; the code
+in it lives in the **fragment**, so it never reaches this instance's access log
+([ADR 0015](./adr/0015-an-invitation-is-a-credential-in-a-link.md)), and
+accepting an invitation signs the new person in rather than sending them to a
+form for the password they have just chosen.
 
 **`/device` is not inside the shell.** It holds no session, asks for a password
 every time, and is reachable while signed in or not
@@ -130,7 +139,7 @@ and a row's acts live in that row's own menu.
 | Environment file | — | import a `.env`, export one | import with replace; **export**, always |
 | Change log | read, filter by project, environment and key, page | — | — |
 | Token | list with kind, name, scopes, binding and standing | create, revoke | revoke |
-| User | list the people of the organization | invite by link, reset a password as administrator, deactivate | reset a password; deactivate |
+| User | list the people of the organization, see who is deactivated | invite by link, withdraw an invitation, reset a password as administrator, deactivate, put back | withdraw; reset a password; deactivate |
 | Organization | read the name | rename | — |
 | Profile | read own name and email | change own name, change own password | — |
 
@@ -221,12 +230,12 @@ screens**, and each of the four says something specific:
 ## What arrives with which screen
 
 The API this document draws on exists for everything above the settings area.
-**Users and the organization's name do not have endpoints yet**: they arrive with
-the screens that need them ([§6.1](../Specification.md#61-web-ui)), and the
-invitation-is-a-link and reset-by-an-administrator behaviour is the shape they
-are built to, because this instance sends no email and that is the price of
-having no external dependency to operate
-([§4](../Specification.md#4-guiding-principles)).
+**The people of the organization arrived with the screens that need them** —
+`/api/v1/users` and `/api/v1/invitations` ([`api.md`](./api.md)) — built to the
+invitation-is-a-link and reset-by-an-administrator shape, because this instance
+sends no email and that is the price of having no external dependency to operate
+([§4](../Specification.md#4-guiding-principles)). **The organization's name does
+not have an endpoint yet** and arrives the same way, with its own screen.
 
 The **missing-key notice** — a key present in one environment and absent from a
 neighbouring one — is explicitly post-MVP and is a display with a dismissal, not

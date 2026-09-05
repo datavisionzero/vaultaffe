@@ -9,6 +9,14 @@ afterEach(cleanup);
 // about here.
 Element.prototype.scrollIntoView ??= () => undefined;
 Element.prototype.scrollTo ??= () => undefined;
+Element.prototype.hasPointerCapture ??= () => false;
+Element.prototype.setPointerCapture ??= () => undefined;
+Element.prototype.releasePointerCapture ??= () => undefined;
+
+// And it has no pointer events at all, which is what a menu opens on. The
+// events a test dispatches are mouse events with a pointer's name, which is
+// enough for the handlers to run — nothing here asserts about a pointer.
+globalThis.PointerEvent ??= MouseEvent as typeof PointerEvent;
 window.matchMedia ??= (query: string) =>
   ({
     matches: false,
