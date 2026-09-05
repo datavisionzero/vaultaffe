@@ -77,7 +77,9 @@ export function renderAt(path: string, element: ReactElement) {
 export function renderUnderShell(path: string, element: ReactElement, me: Me = aPerson) {
   return renderAt(
     path,
-    <SessionProvider value={{ me, signOut: () => undefined }}>{element}</SessionProvider>,
+    <SessionProvider value={{ me, signOut: () => undefined, remember: () => undefined }}>
+      {element}
+    </SessionProvider>,
   );
 }
 

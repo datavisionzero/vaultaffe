@@ -16,6 +16,13 @@ import { SessionContext } from "./context";
 export type Session = {
   me: Me;
   signOut: () => void;
+  /**
+   * What the instance last said about the caller, when a screen has changed it.
+   * Told rather than re-asked: the answer to the act carries the new value, and
+   * asking again would be a second request to learn what the first one already
+   * said.
+   */
+  remember: (me: Me) => void;
 };
 
 export function SessionProvider({ value, children }: { value: Session; children: ReactNode }) {

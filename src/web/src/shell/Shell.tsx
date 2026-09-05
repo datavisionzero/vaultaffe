@@ -9,6 +9,9 @@ import { Project } from "@/catalogue/Project";
 import { Projects } from "@/catalogue/Projects";
 import { Secret } from "@/catalogue/Secret";
 import { SettingsShell } from "@/settings/SettingsShell";
+import { Organization } from "@/settings/Organization";
+import { Profile } from "@/settings/Profile";
+import { Tokens } from "@/settings/Tokens";
 import { Users } from "@/settings/Users";
 import { AccountMenu } from "./AccountMenu";
 import { AppSidebar } from "./AppSidebar";
@@ -16,12 +19,7 @@ import { Palette } from "./Palette";
 import { Keys, ShortcutsDialog } from "./ShortcutsDialog";
 import { is, overlaid, typing } from "./shortcuts";
 import { Nowhere, Unbuilt } from "./Unbuilt";
-import { areas, settingsPath, views } from "./views";
-
-/** What an area is for, as the list of areas already says it. */
-function hintOf(id: string): string {
-  return areas.find((area) => area.id === id)!.hint;
-}
+import { settingsPath, views } from "./views";
 
 /**
  * The frame every screen sits in: the navigation, the header, the palette and
@@ -131,17 +129,13 @@ export function Shell() {
           />
 
           {/* The settings area, screen by screen rather than by looping over
-              the list: each of these is replaced whole by the one it names, and
-              a loop would hide which of them still is not. */}
+              the list: each of these was replaced whole by the one it names. */}
           <Route path="/settings" element={<SettingsShell />}>
             <Route index element={<Navigate to={settingsPath} replace />} />
-            <Route path="tokens" element={<Unbuilt screen="Tokens" what={hintOf("tokens")} />} />
+            <Route path="tokens" element={<Tokens />} />
             <Route path="users" element={<Users />} />
-            <Route
-              path="organization"
-              element={<Unbuilt screen="Organization" what={hintOf("organization")} />}
-            />
-            <Route path="profile" element={<Unbuilt screen="Profile" what={hintOf("profile")} />} />
+            <Route path="organization" element={<Organization />} />
+            <Route path="profile" element={<Profile />} />
           </Route>
 
           <Route path="*" element={<Nowhere />} />

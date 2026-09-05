@@ -117,6 +117,7 @@ export function App() {
         <SessionProvider
           value={{
             me: standing.me,
+            remember: (me) => setStanding({ at: "known", me }),
             signOut: () => {
               // The row stays revoked rather than deleted, so the token goes on
               // authoring everything it ever changed (`docs/api.md`). This tab

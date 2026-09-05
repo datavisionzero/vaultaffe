@@ -283,20 +283,23 @@ The screens sit beside the frame, one directory per part of the matrix.
 an invitation — and neither is inside the shell, because there is no session
 behind them yet. `src/catalogue/` is the product itself: the projects, one
 project, the environment screen and one key. `src/settings/` is the area list
-beside the area. `src/shared/` holds what more than one of them needs — the
+beside the area: the tokens, the people, the organization's one word, and the
+two things a person changes about themselves. `src/shared/` holds what more than one of them needs — the
 page header, the two confirmation dialogs, a labelled field that knows where a
 refusal goes, and the two spellings of a moment.
 
-**What is not built yet** is the change log, the value history with its rollback
-and the purge, and three of the four settings areas; every one of those routes
-exists and leads to a screen that says so, and each is replaced whole by the
-screen it names.
+**What is not built yet** is the change log, and the value history with its
+rollback and the purge beside it; those routes exist and lead to a screen that
+says so, and each is replaced whole by the screen it names.
 
 The masking rule is visible in the code rather than described by it: the
 environment screen renders a listing that **has no values in it** — the endpoint
 does not carry them — and `catalogue/Secret.tsx` is the only file that reads one,
 one key at a time, holding it in component state that a reload, the back button
-and leaving the screen all take away.
+and leaving the screen all take away. The other two values this product hands
+over exactly once — an invitation link and a token — appear in the dialog that
+made them and in no listing afterwards, which is the instance's rule showing
+through rather than a decision of these screens.
 
 Two things this application deliberately does not have. There is no route for
 `/device`: that page is rendered by the instance, holds no session and asks for
