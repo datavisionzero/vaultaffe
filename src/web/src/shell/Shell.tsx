@@ -1,0 +1,195 @@
+import { CommandIcon } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Navigate, Route, Routes, useNavigate } from "react-router";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { SettingsShell } from "@/settings/SettingsShell";
+import { AccountMenu } from "./AccountMenu";
+import { AppSidebar } from "./AppSidebar";
+import { Palette } from "./Palette";
+import { Keys, ShortcutsDialog } from "./ShortcutsDialog";
+import { is, overlaid, typing } from "./shortcuts";
+import { Nowhere, Unbuilt } from "./Unbuilt";
+import { areas, settingsPath, views } from "./views";
+
+/**
+ * The frame every screen sits in: the navigation, the header, the palette and
+ * the overview of the keys.
+ *
+ * It renders before any of the organization's data arrives, and navigation does
+ * not remount it — which is what makes a loading state a skeleton inside a
+ * frame rather than a blank page (`docs/human-interface.md`). Nothing here asks
+ * the instance anything; the screens do that for themselves.
+ *
+ * `/device` is deliberately not a route. It is the instance's own page, holds
+ * no session and asks for a password every time
+ * ([ADR 0008](../../../../docs/adr/0008-a-session-is-a-token-and-the-only-page-asks-for-a-password.md)),
+ * so it is reached by leaving this application rather than by routing inside
+ * it.
+ */
+export function Shell() {
+  const navigate = useNavigate();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  // The keys the frame itself owns, read from `shortcuts.ts` so that this
+  // handler and the overview it feeds cannot come apart.
+  useEffect(() => {
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      if (is("global:palette", event)) {
+        event.preventDefault();
+        // One dialog at a time: the palette arrives over whatever the overview
+        // was explaining, not behind it.
+        setShortcutsOpen(false);
+        setPaletteOpen((open) => !open);
+        return;
+      }
+
+      // Not while something is being typed — a password and a secret's value
+      // are fields a bare key must reach as a letter — and not while a menu or
+      // a dialog holds the keyboard; those close with Escape, as they always
+      // did.
+      if (typing(event) || overlaid(event)) {
+        return;
+      }
+
+      if (is("global:shortcuts", event)) {
+        event.preventDefault();
+        setShortcutsOpen(true);
+      } else if (is("global:projects", event)) {
+        event.preventDefault();
+        void navigate(views[0].path);
+      } else if (is("global:changes", event)) {
+        event.preventDefault();
+        void navigate(views[1].path);
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [navigate]);
+
+  return (
+    <SidebarProvider>
+      <AppSidebar />
+      <SidebarInset>
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
+          <SidebarTrigger className="md:hidden" />
+          <Separator orientation="vertical" className="mr-1 h-4! md:hidden" />
+          <div className="flex-1" />
+          <Button
+            variant="outline"
+            size="sm"
+            className="hidden gap-2 text-muted-foreground sm:flex"
+            onClick={() => setPaletteOpen(true)}
+          >
+            <CommandIcon className="size-3.5" />
+            <span className="text-xs">Search or jump…</span>
+            <Keys id="global:palette" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="sm:hidden"
+            aria-label="Command palette"
+            onClick={() => setPaletteOpen(true)}
+          >
+            <CommandIcon />
+          </Button>
+          <AccountMenu onShortcuts={() => setShortcutsOpen(true)} />
+        </header>
+
+        {/* The matrix of `docs/human-interface.md`, route for route. Each
+            element is replaced by the screen it names; the table itself is what
+            this ticket leaves behind. */}
+        <Routes>
+          <Route path="/" element={<Navigate to={views[0].path} replace />} />
+
+          <Route
+            path="/projects"
+            element={
+              <Unbuilt
+                screen="Projects"
+                what="Every project this session reaches, each with its environments, and a switch for what is deleted and recoverable."
+              />
+            }
+          />
+          <Route
+            path="/projects/:project"
+            element={
+              <Unbuilt
+                screen="Project"
+                what="The project's environments, each with a key count and its last change, and the project's own acts."
+              />
+            }
+          />
+          <Route
+            path="/projects/:project/:environment"
+            element={
+              <Unbuilt
+                screen="Environment"
+                what="The keys of this environment, their status and when each was last written — never their values — with import and export."
+              />
+            }
+          />
+          <Route
+            path="/projects/:project/:environment/:name"
+            element={
+              <Unbuilt
+                screen="Secret"
+                what="The masked value with its reveal, the bounded version history, and this key's own change log."
+              />
+            }
+          />
+          <Route
+            path="/changes"
+            element={
+              <Unbuilt
+                screen="Change log"
+                what="What was changed, by whom and by what kind of thing — and never what it was changed to."
+              />
+            }
+          />
+
+          <Route path="/settings" element={<SettingsShell />}>
+            <Route index element={<Navigate to={settingsPath} replace />} />
+            {areas.map((area) => (
+              <Route key={area.id} path={area.id} element={<Unbuilt screen={area.label} what={area.hint} />} />
+            ))}
+          </Route>
+
+          <Route path="*" element={<Nowhere />} />
+        </Routes>
+      </SidebarInset>
+
+      <Palette open={paletteOpen} onOpenChange={setPaletteOpen} onShortcuts={() => setShortcutsOpen(true)} />
+      <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+    </SidebarProvider>
+  );
+}
+
+/**
+ * What the frame shows while a screen or the answer behind it is still on its
+ * way. Never a blank page, which `docs/human-interface.md` asks for, and never
+ * silent to a screen reader.
+ */
+export function Busy({ title }: { title: string }) {
+  return (
+    <div aria-busy className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
+      <span aria-hidden className="size-4.5 animate-pulse rounded-sm bg-brand" />
+      <p role="status" className="text-sm text-muted-foreground">
+        {title}
+      </p>
+    </div>
+  );
+}
+
+export function Empty({ title, children }: { title: string; children?: React.ReactNode }) {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
+      <p className="font-medium">{title}</p>
+      {children !== undefined && <p className="text-sm text-muted-foreground">{children}</p>}
+    </div>
+  );
+}

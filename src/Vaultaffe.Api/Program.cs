@@ -96,6 +96,14 @@ app.UseRouting();
 
 app.UseVaultaffeAuthorization();
 
+// The web application, which is a client of the API above and nothing more
+// (Specification §9): built by its own toolchain into `wwwroot` and served from
+// here, so that one running instance is the whole product and the browser
+// reaches the API at its own origin. An installation without it — a build that
+// never ran the frontend toolchain — serves the API and nothing at `/`.
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 app.MapOpenApi();
 app.MapContract();
 app.MapIdentity();
@@ -105,6 +113,13 @@ app.MapTokens();
 app.MapProjects();
 app.MapSecrets();
 app.MapHistory();
+
+// Every address the application routes itself is one the browser may also ask
+// the instance for directly — a bookmark, a reload, a link somebody pasted — so
+// what is left over is the application. It cannot swallow an API path: those
+// are claimed by the endpoints above and by the catch-all that answers for a
+// version this build does not serve (`ContractEndpoints`).
+app.MapFallbackToFile("index.html");
 
 app.Run();
 

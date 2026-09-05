@@ -27,6 +27,10 @@ src/Vaultaffe.Api/wwwroot/
 /src/cli/vaultaffe
 
 # Node
+# The web client's API layer is generated from docs/api/openapi.json before
+# every typecheck, test and build (ADR 0006). The contract is the artifact; its
+# output is not.
+/src/web/src/api/schema.d.ts
 node_modules/
 dist/
 *.tsbuildinfo

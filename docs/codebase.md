@@ -24,8 +24,11 @@ the change log and value history read back and rolled back, and what deletion
 means at the end: purge, and the sweep that enforces the deadline. Beside it the
 CLI's own skeleton — the command tree, the client generated from that contract,
 the device-code login, and the prefix table that says what a directory means
-([`cli.md`](./cli.md)) — and the workflow that builds and tests both. This document is kept accurate from here on: a file that lands
-somewhere it does not describe means one of the two is wrong.
+([`cli.md`](./cli.md)) — and now the web application's: the frame every screen
+of [`human-interface.md`](./human-interface.md) will sit in, with none of the
+screens in it yet — and the workflow that builds and tests all three. This
+document is kept accurate from here on: a file that lands somewhere it does not
+describe means one of the two is wrong.
 
 Three decisions shape the layout. Two of them the specification already made —
 the CLI is **Go** and the frontend is **React**, both for the reasons in
@@ -53,7 +56,7 @@ vaultaffe/
 │  ├─ Vaultaffe.Infrastructure/ Postgres, the encryption, the schema
 │  ├─ Vaultaffe.Api/            HTTP and the composition root
 │  ├─ cli/                      the Go CLI — `vaultaffe`
-│  └─ web/                      the single-page application (not here yet)
+│  └─ web/                      the single-page application — React on Vite
 ├─ tests/
 │  ├─ Vaultaffe.UnitTests/
 │  └─ Vaultaffe.IntegrationTests/
@@ -229,6 +232,65 @@ What `exec()` actually does — and the four things it leaves for `run` to do
 before the call — was measured on both target platforms rather than inferred:
 [ADR 0009](./adr/0009-run-replaces-itself-and-does-everything-else-first.md).
 
+## The frontend is a client too
+
+`src/web/` is an ordinary Vite project — React 19, TypeScript, Tailwind 4,
+shadcn on Base UI, `react-router`, Vitest — and it reaches an instance only
+through the same public API the CLI does. The stack and the frame are the sister
+project's, adopted rather than decided again
+([ADR 0013](./adr/0013-the-web-application-is-the-sister-projects-frame.md)).
+
+`src/api/schema.d.ts` is generated from `docs/api/openapi.json` and **not
+committed**, exactly as the CLI's client is: `generate` runs before `dev`,
+`build`, `typecheck` and `test`, so a route that changed shape stops the build
+here rather than failing on a screen
+([ADR 0006](./adr/0006-the-contract-is-checked-in-and-the-web-client-is-generated-from-it.md)).
+`src/api/client.ts` is the only thing that wraps it: the bearer token on every
+request, the one place a `401` from anywhere else means the session ended, and
+the turning of a problem document into the sentence a screen shows — which is
+the instance's own, because a refusal names the action and the client names the
+command ([ADR 0010](./adr/0010-a-refusal-names-the-action-and-the-client-names-the-command.md))
+and a paraphrase loses both.
+
+`src/session/` is where that token lives, and the interesting part is the same
+as the CLI's: the store, not the happy path. It is `sessionStorage`, so the tab
+is the session's lifetime, and a browser that refuses storage gets a token in
+memory rather than a broken page
+([ADR 0014](./adr/0014-the-browser-holds-its-session-for-as-long-as-the-tab.md)).
+
+`src/shell/` is the frame: the sidebar, the header, the palette, the account
+menu and the overview of the keys. `views.ts` is the route table and the place
+every address inside the product is built — a project and an environment in
+lower case, a key in upper, each escaped
+([ADR 0003](./adr/0003-a-name-inside-a-reference-is-narrow-and-lower-case.md)).
+`shortcuts.ts` is the only list of bound keys: the handlers ask it what was
+pressed and the `?` overview draws what it holds, so a key that is bound is a
+key that is advertised, and one that no screen answers yet is not in it at all.
+The frame asks the instance for nothing — it renders before the organization's
+data and is not remounted by navigation, which is what makes a loading state a
+skeleton inside a frame rather than a blank page.
+
+**The screens themselves are not here yet.** Every route of
+[`human-interface.md`](./human-interface.md)'s matrix exists and leads to a
+screen that says it is not built; each is replaced whole by the screen it names.
+
+Two things this application deliberately does not have. There is no route for
+`/device`: that page is rendered by the instance, holds no session and asks for
+a password every time
+([ADR 0008](./adr/0008-a-session-is-a-token-and-the-only-page-asks-for-a-password.md)),
+so it is reached by leaving rather than by routing. And the palette searches the
+names of screens and nothing the instance holds — when the catalogue joins it,
+it will find projects, environments and key names, and never a value, because
+the listing endpoints do not carry one and a palette that turned one up would be
+a reveal nobody asked for.
+
+`npm run build` lands in `src/Vaultaffe.Api/wwwroot`, which the API serves as
+static files with everything unclaimed falling back to `index.html`. One
+`dotnet run` is therefore the whole product, and the browser reaches the API at
+its own origin; in development Vite serves the SPA and forwards `/api`,
+`/openapi`, `/problems` and `/device` to the instance so that stays true there
+too.
+
 ## Tests are split by what they need
 
 **`Vaultaffe.UnitTests`** runs in seconds and needs nothing installed: the rules
@@ -292,10 +354,14 @@ identity and the type that made it, an agent's own token included.
 window measured in days has no other way of being asked about, and everything
 else in that host is the installation an operator gets.
 
-The frontend will carry its own tests inside `src/web/`, and the CLI carries its
-own inside `src/cli/`, each run by the CI job that builds it. The CLI's are Go
-tests against an `httptest` instance and an injected keychain, and much of what
-they assert is what an invocation did **not** print: that the session token
+The frontend carries its own tests inside `src/web/` and the CLI its own inside
+`src/cli/`, each run by the CI job that builds it. The frontend's are Vitest and
+Testing Library against a fetch the test stands in front of the generated
+client — a route table of `METHOD /path` — and they are written against roles
+and accessible names rather than markup, because that is the same floor
+[`human-interface.md`](./human-interface.md) sets. The CLI's are Go tests
+against an `httptest` instance and an injected keychain, and much of what they
+assert is what an invocation did **not** print: that the session token
 `login` collected is in neither stream, that a password piped into the first run
 is not echoed, and that nothing is sent at all to a plain-HTTP host that is not
 loopback.
@@ -305,21 +371,22 @@ loopback.
 `.github/workflows/ci.yml` runs on every push to `main`, every pull request and
 on demand. There is no review step between a commit and the trunk (ADR 0001), so
 that workflow is the only thing standing between a mistake and `main`: the
-format check, the unit tests, the integration tests on Testcontainers, and the
-Go job that generates the client from the checked-in contract and then formats,
-vets, tests and builds the CLI. Generating it there rather than committing it
-makes that job a second reader of the same document the contract job verifies
+format check, the unit tests, the integration tests on Testcontainers, the web
+job that typechecks, lints, tests and builds the frontend, and the Go job that
+generates the client from the checked-in contract and then formats, vets, tests
+and builds the CLI. Neither client job commits its generated layer, which makes
+both of them second readers of the same document the contract job verifies
 against a running instance.
 
-The contract job is the fifth: it starts the installation against a Postgres,
-captures the document it serves and fails on a diff against the one checked in
+The contract job is the last of them: it starts the installation against a
+Postgres, captures the document it serves and fails on a diff against the one
+checked in
 ([ADR 0006](./adr/0006-the-contract-is-checked-in-and-the-web-client-is-generated-from-it.md)).
 `ContractTests` makes the same comparison from the other side, which is
 deliberate — the capture and the test check each other.
 
-The web build and the image are not in it yet. Each of them would have to settle
-a question another ticket owns, and each arrives in the commit that creates its
-subject.
+The image is not in it yet. It would have to settle a question another ticket
+owns, and it arrives in the commit that creates its subject.
 
 ## What is deliberately not here
 

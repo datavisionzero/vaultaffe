@@ -18,9 +18,9 @@ permissions:
 # nobody is tempted to push past it, which is why the toolchains run beside each
 # other rather than in one job.
 #
-# What is deliberately not here yet: the web build and the image. Their subjects
-# do not exist, and each of them arrives in the commit that creates its subject —
-# as the contract job below did.
+# What is deliberately not here yet: the image. Its subject does not exist, and
+# it arrives in the commit that creates it — as the contract and web jobs below
+# did.
 
 # One run at a time, and nothing is cancelled. With a single maintainer pushing
 # there is nothing to gain from two racing, and a pull request waiting a few
@@ -139,6 +139,34 @@ jobs:
 
       - name: The checked-in contract is the one being served
         run: git diff --exit-code -- docs/api/openapi.json
+
+  # No generation step here on purpose. The API layer is generated from
+  # `docs/api/openapi.json` before typecheck, test and build (ADR 0006), and
+  # that belongs in the package's own scripts rather than in this file —
+  # otherwise CI runs against a freshly generated client and a contributor runs
+  # against whatever is in their working tree.
+  #
+  # The build is checked into a directory of its own rather than into the API's
+  # `wwwroot`: what is being asked here is whether it builds, and a job that
+  # left an artifact in the source tree would be answering a different question.
+  web:
+    name: Web
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/web/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build -- --outDir dist --emptyOutDir
 
   # `vaultaffe` is a client of the public API and references nothing in `src/`
   # (Specification §9), so it is a plain Go module built by a plain Go job. The
