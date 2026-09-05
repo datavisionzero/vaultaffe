@@ -117,7 +117,7 @@ public sealed class Token : IBelongToAnOrganization
         RevokedAt is null && (ExpiresAt is null || ExpiresAt > moment);
 
     /// <summary>Whether this token carries every scope in <paramref name="wanted"/>.</summary>
-    public bool Allows(Scopes wanted) => (Scopes & wanted) == wanted;
+    public bool Allows(Scopes wanted) => Scopes.Includes(wanted);
 
     /// <summary>Narrow this token to a project, or to one environment of it.</summary>
     public void BindTo(Guid bindingId, Guid projectId, Guid? environmentId = null) =>

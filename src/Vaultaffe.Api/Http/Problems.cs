@@ -53,7 +53,9 @@ public static class Problems
             or RefusalCode.DevicePending or RefusalCode.DeviceDenied or RefusalCode.DeviceExpired =>
             StatusCodes.Status400BadRequest,
         RefusalCode.Unauthenticated => StatusCodes.Status401Unauthorized,
-        RefusalCode.Forbidden => StatusCodes.Status403Forbidden,
+        RefusalCode.Forbidden or RefusalCode.HumanOnly or RefusalCode.InsufficientScope
+            or RefusalCode.OutOfReach =>
+            StatusCodes.Status403Forbidden,
         RefusalCode.NotFound or RefusalCode.UnsupportedApiVersion => StatusCodes.Status404NotFound,
         RefusalCode.AlreadyStarted => StatusCodes.Status409Conflict,
         RefusalCode.ClientTooOld => StatusCodes.Status426UpgradeRequired,
@@ -67,6 +69,9 @@ public static class Problems
         RefusalCode.NotFound => "Nothing by that name",
         RefusalCode.Unauthenticated => "No token, an unknown token, a revoked one, or the wrong password",
         RefusalCode.Forbidden => "This identity may not do this",
+        RefusalCode.HumanOnly => "This action is reserved for a person",
+        RefusalCode.InsufficientScope => "This token does not carry the scope this needs",
+        RefusalCode.OutOfReach => "This token is not bound to that project or environment",
         RefusalCode.AlreadyStarted => "This instance already has its first user",
         RefusalCode.DevicePending => "Nobody has confirmed this login yet",
         RefusalCode.DeviceDenied => "A human refused this login",

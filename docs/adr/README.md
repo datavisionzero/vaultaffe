@@ -40,3 +40,4 @@ material value to understanding the decision.
 - [0007 – The first run is unauthenticated, and happens once](./0007-the-first-run-is-unauthenticated-and-happens-once.md)
 - [0008 – A session is a token, and the only page asks for a password](./0008-a-session-is-a-token-and-the-only-page-asks-for-a-password.md)
 - [0009 – `run` replaces itself, and does everything else first](./0009-run-replaces-itself-and-does-everything-else-first.md)
+- [0010 – A refusal names the action, and the client names the command](./0010-a-refusal-names-the-action-and-the-client-names-the-command.md)

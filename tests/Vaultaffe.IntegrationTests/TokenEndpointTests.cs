@@ -108,7 +108,9 @@ public sealed class TokenEndpointTests(PostgresFixture postgres)
     /// <summary>
     /// Token management is human-only: a token is itself a secret, and one an
     /// agent created through the CLI would be printed into its own context
-    /// (§6.1).
+    /// (§6.1). The refusal is <c>human-only</c> and not a bare <c>forbidden</c>,
+    /// because the remedy is a different one — hand it to a person rather than
+    /// ask for a wider token.
     /// </summary>
     [Fact]
     public async Task An_agent_may_not_create_a_token()
@@ -126,7 +128,20 @@ public sealed class TokenEndpointTests(PostgresFixture postgres)
             TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        Assert.Equal("forbidden", await IdentityTests.CodeOf(response));
+
+        var problem = JsonNode.Parse(await response.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!;
+
+        Assert.Equal("human-only", problem["code"]!.GetValue<string>());
+        Assert.Equal("create-token", problem["humanAction"]!.GetValue<string>());
+
+        // Specification §8, scenario 5: the agent hands its human an action, and
+        // the client names the command. A server that named one would name a
+        // command of some release it cannot see (ADR 0010).
+        Assert.DoesNotContain(
+            "vaultaffe ",
+            problem["detail"]!.GetValue<string>(),
+            StringComparison.OrdinalIgnoreCase);
 
         // It can still read, which is the point: the restriction is on the one
         // action whose output is itself a secret, not on the agent.
@@ -151,6 +166,59 @@ public sealed class TokenEndpointTests(PostgresFixture postgres)
             $"/api/v1/tokens/{id}", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("human-only", await IdentityTests.CodeOf(response));
+    }
+
+    /// <summary>
+    /// A human-only endpoint is refused before it runs, which is what makes the
+    /// enforcement one middleware rather than a check in a handler: the agent's
+    /// token is never created, so nothing has to be undone.
+    /// </summary>
+    [Fact]
+    public async Task A_refused_creation_creates_nothing()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        using var human = instance.ClientWith(await instance.StartAsync());
+
+        var issued = await CreateAsync(human, "agent", "the agent in this terminal");
+
+        using var agent = instance.ClientWith(issued["value"]!.GetValue<string>());
+
+        using var refused = await agent.PostAsJsonAsync(
+            "/api/v1/tokens",
+            new { kind = "agent", name = "a token of my own" },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+
+        using var listed = await human.GetAsync(
+            "/api/v1/tokens", TestContext.Current.CancellationToken);
+
+        var tokens = JsonNode.Parse(await listed.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!.AsArray();
+
+        Assert.DoesNotContain(
+            tokens, token => token!["name"]?.GetValue<string>() == "a token of my own");
+    }
+
+    /// <summary>
+    /// A token an agent cannot create it also cannot create by not being
+    /// authenticated at all: the human-only list is refused after authentication,
+    /// not instead of it.
+    /// </summary>
+    [Fact]
+    public async Task Nobody_at_all_is_still_unauthenticated_rather_than_human_only()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        using var nobody = instance.ClientWith(null);
+
+        using var response = await nobody.PostAsJsonAsync(
+            "/api/v1/tokens",
+            new { kind = "agent", name = "a token from nowhere" },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal("unauthenticated", await IdentityTests.CodeOf(response));
     }
 
     /// <summary>

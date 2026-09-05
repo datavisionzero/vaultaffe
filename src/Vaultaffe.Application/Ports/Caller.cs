@@ -28,10 +28,22 @@ public sealed record Caller(
     Guid TokenId,
     string? TokenName,
     TokenKind TokenKind,
-    Scopes Scopes)
+    Scopes Scopes,
+    TokenReach Reach)
 {
     /// <summary>Whether a person is behind this request rather than a machine.</summary>
     public bool IsHumanSession => TokenKind is TokenKind.Session;
+
+    /// <summary>Whether this caller's token carries every scope in <paramref name="wanted"/>.</summary>
+    public bool Allows(Scopes wanted) => Scopes.Includes(wanted);
+
+    /// <summary>
+    /// Whether this caller's token may touch that project, or that environment
+    /// of it. A session reaches its whole organization: the granularity is the
+    /// tokens', and the human-only list is what a person is held to (§6.4).
+    /// </summary>
+    public bool Reaches(Guid projectId, Guid? environmentId = null) =>
+        Reach.Covers(projectId, environmentId);
 
     /// <summary>
     /// What the change log records: the acting identity, and its type. A session
@@ -55,7 +67,8 @@ public sealed record Caller(
             token.Id,
             token.Name,
             token.Kind,
-            token.Scopes);
+            token.Scopes,
+            TokenReach.Of(token));
 }
 
 /// <summary>

@@ -47,11 +47,10 @@ public sealed record TokenIssuedShape(TokenShape Token, string Value);
 /// How the domain's words are spelled on the wire.
 /// </summary>
 /// <remarks>
-/// A scope set is a <c>[Flags]</c> integer in the database, because that is what
-/// makes "may write but never read" one column (<c>docs/storage.md</c>). It is an
-/// array of words in the contract, because a client reading <c>6</c> and having
-/// to know which bits those are is a contract that fails silently the day a flag
-/// moves. The two spellings meet here and nowhere else.
+/// A token kind is spelled here. A scope is not: its words are the
+/// specification's own and a refusal has to spell them the same way the contract
+/// does, so they live in <see cref="ScopeNames"/> and this file reads which
+/// direction a caller wanted.
 /// </remarks>
 public static class Shapes
 {
@@ -73,10 +72,7 @@ public static class Shapes
     };
 
     /// <summary>The set, as the words a client reads. Ordered as the scopes are declared.</summary>
-    public static IReadOnlyList<string> ScopesOf(Scopes scopes) =>
-        [.. new[] { Scopes.Names, Scopes.Read, Scopes.Write, Scopes.Delete }
-            .Where(scope => scopes.HasFlag(scope))
-            .Select(scope => scope.ToString().ToLowerInvariant())];
+    public static IReadOnlyList<string> ScopesOf(Scopes scopes) => ScopeNames.NamesOf(scopes);
 
     /// <summary>The words a client sent, as the set. Null when it sent none.</summary>
     public static Scopes? ScopesOf(IReadOnlyList<string>? scopes)
@@ -90,15 +86,9 @@ public static class Shapes
 
         foreach (var scope in scopes)
         {
-            set |= scope switch
-            {
-                "names" => Domain.Tokens.Scopes.Names,
-                "read" => Domain.Tokens.Scopes.Read,
-                "write" => Domain.Tokens.Scopes.Write,
-                "delete" => Domain.Tokens.Scopes.Delete,
-                _ => throw Refusal.Validation(
-                    "scopes", "A scope is one of 'names', 'read', 'write' and 'delete'."),
-            };
+            set |= ScopeNames.Parse(scope)
+                ?? throw Refusal.Validation(
+                    "scopes", "A scope is one of 'names', 'read', 'write' and 'delete'.");
         }
 
         return set;

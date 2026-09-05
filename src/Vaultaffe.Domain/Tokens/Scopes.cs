@@ -27,3 +27,13 @@ public enum Scopes
     /// <summary>What a service token carries unless asked otherwise (§6.4).</summary>
     ServiceDefault = Names | Read,
 }
+
+/// <summary>
+/// What "carries this scope" means, in one place. A set contains another when
+/// every flag of the wanted one is in it — asking for <c>read</c> and
+/// <c>write</c> is one question and not two.
+/// </summary>
+public static class ScopeSets
+{
+    public static bool Includes(this Scopes granted, Scopes wanted) => (granted & wanted) == wanted;
+}

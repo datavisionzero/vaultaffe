@@ -1,6 +1,7 @@
 using Vaultaffe.Api.Hosting;
 using Vaultaffe.Api.Http;
 using Vaultaffe.Application.Acts;
+using Vaultaffe.Application.Authorization;
 using Vaultaffe.Application.Ports;
 using Vaultaffe.Infrastructure;
 
@@ -20,6 +21,10 @@ builder.Services.AddVaultaffeIdentity();
 builder.Services.AddScoped<CallerContext>();
 builder.Services.AddScoped<ICallerIdentity>(services => services.GetRequiredService<CallerContext>());
 builder.Services.AddScoped<IOrganizationScope>(services => services.GetRequiredService<CallerContext>());
+
+// The one place that says no (Specification §6.4). Endpoints declare what they
+// need and acts ask it about a binding; neither decides anything itself.
+builder.Services.AddScoped<Authority>();
 
 builder.Services.AddSingleton(TimeProvider.System);
 
@@ -54,6 +59,13 @@ app.UseVaultaffeVersionExchange();
 // And before any endpoint runs: whoever presented a token is who they are for
 // the rest of the request, filter included.
 app.UseVaultaffeTokens();
+
+// Routing is called out rather than left implicit, because what comes after it
+// reads the endpoint: authorization is one middleware over all of them, and an
+// endpoint is what carries the requirement it enforces (§6.4).
+app.UseRouting();
+
+app.UseVaultaffeAuthorization();
 
 app.MapOpenApi();
 app.MapContract();

@@ -53,4 +53,13 @@ public enum RefusalCode
 
     /// <summary>Something went wrong on the server, and the document says nothing else.</summary>
     Internal = 12,
+
+    /// <summary>One of the short list only a person may do (Specification §6.4).</summary>
+    HumanOnly = 13,
+
+    /// <summary>The token is missing a scope this needs.</summary>
+    InsufficientScope = 14,
+
+    /// <summary>The token is bound elsewhere and does not reach that project or environment.</summary>
+    OutOfReach = 15,
 }

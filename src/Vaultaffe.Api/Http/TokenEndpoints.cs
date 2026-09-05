@@ -1,4 +1,5 @@
 using Vaultaffe.Application.Acts;
+using Vaultaffe.Domain.Authorization;
 
 namespace Vaultaffe.Api.Http;
 
@@ -20,10 +21,12 @@ public sealed record CreateTokenRequest(
 /// exactly once, in the answer that created it.
 /// </summary>
 /// <remarks>
-/// All three need a human session. A token is itself a secret, and one an agent
-/// created through the CLI would be printed to stdout and thus into its own
-/// context (Specification §6.1). The acts refuse on their own until the
-/// authorization ticket puts the human-only list in one place.
+/// Creating and revoking are two of the short list only a person may do
+/// (Specification §6.4): a token is itself a secret, and one an agent created
+/// through the CLI would be printed to stdout and thus into its own context
+/// (§6.1). Both say so by declaring it — the enforcement and the refusal are
+/// <c>Authority</c>'s, and there is no check in either handler. Listing is not on
+/// that list: a revocation list an agent cannot read is not one.
 /// </remarks>
 public static class TokenEndpoints
 {
@@ -47,6 +50,7 @@ public static class TokenEndpoints
 
                 return new TokenIssuedShape(Shapes.Token(issued.Token), issued.Value);
             })
+            .HumanOnly(HumanAction.CreateToken)
             .WithName("CreateToken")
             .WithSummary("Create a service or agent token. Its value appears here and nowhere else, ever.")
             .ProducesProblem(StatusCodes.Status400BadRequest)
@@ -62,6 +66,7 @@ public static class TokenEndpoints
         api.MapDelete("/{id:guid}", async (
                 Guid id, RevokeToken revoke, CancellationToken cancellation) =>
                 Shapes.Token(await revoke.ExecuteAsync(id, cancellation)))
+            .HumanOnly(HumanAction.RevokeToken)
             .WithName("RevokeToken")
             .WithSummary("Revoke a token. Revoked rather than deleted, so its entries keep an author.")
             .ProducesProblem(StatusCodes.Status401Unauthorized)

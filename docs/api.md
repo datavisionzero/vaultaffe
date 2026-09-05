@@ -13,10 +13,11 @@ themselves and checked in
 ([ADR 0006](./adr/0006-the-contract-is-checked-in-and-the-web-client-is-generated-from-it.md)).
 
 **Most of it does not exist yet.** What has landed is the contract itself — the
-version in the path, the handshake, the error shape and the document — and
-identity: the first run, signing in, the device-code login and token management.
-Projects, environments and the secrets surface arrive with their own tickets, and
-this file is kept accurate as each does.
+version in the path, the handshake, the error shape and the document — identity:
+the first run, signing in, the device-code login and token management — and the
+authorization every endpoint after it is enforced by. Projects, environments and
+the secrets surface arrive with their own tickets, and this file is kept accurate
+as each does.
 
 ## Where the endpoints are
 
@@ -147,6 +148,67 @@ A device code hands over one token and never a second: the poll that collects it
 marks the login redeemed, so one left behind in a CI log is worth nothing to
 whoever finds it.
 
+### What a caller may do
+
+[Specification §6.4](../Specification.md#64-permissions-in-the-mvp) is
+deliberately trivial for people and precise for tokens, and this is the whole of
+it.
+
+**Every user of an organization sees and changes everything in it.** There is no
+role model beyond who may administer the organization. A session token therefore
+reaches the whole organization with every scope, and narrowing it would be
+narrowing a person.
+
+**The granularity is the tokens'.** A service or an agent token carries a
+**binding** — projects and environments — and a **scope set**: `names`, `read`,
+`write`, `delete`. Both are enforced, and each has its own refusal because each
+has its own remedy:
+
+- `insufficient-scope` — the token is pointed at the right place and is missing a
+  scope. It carries `requiredScopes` and `grantedScopes`, so that a caller that
+  cannot see its own token still learns what it would have needed. A human issues
+  a wider one; scopes are set when a token is created.
+- `out-of-reach` — the token is bound elsewhere. It carries `projectId` and
+  `environmentId`, which are not secret, so a caller can tell being pointed at
+  the wrong project from being pointed at the wrong environment of the right one.
+
+Naming a project without an environment asks whether the token reaches into that
+project at all, and a token bound to one environment of it does. A token with no
+binding reaches the whole organization, which is what an agent token gets unless
+the human narrows it: **the point is attribution, not restriction.**
+
+**Human-only actions** are the short list where an agent's mistake could not be
+undone or the output is itself a secret: purging value history or deleted
+objects, creating and revoking tokens, and administering the organization and its
+users. They are refused with `human-only` for every token that is not a session,
+whatever its scopes — being human-only is not a permission a token can be given.
+
+The document carries `humanAction`: one of `purge`, `create-token`,
+`revoke-token`, `administer-organization`.
+
+```json
+{
+  "type": "/problems/human-only",
+  "title": "This action is reserved for a person",
+  "status": 403,
+  "detail": "Creating a token is reserved for a person: the answer is itself a secret, and one created here would be printed into this context. Hand it to a human, who creates it under their own session and gives you the value.",
+  "code": "human-only",
+  "humanAction": "create-token"
+}
+```
+
+**The refusal names the action and never a command** — the CLI renders
+`humanAction` as the command it has, the web UI as the screen it has
+([ADR 0010](./adr/0010-a-refusal-names-the-action-and-the-client-names-the-command.md)).
+A server that spelled out a command would be spelling one from a release it
+cannot see.
+
+An endpoint says what it needs as a declaration on the endpoint, and one
+middleware enforces every such declaration after routing and before the handler —
+so a refused request never reaches the act, and nothing it would have written is
+written. What the binding is checked against depends on which project a request
+names, so that half is asked by the act, through the same object.
+
 ### Tokens
 
 `POST /api/v1/tokens` creates a `service` or an `agent` token — a session comes
@@ -154,10 +216,11 @@ from signing in, not from being created. `GET /api/v1/tokens` lists every token 
 the organization, newest first, revoked ones included and sessions among them.
 `DELETE /api/v1/tokens/{id}` revokes one.
 
-**The value is in the answer that created it and in no listing, ever.** All three
-need a human session: a token is itself a secret, and one an agent created through
-the CLI would be printed to stdout and thus into its own context
-([§6.1](../Specification.md#61-web-ui)).
+**The value is in the answer that created it and in no listing, ever.** Creating
+and revoking are human-only: a token is itself a secret, and one an agent created
+through the CLI would be printed to stdout and thus into its own context
+([§6.1](../Specification.md#61-web-ui)). Listing is not — a revocation list an
+agent cannot read is not one.
 
 Scopes travel as words — `["names", "read", "write", "delete"]` — and not as the
 integer of flags the column holds, so that a client never has to know which bits
@@ -207,6 +270,9 @@ an untidiness. `detail` says what was refused, not what it was refused about.
 | `not-found` | 404 | Nothing by that name. |
 | `unauthenticated` | 401 | No token, an unknown token, a revoked one — or the wrong password. |
 | `forbidden` | 403 | The caller is authenticated and still may not do this. |
+| `human-only` | 403 | One of the short list only a person may do. Carries `humanAction`. |
+| `insufficient-scope` | 403 | The token is missing a scope. Carries `requiredScopes` and `grantedScopes`. |
+| `out-of-reach` | 403 | The token is bound elsewhere. Carries `projectId` and `environmentId`. |
 | `already-started` | 409 | The instance already has its first user. |
 | `device-pending` | 400 | Nobody has confirmed that login yet. Keep polling. |
 | `device-denied` | 400 | A human refused it. |
@@ -216,10 +282,12 @@ an untidiness. `detail` says what was refused, not what it was refused about.
 | `client-version-unreadable` | 400 | `Vaultaffe-Client` is not a version. |
 | `internal` | 500 | Something went wrong here. The reason is in this instance's log and deliberately not in the document. |
 
-Only what something already refuses is in that table. Authentication,
-authorization and the refusals of the secrets surface arrive with the endpoints
-that make them — a code nothing raises is a promise to a client that nothing
-keeps.
+Only what something already refuses is in that table, and the refusals of the
+secrets surface arrive with the endpoints that make them — a code nothing raises
+is a promise to a client that nothing keeps. The three authorization codes are in
+it because the enforcement is: `human-only` is what token management answers an
+agent with today, and `insufficient-scope` and `out-of-reach` are raised by the
+one place that decides both, which every endpoint that names a project will ask.
 
 ## The document
 

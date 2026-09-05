@@ -1,3 +1,6 @@
+using Vaultaffe.Domain.Authorization;
+using Vaultaffe.Domain.Tokens;
+
 namespace Vaultaffe.Domain.Refusals;
 
 /// <summary>
@@ -50,4 +53,50 @@ public sealed class Refusal : Exception
     public static Refusal Unauthenticated(string detail) => new(RefusalCode.Unauthenticated, detail);
 
     public static Refusal Forbidden(string detail) => new(RefusalCode.Forbidden, detail);
+
+    /// <summary>
+    /// One of the short list only a person may do (Specification §6.4). It names
+    /// the action and never a command: which command that is depends on which
+    /// client is asking, and suggesting one that does not exist is worse than
+    /// suggesting none (ADR 0010).
+    /// </summary>
+    public static Refusal HumanOnly(HumanAction action) =>
+        new(
+            RefusalCode.HumanOnly,
+            HumanActions.RefusalOf(action),
+            new Dictionary<string, object?> { ["humanAction"] = HumanActions.NameOf(action) });
+
+    /// <summary>
+    /// The token is missing a scope. It carries both sets, because "you may not"
+    /// without "you would have needed this" leaves a caller guessing at a token
+    /// it cannot see.
+    /// </summary>
+    public static Refusal InsufficientScope(Scopes required, Scopes granted) =>
+        new(
+            RefusalCode.InsufficientScope,
+            "This token does not carry "
+            + string.Join(" and ", ScopeNames.NamesOf(required & ~granted))
+            + ". A human widens a token by issuing a new one; scopes are set when it is created.",
+            new Dictionary<string, object?>
+            {
+                ["requiredScopes"] = ScopeNames.NamesOf(required),
+                ["grantedScopes"] = ScopeNames.NamesOf(granted),
+            });
+
+    /// <summary>
+    /// The token is bound to particular projects and environments, and this is
+    /// not one of them (§6.4). The ids are in it because they are not secret and
+    /// a caller comparing them against its own binding is how it finds out what
+    /// it was pointed at.
+    /// </summary>
+    public static Refusal OutOfReach(Guid projectId, Guid? environmentId) =>
+        new(
+            RefusalCode.OutOfReach,
+            "This token is bound to particular projects and environments, and that is not one of "
+            + "them. A human issues a token that reaches there.",
+            new Dictionary<string, object?>
+            {
+                ["projectId"] = projectId,
+                ["environmentId"] = environmentId,
+            });
 }

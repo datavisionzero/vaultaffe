@@ -14,8 +14,10 @@ change afterwards: the token value and the envelope a secret rests in
 ([ADR 0004](./adr/0004-the-token-format-and-the-envelope.md)) — the contract the
 rest of the API arrives inside: the version in the path, the handshake, the shape
 of a refusal, and the document all of it is captured into
-([`api.md`](./api.md)) — and identity: the first run, signing in, the device-code
-login with the one page it needs, and token management. Beside it the Go module
+([`api.md`](./api.md)) — identity: the first run, signing in, the device-code
+login with the one page it needs, and token management — and the authorization
+every endpoint after it is held to: the scope set, the binding, and the short
+list only a person may do. Beside it the Go module
 with one command that prints its version, and the workflow that builds and tests
 both. This document is kept accurate from here on: a file that lands
 somewhere it does not describe means one of the two is wrong.
@@ -77,7 +79,10 @@ versions, 72 hours, whichever is hit first — and the recovery window on a
 deletion. The test of whether something
 belongs here: **anything the specification already states as a rule.** A token
 that can be constructed without a binding, or a value version that can outlive
-both of its bounds, is a rule that escaped.
+both of its bounds, is a rule that escaped. `Authorization/` is the one to look
+at twice: the short list of §6.4 that only a person may do, and the sentences a
+refusal says about them — which name the action and never a command
+([ADR 0010](./adr/0010-a-refusal-names-the-action-and-the-client-names-the-command.md)).
 
 **`Vaultaffe.Application` holds the acts and the ports.** An act is one thing a
 caller does, a port is one thing the acts need answered. Starting the instance,
@@ -89,10 +94,17 @@ hashes a password, the key ring that seals a value and opens it again, and the
 clock — which is `TimeProvider` from the base class libraries rather than a port
 of ours.
 
-`Caller` is the one to know: the organization, the person, the token and its
-scopes, as a value rather than the rows it came from. The adapter that
-authenticated the request hands the same one to every act in it, and it is what
-the change log's identity type is read from.
+`Caller` is the one to know: the organization, the person, the token, its scopes
+and what it reaches, as a value rather than the rows it came from. The adapter
+that authenticated the request hands the same one to every act in it, and it is
+what the change log's identity type is read from.
+
+`Authorization/Authority` is the other: **the one place that says no.** Every rule
+of [§6.4](../Specification.md#64-permissions-in-the-mvp) — the scope set, the
+binding, the human-only list — is decided there, and an act or an endpoint says
+what it needs rather than checking anything. A rule spelled out in twenty handlers
+is nineteen chances to spell it differently, and in a secrets manager the one that
+is spelled wrong is the one nobody notices.
 
 **`Vaultaffe.Infrastructure` answers those ports.** `Identity/` hashes passwords
 with Argon2id in the encoding that carries its own parameters, so raising the cost
@@ -109,13 +121,18 @@ organization filter of
 [`storage.md`](./storage.md) has the whole of it.
 
 **`Vaultaffe.Api` is the adapters and the composition root.** The endpoints, the
-token authentication, the version handshake, the one place a refusal becomes a
-problem document — and the browser confirmation page the device-code login needs,
+token authentication, the version handshake, the authorization middleware, the one
+place a refusal becomes a problem document — and the browser confirmation page the
+device-code login needs,
 which is the whole of the browser surface until the management application
 arrives. `CallerContext` is worth knowing about: it answers both the caller port
 the acts ask and the organization scope the query filter reads, so a caller can
 never be inside a different organization from the one their queries are filtered
-by. The HTTP API is the only read and write interface
+by. Beside it `EndpointAuthorization`: an endpoint declares what it needs —
+`HumanOnly(…)`, `Needing(…)` — as metadata, and one middleware after routing
+enforces every such declaration through `Authority`. A handler therefore carries
+no authorization code at all, and an endpoint that forgot its requirement is a
+missing line one can grep for rather than a check hidden in a method. The HTTP API is the only read and write interface
 (§9): the web application is a client of it exactly as the CLI is, and a later
 MCP server would be a third adapter over the same acts rather than a second way
 into the data.
@@ -169,7 +186,12 @@ that a refusal is a problem document whose `code` a client can switch on, and
 that the document a running instance serves is the one checked in. Then identity,
 end to end over HTTP: that an instance cannot be started twice, that a wrong
 password and an unknown address are one answer, that a device code hands over one
-token and never a second, and that no token listing carries a value.
+token and never a second, and that no token listing carries a value. Then
+authorization: that a machine token is refused a human-only action with the
+action's name in the document and no command in it, that a refused request wrote
+nothing, and — in the unit tests, where the rules are — that a scope set is
+carried whole or not at all, that a token bound to one environment does not reach
+its neighbour, and that no refusal this product can make spells a command.
 
 The frontend will carry its own tests inside `src/web/`, and the CLI carries its
 own inside `src/cli/`, each run by the CI job that builds it.

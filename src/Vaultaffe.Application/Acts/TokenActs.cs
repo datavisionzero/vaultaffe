@@ -51,20 +51,11 @@ public sealed class CreateToken(
         DateTimeOffset? expiresAt,
         CancellationToken cancellationToken)
     {
+        // Creating a token is human-only, and that is not decided here: the
+        // endpoint declares `HumanOnly(HumanAction.CreateToken)` and one
+        // middleware enforces it through Authority (§6.4). What is left in this
+        // act is what a token is, which is its own business.
         var acting = caller.Required;
-
-        // Creating a token is human-only: a token is itself a secret, and one an
-        // agent created through the CLI would land on stdout and thus in its
-        // context (§6.1). Central enforcement of the human-only list, and the
-        // refusal that names the human action instead, belong to the
-        // authorization ticket; this is the endpoint refusing on its own until
-        // then.
-        if (!acting.IsHumanSession)
-        {
-            throw Refusal.Forbidden(
-                "Creating a token needs a human session. A token is itself a secret, and one "
-                + "an agent created would be printed into its own context.");
-        }
 
         if (kind is TokenKind.Session)
         {
@@ -166,13 +157,7 @@ public sealed class RevokeToken(
 {
     public async Task<TokenRow> ExecuteAsync(Guid id, CancellationToken cancellationToken)
     {
-        var acting = caller.Required;
-
-        // Human-only, for the reason creating one is: see CreateToken.
-        if (!acting.IsHumanSession)
-        {
-            throw Refusal.Forbidden("Revoking a token needs a human session.");
-        }
+        _ = caller.Required;
 
         var token = await identities.FindTokenAsync(id, cancellationToken)
             ?? throw Refusal.NotFound("No token by that id.");
