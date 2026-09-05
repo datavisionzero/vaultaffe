@@ -27,6 +27,15 @@ public static partial class ReferenceName
     /// </summary>
     public const string Pattern = $"^{Body}$";
 
+    /// <summary>
+    /// The rule in a sentence, for whoever broke it. One wording, because the
+    /// entity constructors and the acts both say it and a person reading two
+    /// versions of one rule reasonably wonders whether there are two.
+    /// </summary>
+    public static string Explanation { get; } =
+        $"Use lower-case letters, digits, '.', '-' and '_', at most {Limit} characters, "
+        + "starting and ending with a letter or digit.";
+
     /// <summary>Whether <paramref name="name"/> may appear in a reference.</summary>
     public static bool IsValid(string? name) =>
         name is not null && name.Length <= Limit && Rule().IsMatch(name);
@@ -40,9 +49,7 @@ public static partial class ReferenceName
         if (!IsValid(name))
         {
             throw new ArgumentException(
-                $"'{name}' is not usable in a vaultaffe:// reference. "
-                + $"Use lower-case letters, digits, '.', '-' and '_', at most {Limit} "
-                + "characters, starting and ending with a letter or digit.",
+                $"'{name}' is not usable in a vaultaffe:// reference. {Explanation}",
                 parameterName);
         }
 

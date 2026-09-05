@@ -105,6 +105,48 @@ public sealed class AuthorizationTests
     }
 
     /// <summary>
+    /// Reaching into a project and reaching all of it are two questions, and
+    /// renaming it, deleting it or adding an environment to it asks the second.
+    /// A token bound to staging that could create the production environment
+    /// beside it would make its own binding a suggestion.
+    /// </summary>
+    [Fact]
+    public void Reaching_into_a_project_is_not_reaching_all_of_it()
+    {
+        var project = Guid.NewGuid();
+        var staging = Guid.NewGuid();
+        var narrowed = Acting(A.Agent(new Reach(project, staging)));
+
+        narrowed.RequiresReachInto(project);
+
+        var refusal = Assert.Throws<Refusal>(() => narrowed.RequiresAllOf(project));
+
+        Assert.Equal(RefusalCode.OutOfReach, refusal.Code);
+
+        // Bound to the project rather than to one environment of it, and it does.
+        Acting(A.Agent(new Reach(project, null))).RequiresAllOf(project);
+        Acting(A.Session()).RequiresAllOf(project);
+    }
+
+    /// <summary>
+    /// Creating a project asks for the whole organization: a bound token is
+    /// narrowed to projects that exist, and a new one is by definition not among
+    /// them. The refusal carries no project id, because there is no project.
+    /// </summary>
+    [Fact]
+    public void Anything_bound_at_all_is_short_of_the_whole_organization()
+    {
+        Acting(A.Session()).RequiresTheWholeOrganization();
+        Acting(A.Agent()).RequiresTheWholeOrganization();
+
+        var refusal = Assert.Throws<Refusal>(
+            () => Acting(A.Agent(new Reach(Guid.NewGuid(), null))).RequiresTheWholeOrganization());
+
+        Assert.Equal(RefusalCode.OutOfReach, refusal.Code);
+        Assert.Null(refusal.Extensions!["projectId"]);
+    }
+
+    /// <summary>
     /// A token pointed at the wrong place is told that, not that it is missing a
     /// scope it may well have — and it is not told which scopes a project it may
     /// not know exists would have wanted.

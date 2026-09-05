@@ -75,6 +75,29 @@ public sealed class Authority(ICallerIdentity identity)
     }
 
     /// <summary>
+    /// Reach into every environment of that project, including ones that do not
+    /// exist yet — what renaming or deleting a project asks, and what adding an
+    /// environment to it asks.
+    /// </summary>
+    public Caller RequiresAllOf(Guid projectId)
+    {
+        var acting = Caller;
+
+        return acting.ReachesAllOf(projectId) ? acting : throw Refusal.OutOfReach(projectId);
+    }
+
+    /// <summary>
+    /// Reach across the whole organization: what creating a project asks, since
+    /// there is no project yet for a binding to have named.
+    /// </summary>
+    public Caller RequiresTheWholeOrganization()
+    {
+        var acting = Caller;
+
+        return acting.Reach.IsTheWholeOrganization ? acting : throw Refusal.OutOfReach();
+    }
+
+    /// <summary>
     /// Both at once, which is what every act touching a secret asks: this scope,
     /// in this environment of this project.
     /// </summary>

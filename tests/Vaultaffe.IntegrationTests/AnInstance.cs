@@ -1,8 +1,11 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Vaultaffe.Infrastructure;
@@ -35,6 +38,13 @@ internal sealed class AnInstance(string connectionString, string masterKey)
     public const string AdministratorPassword = "a-password-of-real-length";
 
     public string ConnectionString => connectionString;
+
+    /// <summary>
+    /// The clock this instance runs on. It starts at the real one and a test
+    /// moves it — which is the only way to ask what happens after a window that
+    /// is measured in days (Specification §6.5).
+    /// </summary>
+    public MovableClock Clock { get; } = new();
 
     /// <summary>
     /// The instance after its first run, and the session token that came out of
@@ -94,6 +104,14 @@ internal sealed class AnInstance(string connectionString, string masterKey)
         return http;
     }
 
+    /// <summary>
+    /// Replaces what the composition root registered, after it has registered it.
+    /// The clock is the one service a test has to be able to move; everything
+    /// else here is the installation an operator gets.
+    /// </summary>
+    protected override void ConfigureWebHost(IWebHostBuilder builder) =>
+        builder.ConfigureTestServices(services => services.AddSingleton<TimeProvider>(Clock));
+
     protected override IHost CreateHost(IHostBuilder builder)
     {
         builder.ConfigureHostConfiguration(configuration => configuration.AddInMemoryCollection(
@@ -110,6 +128,16 @@ internal sealed class AnInstance(string connectionString, string masterKey)
 
     private static string AMasterKey() =>
         Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(MasterKey.Length));
+
+    /// <summary>The system clock, plus whatever a test has added to it.</summary>
+    internal sealed class MovableClock : TimeProvider
+    {
+        private TimeSpan _ahead = TimeSpan.Zero;
+
+        public override DateTimeOffset GetUtcNow() => System.GetUtcNow() + _ahead;
+
+        public void MoveOn(TimeSpan by) => _ahead += by;
+    }
 
     private sealed class Capture(List<string> errors) : ILoggerProvider, ILogger
     {

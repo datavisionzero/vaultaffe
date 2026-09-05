@@ -139,6 +139,18 @@ the window: a deleted secret keeps its row, so it fires only when that row is
 genuinely removed — a human purge, or the end of the window. When a secret is
 gone its history has to be gone with it. That is what a purge means.
 
+The acts do the same thing the schema does: deleting a project sets `deleted_at`
+on the project row and touches nothing underneath. The subtree is retained and
+restored **as one**, so an environment deleted before its project stays deleted
+when the project comes back — which is the state that was there, rather than the
+state that would have been. Marking the children too would lose exactly that.
+
+**Still here and still recoverable are two questions.** Nothing removes the row
+when the window ends: what removes it is a purge, or the sweep that reads the
+deadline. So an object past its window is found and then refused —
+`not-recoverable`, not `not-found` — and its name stays reserved until the row
+itself is gone.
+
 ## Value history is bounded, and the clock is `replaced_at`
 
 Five versions, at most 72 hours, whichever is reached first; what falls out is

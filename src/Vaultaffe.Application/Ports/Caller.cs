@@ -46,6 +46,13 @@ public sealed record Caller(
         Reach.Covers(projectId, environmentId);
 
     /// <summary>
+    /// Whether this caller's token may touch that project as a whole — the
+    /// question renaming, deleting or adding an environment has to ask
+    /// (<see cref="TokenReach.CoversAllOf"/>).
+    /// </summary>
+    public bool ReachesAllOf(Guid projectId) => Reach.CoversAllOf(projectId);
+
+    /// <summary>
     /// What the change log records: the acting identity, and its type. A session
     /// is the person; anything else is the token, so that a revoked token's
     /// entries still read as something other than a bare id.

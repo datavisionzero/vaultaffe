@@ -58,4 +58,20 @@ public sealed class TokenReach
             && (binding.EnvironmentId is null
                 || environmentId is null
                 || binding.EnvironmentId == environmentId));
+
+    /// <summary>
+    /// Whether this token may touch that project <b>as a whole</b> — every
+    /// environment of it, including ones that do not exist yet.
+    /// </summary>
+    /// <remarks>
+    /// The stronger question, and the one that has to be asked before a project
+    /// is renamed or deleted, or an environment is added to it. A token bound to
+    /// staging reaches into the project (<see cref="Covers"/>) and must not be
+    /// able to create the production environment beside it, or to delete the
+    /// project the binding was supposed to narrow it to.
+    /// </remarks>
+    public bool CoversAllOf(Guid projectId) =>
+        IsTheWholeOrganization
+        || _bindings.Any(binding =>
+            binding.ProjectId == projectId && binding.EnvironmentId is null);
 }

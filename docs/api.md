@@ -14,10 +14,11 @@ themselves and checked in
 
 **Most of it does not exist yet.** What has landed is the contract itself — the
 version in the path, the handshake, the error shape and the document — identity:
-the first run, signing in, the device-code login and token management — and the
-authorization every endpoint after it is enforced by. Projects, environments and
-the secrets surface arrive with their own tickets, and this file is kept accurate
-as each does.
+the first run, signing in, the device-code login and token management — the
+authorization every endpoint after it is enforced by — and the catalogue:
+projects and environments, with the change log that every write path since has
+been in. The secrets surface and the change log's own endpoint arrive with their
+own tickets, and this file is kept accurate as each does.
 
 ## Where the endpoints are
 
@@ -28,6 +29,7 @@ as each does.
 /api/v1/device/authorizations    beginning a device-code login
 /api/v1/device/tokens            polling one
 /api/v1/tokens                   creating, listing and revoking tokens
+/api/v1/projects                 the catalogue, by name
 /device                          the page a human confirms a login on
 
 /api/handshake       what this instance is and what it serves
@@ -229,6 +231,67 @@ agent token, because the point is attribution and not restriction
 ([§6.4](../Specification.md#64-permissions-in-the-mvp)), and `names` plus `read`
 for a service token. Bindings omitted or empty mean the whole organization.
 
+## Projects and environments
+
+Addressed **by name**, at both levels:
+
+```
+GET    /api/v1/projects                                        every project this token reaches
+POST   /api/v1/projects                                        create one
+GET    /api/v1/projects/{project}                              one, with its environments
+PATCH  /api/v1/projects/{project}                              rename it
+DELETE /api/v1/projects/{project}                              delete it, recoverably
+POST   /api/v1/projects/{project}/restore                      bring it back
+
+GET    /api/v1/projects/{project}/environments                 every environment this token reaches
+POST   /api/v1/projects/{project}/environments                 add one
+PATCH  /api/v1/projects/{project}/environments/{environment}   rename it
+DELETE /api/v1/projects/{project}/environments/{environment}   delete it, recoverably
+POST   /api/v1/projects/{project}/environments/{environment}/restore
+```
+
+A name is what a person types, what a `vaultaffe://` reference carries and what
+the CLI's directory binding holds
+([§5](../Specification.md#5-core-concepts)), so it is what the path carries too.
+The id is in every answer, because a token binding is by id and so is the
+`out-of-reach` refusal.
+
+**Creating a project creates its environments.** `dev`, `staging` and `prod`
+unless the request names others; an explicit empty list creates none. Environment
+names are free, and an extra `dev-someone` is an ordinary environment offering
+**no** privacy — everybody in the organization sees it
+([§6.4](../Specification.md#64-permissions-in-the-mvp)). Both names are lower-case
+and narrow, because both appear inside a reference
+([ADR 0003](./adr/0003-a-name-inside-a-reference-is-narrow-and-lower-case.md)).
+
+**Deleting is recoverable and nothing cascades.** `DELETE` sets the moment and the
+object leaves every listing; `restore` brings it back inside 72 hours, and
+`not-recoverable` is the answer after that — the row is still there, so this is a
+refusal rather than a `not-found`. Deleting a project does **not** delete its
+environments: the subtree is retained and restored *as one*, so an environment
+deleted before its project stays deleted when the project comes back.
+
+**A deleted object keeps its name.** Creating something of that name is
+`name-taken` with `takenBySomethingDeleted: true` — which is the answer to "I
+deleted it, why can I not recreate it".
+
+**A binding narrows a listing and refuses a change.** A token bound to one project
+sees that project in `GET /projects` and `out-of-reach` on any other; a token
+bound to one environment sees that environment and cannot create the one beside
+it, or rename or delete the project its binding was supposed to narrow it to.
+Creating a project needs a token that reaches the whole organization.
+
+Scopes: `names` to read the catalogue, `write` to create or rename, `delete` to
+delete **and to restore** — restoring is the undo of a deletion and travels with
+it ([§5](../Specification.md#5-core-concepts)). None of it is human-only:
+creating projects and environments is explicitly something an agent may do.
+
+**Every one of these changes is in the change log**, with the acting identity and
+its type ([§6.5](../Specification.md#65-logging-and-history)) — the log belongs to
+the first write path rather than to a later ticket, and an entry is committed by
+the same transaction as the change it describes. Reading it is `GET`-able with its
+own ticket; writing it starts here.
+
 ## Refusals
 
 Every error is `application/problem+json`
@@ -274,6 +337,8 @@ an untidiness. `detail` says what was refused, not what it was refused about.
 | `insufficient-scope` | 403 | The token is missing a scope. Carries `requiredScopes` and `grantedScopes`. |
 | `out-of-reach` | 403 | The token is bound elsewhere. Carries `projectId` and `environmentId`. |
 | `already-started` | 409 | The instance already has its first user. |
+| `name-taken` | 409 | Something of that name is here. Carries `takenBySomethingDeleted`. |
+| `not-recoverable` | 410 | Deleted longer ago than the 72-hour window. |
 | `device-pending` | 400 | Nobody has confirmed that login yet. Keep polling. |
 | `device-denied` | 400 | A human refused it. |
 | `device-expired` | 400 | Nobody confirmed it in time, or its token was already collected. |

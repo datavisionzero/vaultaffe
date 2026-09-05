@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Vaultaffe.Application.Ports;
 using Vaultaffe.Infrastructure.Persistence;
 
 namespace Vaultaffe.Infrastructure;
@@ -25,6 +26,12 @@ public static class PersistenceServices
                 + $"ConnectionStrings__{ConnectionStringName} in its environment.");
 
         services.AddDbContext<VaultaffeDbContext>(options => options.UseNpgsql(connectionString));
+
+        // Both scoped, over the one context of the request: what the acts change
+        // and what the change log records about it reach the database in the same
+        // transaction (docs/storage.md).
+        services.AddScoped<IProjectStore, ProjectStore>();
+        services.AddScoped<IChangeLogStore, ChangeLogStore>();
 
         services.AddSingleton<SchemaMigrator>();
 

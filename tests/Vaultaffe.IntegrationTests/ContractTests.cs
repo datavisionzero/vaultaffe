@@ -55,6 +55,11 @@ public sealed class ContractTests(PostgresFixture postgres)
                 "/api/handshake",
                 "/api/v1/device/authorizations", "/api/v1/device/tokens",
                 "/api/v1/instance", "/api/v1/me",
+                "/api/v1/projects", "/api/v1/projects/{project}",
+                "/api/v1/projects/{project}/environments",
+                "/api/v1/projects/{project}/environments/{environment}",
+                "/api/v1/projects/{project}/environments/{environment}/restore",
+                "/api/v1/projects/{project}/restore",
                 "/api/v1/sessions", "/api/v1/sessions/current",
                 "/api/v1/tokens", "/api/v1/tokens/{id}",
                 "/problems", "/problems/{code}",
@@ -71,6 +76,8 @@ public sealed class ContractTests(PostgresFixture postgres)
         Assert.Contains("Session", schemas);
         Assert.Contains("Token", schemas);
         Assert.Contains("Me", schemas);
+        Assert.Contains("Project", schemas);
+        Assert.Contains("Environment", schemas);
         Assert.Contains("ProblemDetails", schemas);
 
         // The browser page the device login needs is deliberately not in here:

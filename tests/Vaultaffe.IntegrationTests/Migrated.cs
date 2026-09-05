@@ -67,9 +67,7 @@ internal sealed class Migrated(string connectionString) : IAsyncDisposable
     /// and not the change tracker answering.
     /// </summary>
     public VaultaffeDbContext Writer(Guid? organizationId) =>
-        new(
-            new DbContextOptionsBuilder<VaultaffeDbContext>().UseNpgsql(ConnectionString).Options,
-            new ScopeOf(organizationId));
+        ReaderOn(ConnectionString, organizationId);
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
@@ -77,6 +75,16 @@ internal sealed class Migrated(string connectionString) : IAsyncDisposable
         new(
             new ServiceCollection().AddScoped(_ => context).BuildServiceProvider(),
             NullLogger<SchemaMigrator>.Instance);
+
+    /// <summary>
+    /// A context on <paramref name="connectionString"/> acting inside
+    /// <paramref name="organizationId"/> — for a test that has to look at rows an
+    /// instance wrote and no endpoint hands out yet.
+    /// </summary>
+    public static VaultaffeDbContext ReaderOn(string connectionString, Guid? organizationId) =>
+        new(
+            new DbContextOptionsBuilder<VaultaffeDbContext>().UseNpgsql(connectionString).Options,
+            new ScopeOf(organizationId));
 
     private sealed class ScopeOf(Guid? organizationId) : IOrganizationScope
     {

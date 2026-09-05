@@ -89,14 +89,33 @@ public sealed class Refusal : Exception
     /// a caller comparing them against its own binding is how it finds out what
     /// it was pointed at.
     /// </summary>
-    public static Refusal OutOfReach(Guid projectId, Guid? environmentId) =>
+    public static Refusal OutOfReach(Guid? projectId = null, Guid? environmentId = null) =>
         new(
             RefusalCode.OutOfReach,
-            "This token is bound to particular projects and environments, and that is not one of "
-            + "them. A human issues a token that reaches there.",
+            projectId is null
+                ? "This token is bound to particular projects, and this needs one that reaches "
+                    + "the whole organization. A human issues a token that does."
+                : "This token is bound to particular projects and environments, and that is not "
+                    + "one of them. A human issues a token that reaches there.",
             new Dictionary<string, object?>
             {
                 ["projectId"] = projectId,
                 ["environmentId"] = environmentId,
             });
+
+    /// <summary>
+    /// The name is in use. Deliberately its own code and not a validation
+    /// failure: nothing about the name is malformed, and the surprising case —
+    /// a deleted object keeping its name reserved for as long as it can be
+    /// restored (Specification §6.5) — is one a client should be able to
+    /// recognise rather than read.
+    /// </summary>
+    public static Refusal NameTaken(string detail, bool bySomethingDeleted) =>
+        new(
+            RefusalCode.NameTaken,
+            detail,
+            new Dictionary<string, object?> { ["takenBySomethingDeleted"] = bySomethingDeleted });
+
+    /// <summary>Deleted longer ago than the recovery window. There is nothing to restore.</summary>
+    public static Refusal NotRecoverable(string detail) => new(RefusalCode.NotRecoverable, detail);
 }

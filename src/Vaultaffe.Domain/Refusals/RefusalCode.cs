@@ -62,4 +62,13 @@ public enum RefusalCode
 
     /// <summary>The token is bound elsewhere and does not reach that project or environment.</summary>
     OutOfReach = 15,
+
+    /// <summary>
+    /// Something of that name is already here — including something deleted,
+    /// which keeps its name reserved for as long as it is recoverable.
+    /// </summary>
+    NameTaken = 16,
+
+    /// <summary>It was deleted longer ago than the recovery window, and is gone.</summary>
+    NotRecoverable = 17,
 }

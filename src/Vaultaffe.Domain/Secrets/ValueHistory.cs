@@ -27,4 +27,17 @@ public static class ValueHistory
     /// not restart the clocks of what hangs underneath.
     /// </summary>
     public static readonly TimeSpan RecoveryWindow = TimeSpan.FromHours(72);
+
+    /// <summary>
+    /// Whether something deleted at <paramref name="deletedAt"/> can still be
+    /// restored at <paramref name="now"/>.
+    /// </summary>
+    /// <remarks>
+    /// Still here and still recoverable are two questions. The row outlives the
+    /// window — it is removed by a purge or by the sweep that reads the deadline,
+    /// not by the deadline passing — so an object past its window is found and
+    /// then refused rather than not found (Specification §6.5).
+    /// </remarks>
+    public static bool IsStillRecoverable(DateTimeOffset deletedAt, DateTimeOffset now) =>
+        now - deletedAt <= RecoveryWindow;
 }

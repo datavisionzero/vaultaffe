@@ -15,9 +15,10 @@ change afterwards: the token value and the envelope a secret rests in
 rest of the API arrives inside: the version in the path, the handshake, the shape
 of a refusal, and the document all of it is captured into
 ([`api.md`](./api.md)) — identity: the first run, signing in, the device-code
-login with the one page it needs, and token management — and the authorization
+login with the one page it needs, and token management — the authorization
 every endpoint after it is held to: the scope set, the binding, and the short
-list only a person may do. Beside it the Go module
+list only a person may do — and the catalogue: projects and environments, with
+the change log that every write path since has been in. Beside it the Go module
 with one command that prints its version, and the workflow that builds and tests
 both. This document is kept accurate from here on: a file that lands
 somewhere it does not describe means one of the two is wrong.
@@ -86,13 +87,20 @@ refusal says about them — which name the action and never a command
 
 **`Vaultaffe.Application` holds the acts and the ports.** An act is one thing a
 caller does, a port is one thing the acts need answered. Starting the instance,
-signing in, the three steps of a device login, creating and revoking tokens; and
-still to come, setting a secret, reading one, listing names without values,
-importing an environment, rolling back, deleting recoverably and restoring.
-Beside them the ports: the stores, the identity of the caller, the thing that
-hashes a password, the key ring that seals a value and opens it again, and the
-clock — which is `TimeProvider` from the base class libraries rather than a port
-of ours.
+signing in, the three steps of a device login, creating and revoking tokens,
+creating and listing and renaming and deleting and restoring a project or an
+environment; and still to come, setting a secret, reading one, listing names
+without values, importing an environment, rolling back and purging. Beside them
+the ports: the stores, the identity of the caller, the thing that hashes a
+password, the key ring that seals a value and opens it again, and the clock —
+which is `TimeProvider` from the base class libraries rather than a port of ours.
+
+`ChangeLog` is one of the acts and belongs to **every** write path, not to a
+later ticket: it takes an action and the names it happened to, has no parameter a
+value could be passed through, and enlists its entry so the same `SaveAsync` that
+commits the change commits the record of it
+([§6.5](../Specification.md#65-logging-and-history)). A log written in a second
+transaction is one that can disagree with what happened.
 
 `Caller` is the one to know: the organization, the person, the token, its scopes
 and what it reaches, as a value rather than the rows it came from. The adapter
@@ -191,7 +199,17 @@ authorization: that a machine token is refused a human-only action with the
 action's name in the document and no command in it, that a refused request wrote
 nothing, and — in the unit tests, where the rules are — that a scope set is
 carried whole or not at all, that a token bound to one environment does not reach
-its neighbour, and that no refusal this product can make spells a command.
+its neighbour, and that no refusal this product can make spells a command. Then
+the catalogue: that a project arrives with its three environments, that a deleted
+one keeps its name reserved and comes back with the subtree it had rather than
+the one it would have had, that past the window there is a refusal and not a
+missing row, that a bound token's listing is narrowed while its writes are
+refused — and that every one of those changes is in the change log under the
+identity and the type that made it, an agent's own token included.
+
+`AnInstance` carries the one service a test replaces: a clock it can move. A
+window measured in days has no other way of being asked about, and everything
+else in that host is the installation an operator gets.
 
 The frontend will carry its own tests inside `src/web/`, and the CLI carries its
 own inside `src/cli/`, each run by the CI job that builds it.

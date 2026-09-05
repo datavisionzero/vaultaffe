@@ -34,6 +34,18 @@ builder.Services.AddScoped<SignIn>();
 builder.Services.AddScoped<BeginDeviceLogin>();
 builder.Services.AddScoped<ConfirmDeviceLogin>();
 builder.Services.AddScoped<RedeemDeviceLogin>();
+builder.Services.AddScoped<ChangeLog>();
+builder.Services.AddScoped<CreateProject>();
+builder.Services.AddScoped<ListProjects>();
+builder.Services.AddScoped<ReadProject>();
+builder.Services.AddScoped<RenameProject>();
+builder.Services.AddScoped<DeleteProject>();
+builder.Services.AddScoped<RestoreProject>();
+builder.Services.AddScoped<CreateEnvironment>();
+builder.Services.AddScoped<ListEnvironments>();
+builder.Services.AddScoped<RenameEnvironment>();
+builder.Services.AddScoped<DeleteEnvironment>();
+builder.Services.AddScoped<RestoreEnvironment>();
 builder.Services.AddScoped<CreateToken>();
 builder.Services.AddScoped<ListTokens>();
 builder.Services.AddScoped<RevokeToken>();
@@ -73,6 +85,7 @@ app.MapIdentity();
 app.MapDeviceLogin();
 app.MapDevicePage();
 app.MapTokens();
+app.MapProjects();
 
 app.Run();
 
