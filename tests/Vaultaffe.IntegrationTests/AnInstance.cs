@@ -1,3 +1,6 @@
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -25,7 +28,34 @@ internal sealed class AnInstance(string connectionString, string masterKey)
     public static async Task<AnInstance> StartedAsync(PostgresFixture postgres) =>
         new(await postgres.CreateDatabaseAsync(), AMasterKey());
 
+    /// <summary>The address the first user of a started instance signs in with.</summary>
+    public const string Administrator = "maintainer@example.test";
+
+    /// <summary>Their password. Long enough to be one, and nothing else about it matters.</summary>
+    public const string AdministratorPassword = "a-password-of-real-length";
+
     public string ConnectionString => connectionString;
+
+    /// <summary>
+    /// The instance after its first run, and the session token that came out of
+    /// it — which is what everything else here acts under.
+    /// </summary>
+    public async Task<string> StartAsync()
+    {
+        using var client = ClientAnnouncing(null);
+
+        using var response = await client.PostAsJsonAsync(
+            "/api/v1/instance",
+            new { email = Administrator, name = "Maintainer", password = AdministratorPassword },
+            TestContext.Current.CancellationToken);
+
+        response.EnsureSuccessStatusCode();
+
+        var started = JsonNode.Parse(await response.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!;
+
+        return started["session"]!["token"]!.GetValue<string>();
+    }
 
     /// <summary>
     /// What the instance logged at error or above — the exception behind a 500,
@@ -46,6 +76,19 @@ internal sealed class AnInstance(string connectionString, string masterKey)
         if (client is not null)
         {
             http.DefaultRequestHeaders.Add("Vaultaffe-Client", client);
+        }
+
+        return http;
+    }
+
+    /// <summary>A client presenting <paramref name="token"/>, or none at all.</summary>
+    public HttpClient ClientWith(string? token)
+    {
+        var http = CreateClient();
+
+        if (token is not null)
+        {
+            http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         }
 
         return http;

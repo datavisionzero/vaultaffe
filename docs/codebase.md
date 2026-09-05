@@ -11,11 +11,13 @@ what has landed in it so far is the data model — the eight tables, the
 migrations that apply themselves on startup, and the one place two organizations
 are kept apart ([`storage.md`](./storage.md)) — the two formats nothing can
 change afterwards: the token value and the envelope a secret rests in
-([ADR 0004](./adr/0004-the-token-format-and-the-envelope.md)) — and the contract
-the rest of the API arrives inside: the version in the path, the handshake, the
-shape of a refusal, and the document all of it is captured into
-([`api.md`](./api.md)). Beside it the Go module with one command that prints its
-version, and the workflow that builds and tests both. This document is kept accurate from here on: a file that lands
+([ADR 0004](./adr/0004-the-token-format-and-the-envelope.md)) — the contract the
+rest of the API arrives inside: the version in the path, the handshake, the shape
+of a refusal, and the document all of it is captured into
+([`api.md`](./api.md)) — and identity: the first run, signing in, the device-code
+login with the one page it needs, and token management. Beside it the Go module
+with one command that prints its version, and the workflow that builds and tests
+both. This document is kept accurate from here on: a file that lands
 somewhere it does not describe means one of the two is wrong.
 
 Three decisions shape the layout. Two of them the specification already made —
@@ -78,14 +80,23 @@ that can be constructed without a binding, or a value version that can outlive
 both of its bounds, is a rule that escaped.
 
 **`Vaultaffe.Application` holds the acts and the ports.** An act is one thing a
-caller does, a port is one thing the acts need answered. Setting a secret,
-reading one, listing names without values, importing an environment, rolling
-back, deleting recoverably and restoring, creating tokens under a human session.
-Beside them the ports: the stores, the identity of the caller, the key ring that
-seals a value and opens it again, and the clock — which is `TimeProvider` from
-the base class libraries rather than a port of ours.
+caller does, a port is one thing the acts need answered. Starting the instance,
+signing in, the three steps of a device login, creating and revoking tokens; and
+still to come, setting a secret, reading one, listing names without values,
+importing an environment, rolling back, deleting recoverably and restoring.
+Beside them the ports: the stores, the identity of the caller, the thing that
+hashes a password, the key ring that seals a value and opens it again, and the
+clock — which is `TimeProvider` from the base class libraries rather than a port
+of ours.
 
-**`Vaultaffe.Infrastructure` answers those ports.** `Persistence/` is the one
+`Caller` is the one to know: the organization, the person, the token and its
+scopes, as a value rather than the rows it came from. The adapter that
+authenticated the request hands the same one to every act in it, and it is what
+the change log's identity type is read from.
+
+**`Vaultaffe.Infrastructure` answers those ports.** `Identity/` hashes passwords
+with Argon2id in the encoding that carries its own parameters, so raising the cost
+is a re-hash rather than a migration. `Persistence/` is the one
 place that declares schema: the context, one configuration per table, the
 migrations and the migrator that applies them before anything is served.
 `Encryption/` is the envelope of
@@ -97,10 +108,14 @@ organization filter of
 `VaultaffeDbContext.OnModelCreating` and nowhere else:
 [`storage.md`](./storage.md) has the whole of it.
 
-**`Vaultaffe.Api` is the adapters and the composition root.** The endpoints,
-the token and session authentication, the version handshake, the one place a
-refusal becomes a problem document — and the browser confirmation page the
-device-code login needs. The HTTP API is the only read and write interface
+**`Vaultaffe.Api` is the adapters and the composition root.** The endpoints, the
+token authentication, the version handshake, the one place a refusal becomes a
+problem document — and the browser confirmation page the device-code login needs,
+which is the whole of the browser surface until the management application
+arrives. `CallerContext` is worth knowing about: it answers both the caller port
+the acts ask and the organization scope the query filter reads, so a caller can
+never be inside a different organization from the one their queries are filtered
+by. The HTTP API is the only read and write interface
 (§9): the web application is a client of it exactly as the CLI is, and a later
 MCP server would be a third adapter over the same acts rather than a second way
 into the data.
@@ -147,7 +162,10 @@ secret's own data key comes back out of Postgres unchanged and a superseded one
 with it — and that the change log has no column a value could live in. Then the
 contract: that a client too old is told so rather than left to fail at a field,
 that a refusal is a problem document whose `code` a client can switch on, and
-that the document a running instance serves is the one checked in.
+that the document a running instance serves is the one checked in. Then identity,
+end to end over HTTP: that an instance cannot be started twice, that a wrong
+password and an unknown address are one answer, that a device code hands over one
+token and never a second, and that no token listing carries a value.
 
 The frontend will carry its own tests inside `src/web/`, and the CLI carries its
 own inside `src/cli/`, each run by the CI job that builds it.

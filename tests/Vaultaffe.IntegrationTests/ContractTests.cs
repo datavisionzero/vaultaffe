@@ -50,7 +50,33 @@ public sealed class ContractTests(PostgresFixture postgres)
             .Select(path => path.Key)
             .Order(StringComparer.Ordinal);
 
-        Assert.Equal(["/api/handshake", "/problems", "/problems/{code}"], paths);
+        Assert.Equal(
+            [
+                "/api/handshake",
+                "/api/v1/device/authorizations", "/api/v1/device/tokens",
+                "/api/v1/instance", "/api/v1/me",
+                "/api/v1/sessions", "/api/v1/sessions/current",
+                "/api/v1/tokens", "/api/v1/tokens/{id}",
+                "/problems", "/problems/{code}",
+            ],
+            paths);
+
+        // The shapes are the ones docs/api.md names, spelled that way in the
+        // components so that a generated client sees the specification's words.
+        var schemas = document["components"]!["schemas"]!.AsObject()
+            .Select(schema => schema.Key)
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.Contains("Handshake", schemas);
+        Assert.Contains("Session", schemas);
+        Assert.Contains("Token", schemas);
+        Assert.Contains("Me", schemas);
+        Assert.Contains("ProblemDetails", schemas);
+
+        // The browser page the device login needs is deliberately not in here:
+        // this document is what a client is generated from, and that is a page
+        // for a person (Specification §6.6).
+        Assert.DoesNotContain("/device", document["paths"]!.AsObject().Select(path => path.Key));
     }
 
     [Fact]

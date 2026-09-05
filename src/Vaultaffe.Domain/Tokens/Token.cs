@@ -9,9 +9,8 @@ namespace Vaultaffe.Domain.Tokens;
 /// <remarks>
 /// What a token value looks like — the prefix per kind that lets a secret scanner
 /// find it in a repository or a log, and how it is hashed — is
-/// <see cref="TokenValue"/>. Who owns a token is not decided here; that arrives
-/// with the identity this one belongs to. This type is the credential's own
-/// record: what it may touch, what it may do, and whether it still counts.
+/// <see cref="TokenValue"/>. This type is the credential's own record: whose it
+/// is, what it may touch, what it may do, and whether it still counts.
 /// </remarks>
 public sealed class Token : IBelongToAnOrganization
 {
@@ -20,6 +19,7 @@ public sealed class Token : IBelongToAnOrganization
     public Token(
         Guid id,
         Guid organizationId,
+        Guid userId,
         TokenKind kind,
         string? name,
         byte[] valueHash,
@@ -31,6 +31,7 @@ public sealed class Token : IBelongToAnOrganization
 
         Id = id;
         OrganizationId = organizationId;
+        UserId = userId;
         Kind = kind;
         Name = name;
         ValueHash = valueHash;
@@ -48,6 +49,7 @@ public sealed class Token : IBelongToAnOrganization
     public static (Token Token, TokenValue Value) Issue(
         Guid id,
         Guid organizationId,
+        Guid userId,
         TokenKind kind,
         string? name,
         Scopes scopes,
@@ -57,13 +59,24 @@ public sealed class Token : IBelongToAnOrganization
         var value = TokenValue.Issue(kind);
 
         return (
-            new Token(id, organizationId, kind, name, value.Hash(), scopes, createdAt, expiresAt),
+            new Token(
+                id, organizationId, userId, kind, name, value.Hash(), scopes, createdAt, expiresAt),
             value);
     }
 
     public Guid Id { get; private set; }
 
     public Guid OrganizationId { get; private set; }
+
+    /// <summary>
+    /// Whose token this is. For a session token that is the person it
+    /// authenticates; for a service or an agent token it is the person who
+    /// created it and is accountable for what it does — a human creates an agent
+    /// token and hands it over (Specification §6.4), and the trail from a machine
+    /// back to a person is exactly what the change log's identity type is for
+    /// (§6.5).
+    /// </summary>
+    public Guid UserId { get; private set; }
 
     public TokenKind Kind { get; private set; }
 

@@ -2,6 +2,7 @@ using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Vaultaffe.Application.Ports;
 using Vaultaffe.Domain.History;
+using Vaultaffe.Domain.Identities;
 using Vaultaffe.Domain.Organizations;
 using Vaultaffe.Domain.Projects;
 using Vaultaffe.Domain.Secrets;
@@ -31,6 +32,10 @@ public sealed class VaultaffeDbContext(
     IOrganizationScope scope) : DbContext(options)
 {
     public DbSet<Organization> Organizations => Set<Organization>();
+
+    public DbSet<User> Users => Set<User>();
+
+    public DbSet<DeviceAuthorization> DeviceAuthorizations => Set<DeviceAuthorization>();
 
     public DbSet<Project> Projects => Set<Project>();
 

@@ -1,0 +1,186 @@
+using Vaultaffe.Application.Ports;
+using Vaultaffe.Domain.Refusals;
+using Vaultaffe.Domain.Tokens;
+
+namespace Vaultaffe.Application.Acts;
+
+/// <summary>One project, or one environment of it, a token may touch.</summary>
+public sealed record BindingRequest(Guid ProjectId, Guid? EnvironmentId);
+
+/// <summary>A token as a listing shows it — everything about it except its value.</summary>
+public sealed record TokenRow(
+    Guid Id,
+    TokenKind Kind,
+    string? Name,
+    Scopes Scopes,
+    IReadOnlyList<BindingRequest> Bindings,
+    bool ReachesTheWholeOrganization,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? ExpiresAt,
+    DateTimeOffset? RevokedAt);
+
+/// <summary>A token as it is created: the row, and the value nobody will see again.</summary>
+public sealed record TokenIssued(TokenRow Token, string Value);
+
+/// <summary>
+/// Creating a service or an agent token (Specification §6.1, §6.4). The value is
+/// shown exactly once, here, and nothing can ask for it afterwards.
+/// </summary>
+/// <remarks>
+/// A default agent token is the whole organization with every scope, because the
+/// point is attribution and not restriction (§6.4): an agent acts under its own
+/// token so the change log can say an agent acted, and a human narrows it at
+/// creation if they want to. A service token defaults to names and read.
+/// <para>
+/// Session tokens are not created here. One comes out of a sign-in or a device
+/// login and nowhere else — a session somebody could mint for another person is
+/// not a session.
+/// </para>
+/// </remarks>
+public sealed class CreateToken(
+    IIdentityStore identities, ICallerIdentity caller, TimeProvider clock)
+{
+    /// <summary>The longest a token name may be.</summary>
+    public const int NameLimit = 100;
+
+    public async Task<TokenIssued> ExecuteAsync(
+        TokenKind kind,
+        string name,
+        Scopes? scopes,
+        IReadOnlyList<BindingRequest>? bindings,
+        DateTimeOffset? expiresAt,
+        CancellationToken cancellationToken)
+    {
+        var acting = caller.Required;
+
+        // Creating a token is human-only: a token is itself a secret, and one an
+        // agent created through the CLI would land on stdout and thus in its
+        // context (§6.1). Central enforcement of the human-only list, and the
+        // refusal that names the human action instead, belong to the
+        // authorization ticket; this is the endpoint refusing on its own until
+        // then.
+        if (!acting.IsHumanSession)
+        {
+            throw Refusal.Forbidden(
+                "Creating a token needs a human session. A token is itself a secret, and one "
+                + "an agent created would be printed into its own context.");
+        }
+
+        if (kind is TokenKind.Session)
+        {
+            throw Refusal.Validation(
+                "kind", "A session token comes from signing in, not from being created.");
+        }
+
+        if (kind is not (TokenKind.Service or TokenKind.Agent))
+        {
+            throw Refusal.Validation("kind", "There are three token kinds.");
+        }
+
+        var named = (name ?? string.Empty).Trim();
+
+        if (named.Length is 0 or > NameLimit)
+        {
+            throw Refusal.Validation(
+                "name",
+                $"A token needs a name of at most {NameLimit} characters, so that a revocation "
+                + "list is readable.");
+        }
+
+        var now = clock.GetUtcNow();
+
+        if (expiresAt is not null && expiresAt <= now)
+        {
+            throw Refusal.Validation("expiresAt", "An expiry in the past creates nothing.");
+        }
+
+        var (token, value) = Token.Issue(
+            Guid.NewGuid(),
+            acting.OrganizationId,
+            acting.UserId,
+            kind,
+            named,
+            scopes ?? DefaultScopesOf(kind),
+            now,
+            expiresAt);
+
+        foreach (var binding in bindings ?? [])
+        {
+            token.BindTo(Guid.NewGuid(), binding.ProjectId, binding.EnvironmentId);
+        }
+
+        await identities.AddTokenAsync(token, cancellationToken);
+
+        return new TokenIssued(Row(token), value.Reveal());
+    }
+
+    /// <summary>
+    /// What a token of that kind carries unless the human says otherwise
+    /// (§6.4). An agent gets everything, a service gets names and read.
+    /// </summary>
+    public static Scopes DefaultScopesOf(TokenKind kind) => kind switch
+    {
+        TokenKind.Agent => Scopes.Everything,
+        TokenKind.Service => Scopes.ServiceDefault,
+        _ => Scopes.None,
+    };
+
+    internal static TokenRow Row(Token token) =>
+        new(
+            token.Id,
+            token.Kind,
+            token.Name,
+            token.Scopes,
+            [.. token.Bindings.Select(binding =>
+                new BindingRequest(binding.ProjectId, binding.EnvironmentId))],
+            token.ReachesTheWholeOrganization,
+            token.CreatedAt,
+            token.ExpiresAt,
+            token.RevokedAt);
+}
+
+/// <summary>
+/// Every token of this organization, revoked ones included — a revocation list
+/// nobody can read is not one.
+/// </summary>
+/// <remarks>
+/// Session tokens are in it: what a person needs after losing a laptop is to see
+/// their sessions and revoke one. No listing anywhere carries a value.
+/// </remarks>
+public sealed class ListTokens(IIdentityStore identities, ICallerIdentity caller)
+{
+    public async Task<IReadOnlyList<TokenRow>> ExecuteAsync(CancellationToken cancellationToken)
+    {
+        _ = caller.Required;
+
+        return [.. (await identities.ListTokensAsync(cancellationToken)).Select(CreateToken.Row)];
+    }
+}
+
+/// <summary>
+/// Revoking one. Revoked rather than deleted, so that everything it ever signed
+/// in the change log keeps an author (§6.5).
+/// </summary>
+public sealed class RevokeToken(
+    IIdentityStore identities, ICallerIdentity caller, TimeProvider clock)
+{
+    public async Task<TokenRow> ExecuteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var acting = caller.Required;
+
+        // Human-only, for the reason creating one is: see CreateToken.
+        if (!acting.IsHumanSession)
+        {
+            throw Refusal.Forbidden("Revoking a token needs a human session.");
+        }
+
+        var token = await identities.FindTokenAsync(id, cancellationToken)
+            ?? throw Refusal.NotFound("No token by that id.");
+
+        token.RevokeAt(clock.GetUtcNow());
+
+        await identities.SaveAsync(cancellationToken);
+
+        return CreateToken.Row(token);
+    }
+}

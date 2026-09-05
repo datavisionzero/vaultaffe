@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.OpenApi;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.OpenApi;
 
@@ -21,9 +22,26 @@ namespace Vaultaffe.Api.Http;
 /// </remarks>
 public static class OpenApiDocument
 {
+    /// <summary>
+    /// A CLR type ending in <c>Shape</c> is the contract's spelling of the
+    /// concept of the same name — <c>TokenShape</c> is the <c>Token</c> of
+    /// <c>docs/api.md</c> — so the suffix is dropped from the schema id and a
+    /// generated client sees the word the specification uses.
+    /// </summary>
+    private const string ShapeSuffix = "Shape";
+
     public static IServiceCollection AddVaultaffeOpenApi(this IServiceCollection services) =>
         services.AddOpenApi(ApiVersion.Current, options =>
         {
+            options.CreateSchemaReferenceId = info =>
+            {
+                var id = OpenApiOptions.CreateDefaultSchemaReferenceId(info);
+
+                return id is not null && id.EndsWith(ShapeSuffix, StringComparison.Ordinal)
+                    ? id[..^ShapeSuffix.Length]
+                    : id;
+            };
+
             options.AddSchemaTransformer((schema, context, _) =>
             {
                 // What ASP.NET returns as a refusal is a ProblemDetails plus the

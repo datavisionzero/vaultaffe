@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Vaultaffe.Domain.Refusals;
 
 namespace Vaultaffe.Api.Http;
 
@@ -11,9 +12,10 @@ namespace Vaultaffe.Api.Http;
 /// code as a member beside it.
 /// </summary>
 /// <remarks>
-/// The status of a code lives here and nowhere else. HTTP's word for a refusal
-/// is the status; the CLI's word for it is the code and an exit code of its own,
-/// and neither has to be derivable from the other.
+/// The status of a code lives here and nowhere else — not in Domain, where the
+/// codes live. HTTP's word for a refusal is the status; the CLI's word for it is
+/// the code and an exit code of its own, and neither has to be derivable from the
+/// other.
 /// <para>
 /// <b>A problem document never carries a secret value.</b> Specification §6.5
 /// makes a value in a log line or an error message a bug rather than an
@@ -33,40 +35,52 @@ public static class Problems
     /// </summary>
     private const string TypePrefix = "/problems/";
 
-    /// <summary>The wire spelling: <see cref="ProblemCode.ClientTooOld"/> is <c>client-too-old</c>.</summary>
-    public static string CodeOf(ProblemCode code) =>
+    /// <summary>The wire spelling: <see cref="RefusalCode.ClientTooOld"/> is <c>client-too-old</c>.</summary>
+    public static string CodeOf(RefusalCode code) =>
         JsonNamingPolicy.KebabCaseLower.ConvertName(code.ToString());
 
     /// <summary>The code again, spelled as the <c>type</c> a client may dereference.</summary>
-    public static string TypeOf(ProblemCode code) => TypePrefix + CodeOf(code);
+    public static string TypeOf(RefusalCode code) => TypePrefix + CodeOf(code);
 
     /// <summary>Which code a wire spelling names, or null when this build has no such code.</summary>
-    public static ProblemCode? Parse(string? code) =>
-        Enum.GetValues<ProblemCode>().Cast<ProblemCode?>()
+    public static RefusalCode? Parse(string? code) =>
+        Enum.GetValues<RefusalCode>().Cast<RefusalCode?>()
             .FirstOrDefault(known => CodeOf(known!.Value) == code);
 
-    public static int StatusOf(ProblemCode code) => code switch
+    public static int StatusOf(RefusalCode code) => code switch
     {
-        ProblemCode.ClientVersionUnreadable => StatusCodes.Status400BadRequest,
-        ProblemCode.NotFound or ProblemCode.UnsupportedApiVersion => StatusCodes.Status404NotFound,
-        ProblemCode.ClientTooOld => StatusCodes.Status426UpgradeRequired,
-        ProblemCode.Internal => StatusCodes.Status500InternalServerError,
-        _ => throw new ArgumentOutOfRangeException(nameof(code), code, "A problem code without a status."),
+        RefusalCode.Validation or RefusalCode.ClientVersionUnreadable
+            or RefusalCode.DevicePending or RefusalCode.DeviceDenied or RefusalCode.DeviceExpired =>
+            StatusCodes.Status400BadRequest,
+        RefusalCode.Unauthenticated => StatusCodes.Status401Unauthorized,
+        RefusalCode.Forbidden => StatusCodes.Status403Forbidden,
+        RefusalCode.NotFound or RefusalCode.UnsupportedApiVersion => StatusCodes.Status404NotFound,
+        RefusalCode.AlreadyStarted => StatusCodes.Status409Conflict,
+        RefusalCode.ClientTooOld => StatusCodes.Status426UpgradeRequired,
+        RefusalCode.Internal => StatusCodes.Status500InternalServerError,
+        _ => throw new ArgumentOutOfRangeException(nameof(code), code, "A refusal code without a status."),
     };
 
-    public static string TitleOf(ProblemCode code) => code switch
+    public static string TitleOf(RefusalCode code) => code switch
     {
-        ProblemCode.NotFound => "Nothing by that name",
-        ProblemCode.UnsupportedApiVersion => "This instance does not serve that version of the API",
-        ProblemCode.ClientTooOld => "This client is older than this instance accepts",
-        ProblemCode.ClientVersionUnreadable => "The announced client version is not a version",
-        ProblemCode.Internal => "Something went wrong on the server",
-        _ => throw new ArgumentOutOfRangeException(nameof(code), code, "A problem code without a title."),
+        RefusalCode.Validation => "A field is missing, malformed or over its limit",
+        RefusalCode.NotFound => "Nothing by that name",
+        RefusalCode.Unauthenticated => "No token, an unknown token, a revoked one, or the wrong password",
+        RefusalCode.Forbidden => "This identity may not do this",
+        RefusalCode.AlreadyStarted => "This instance already has its first user",
+        RefusalCode.DevicePending => "Nobody has confirmed this login yet",
+        RefusalCode.DeviceDenied => "A human refused this login",
+        RefusalCode.DeviceExpired => "This login expired, or its token was already collected",
+        RefusalCode.UnsupportedApiVersion => "This instance does not serve that version of the API",
+        RefusalCode.ClientTooOld => "This client is older than this instance accepts",
+        RefusalCode.ClientVersionUnreadable => "The announced client version is not a version",
+        RefusalCode.Internal => "Something went wrong on the server",
+        _ => throw new ArgumentOutOfRangeException(nameof(code), code, "A refusal code without a title."),
     };
 
     /// <summary>The document for <paramref name="code"/>.</summary>
     public static ProblemDetails Document(
-        ProblemCode code,
+        RefusalCode code,
         string? detail,
         string? instance = null,
         IReadOnlyDictionary<string, object?>? extensions = null)
@@ -96,7 +110,7 @@ public static class Problems
 
     /// <summary>The document as an endpoint's result.</summary>
     public static IResult Result(
-        ProblemCode code,
+        RefusalCode code,
         string? detail = null,
         IReadOnlyDictionary<string, object?>? extensions = null) =>
         Results.Problem(Document(code, detail, instance: null, extensions));
@@ -107,7 +121,7 @@ public static class Problems
     /// </summary>
     public static async Task WriteAsync(
         HttpContext context,
-        ProblemCode code,
+        RefusalCode code,
         string? detail = null,
         IReadOnlyDictionary<string, object?>? extensions = null)
     {
@@ -119,23 +133,29 @@ public static class Problems
     }
 
     /// <summary>
-    /// What turns anything that escaped an endpoint into <c>internal</c> with
-    /// nothing else in it. The exception goes to the log, where an operator can
-    /// see it; the caller gets a code and a title, because an exception message
-    /// is the other place a value could leak into (§6.5).
+    /// What turns a <see cref="Refusal"/> thrown by an act into its document, and
+    /// anything else into <c>internal</c> with nothing else in it. The exception
+    /// goes to the log, where an operator can see it; the caller gets a code and
+    /// a title, because an exception message is the other place a value could
+    /// leak into (§6.5).
     /// </summary>
     public sealed class Handler(ILogger<Handler> logger) : IExceptionHandler
     {
         public async ValueTask<bool> TryHandleAsync(
             HttpContext context, Exception exception, CancellationToken cancellationToken)
         {
-            logger.LogError(
-                exception,
-                "Unhandled exception on {Method} {Path}.",
-                context.Request.Method,
-                context.Request.Path);
+            var document = exception is Refusal refusal
+                ? Document(refusal.Code, refusal.Detail, context.Request.Path, refusal.Extensions)
+                : Document(RefusalCode.Internal, detail: null, context.Request.Path);
 
-            var document = Document(ProblemCode.Internal, detail: null, context.Request.Path);
+            if (document.Status == StatusCodes.Status500InternalServerError)
+            {
+                logger.LogError(
+                    exception,
+                    "Unhandled exception on {Method} {Path}.",
+                    context.Request.Method,
+                    context.Request.Path);
+            }
 
             context.Response.StatusCode = document.Status!.Value;
             await context.Response.WriteAsJsonAsync(

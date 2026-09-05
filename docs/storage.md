@@ -1,6 +1,6 @@
 # The Data Model
 
-Eight tables, and the rules the database itself holds. What each concept *means*
+Ten tables, and the rules the database itself holds. What each concept *means*
 is [Specification §5](../Specification.md#5-core-concepts); this says how it is
 stored and which of the promises are constraints rather than intentions.
 
@@ -27,13 +27,16 @@ an exception for generated code that is checked in like any other file.
 
 ```
 organization
+├─ app_user                 (organization_id, email unique across the instance)
 └─ project                  (organization_id, name unique per organization)
    └─ environment           (project_id, name unique per project)
       └─ secret             (environment_id, name unique per environment)
          └─ secret_value_version
 
-token
+token                       (organization_id, user_id)
 └─ token_binding            (a project, or one environment of it)
+
+device_authorization        (one `vaultaffe login` in progress)
 
 change_log_entry            (points at nothing)
 ```
@@ -41,12 +44,14 @@ change_log_entry            (points at nothing)
 | Table | What it holds |
 | --- | --- |
 | `organization` | The tenancy boundary. Exactly one row in the MVP. |
+| `app_user` | A person: the address they sign in with, their password hash, and whether they administer the organization. |
 | `project` | An application or service. |
 | `environment` | `dev`, `staging`, `prod` — one level, no branch or personal configs. |
 | `secret` | A key, and its current value sealed under the secret's data key. |
 | `secret_value_version` | Values this secret used to hold, tightly bounded. |
 | `token` | A credential: kind, scope set, and the hash of a value shown once. |
 | `token_binding` | What a token may touch. No rows means the whole organization. |
+| `device_authorization` | One `vaultaffe login` in progress: two codes, and what has happened to it. |
 | `change_log_entry` | What was done, by whom, and of what type — never a value. |
 
 ## Every table carries the organization
@@ -168,6 +173,53 @@ entries should still read as something other than a bare id.
 database does not reach into last night's backup. That belongs in the operations
 guide when there is one, not in a footnote.
 
+## A person is `app_user`, and the name is the one compromise
+
+`user` is a reserved word in Postgres, and a table named that would need quoting
+in every query for the rest of this product's life. Every other table here is
+named after its concept; this is the one that pays a prefix for it.
+
+The address is stored **normalized and lower-case**, because two spellings of one
+address are one person to everybody except an index — and a login that depended on
+how somebody's keyboard felt that morning is not a login. Surrounding whitespace
+goes the same way: it is what a form collected, not what anybody meant. The rule
+itself is deliberately loose — one `@`, something on either side, no whitespace —
+because this instance sends no mail
+([Specification §6.1](../Specification.md#61-web-ui)), so an address here is an
+identifier rather than a delivery target, and a strict rule would only refuse
+addresses that are perfectly valid. `ck_user_email` holds exactly that much.
+
+`ux_user_email` is unique **across the instance** rather than per organization.
+With one organization the two are the same thing; with several they are not, and a
+sign-in has only an address to go on — an address belonging to two people would be
+a login nobody could resolve.
+
+`password_hash` holds Argon2id in its PHC encoding, which carries the algorithm
+and its parameters with the value. Raising the cost later is therefore a new hash
+on the next sign-in rather than a migration, and nothing in the schema has to know
+which parameters a given row was written under.
+
+## A login in progress is a row, and it holds no code
+
+`device_authorization` is the device-code flow of
+[§6.2](../Specification.md#62-cli) between the CLI asking and a human confirming.
+It carries `device_code_hash` and never the device code — the same rule the token
+table follows, for a credential that is only worth ten minutes. The short
+`user_code` *is* stored in the clear, because it is not a credential: it names a
+pending request to the human confirming it, and confirming still takes their
+password ([ADR 0008](./adr/0008-a-session-is-a-token-and-the-only-page-asks-for-a-password.md)).
+
+Both codes are unique. Everything else on the row is a moment — approved, denied,
+redeemed — and the state is read from them rather than stored as one, so there is
+no status column that could disagree with its own timestamps. `ix_device_authorization_expires_at`
+is what a sweep will read when this instance has one; until then a collected login
+is a row that answers `redeemed` and hands nothing over twice.
+
+It carries an `organization_id` like every other domain table, and at the moment
+it is created nobody has authenticated. The MVP has exactly one organization (§5)
+and that is the one it gets; the day there are several, what resolves it is the
+human who confirms, and this is the column that answer already goes into.
+
 ## Tokens store a hash, and nothing else
 
 `token.value_hash` is unique, because authentication looks a token up by exactly
@@ -194,8 +246,13 @@ for an agent token, because the point is attribution, not restriction
 `(token_id, project_id, environment_id)` is declared `nulls not distinct`, or
 Postgres would allow "this whole project" twice.
 
-*Who owns a token is not in this table.* That arrives with the identity it
-belongs to.
+`user_id` is whose token it is: for a session token the person it authenticates,
+for a service or agent token the person who created it and is accountable for what
+it does. A human creates an agent token and hands it over
+([§6.4](../Specification.md#64-permissions-in-the-mvp)), and the trail from a
+machine back to a person is exactly what the change log's identity type is for
+(§6.5). The foreign key is `restrict` rather than `cascade`, for the reason
+revoking beats deleting: nothing here disappears quietly.
 
 ## What is deliberately not here
 
@@ -205,8 +262,15 @@ belongs to.
   no personal config, and therefore not a single exception to "everyone in the
   organization sees everything". The retrofit path, if that turns out wrong, is
   an additive column — a note, not a plan.
-- **No users table yet.** Identity, its password hash and its sessions arrive
-  with the login that needs them.
+- **No roles table, and no permissions table.** Every user of an organization sees
+  and changes everything in it, and the only distinction is
+  `app_user.is_administrator` — who may invite users and administer the
+  organization (§6.4). The granularity is the token's, and it is already two
+  columns away.
+- **No session table.** A session *is* a token
+  ([ADR 0008](./adr/0008-a-session-is-a-token-and-the-only-page-asks-for-a-password.md)),
+  which is why signing out is a revocation and a session appears in the token
+  listing beside the rest.
 - **No `Down` migrations that anybody is told to run.** Migrations only run
   forward: a self-hosted instance that rolls a schema back rolls a value's
   ciphertext back with it, and the honest recovery from a bad upgrade is the

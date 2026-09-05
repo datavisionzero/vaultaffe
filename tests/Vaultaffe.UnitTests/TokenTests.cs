@@ -11,7 +11,7 @@ public sealed class TokenTests
     private static readonly DateTimeOffset _now = new(2026, 9, 5, 12, 0, 0, TimeSpan.Zero);
 
     private static Token AToken(TokenKind kind, Scopes scopes) =>
-        new(Guid.NewGuid(), Guid.NewGuid(), kind, "ci", [1, 2, 3], scopes, _now);
+        new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), kind, "ci", [1, 2, 3], scopes, _now);
 
     /// <summary>
     /// The point of a scope set rather than a switch: "may write but never read"
@@ -62,8 +62,8 @@ public sealed class TokenTests
     public void An_expired_token_authenticates_nothing()
     {
         var token = new Token(
-            Guid.NewGuid(), Guid.NewGuid(), TokenKind.Session, null, [1], Scopes.Everything,
-            _now, _now.AddHours(1));
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), TokenKind.Session, null, [1],
+            Scopes.Everything, _now, _now.AddHours(1));
 
         Assert.True(token.IsUsableAt(_now));
         Assert.False(token.IsUsableAt(_now.AddHours(2)));

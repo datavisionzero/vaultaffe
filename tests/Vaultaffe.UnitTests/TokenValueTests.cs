@@ -163,6 +163,7 @@ public sealed class TokenValueTests
         var (token, value) = Token.Issue(
             Guid.NewGuid(),
             Guid.NewGuid(),
+            Guid.NewGuid(),
             TokenKind.Agent,
             "the agent in this terminal",
             Scopes.Everything,

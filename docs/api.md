@@ -13,24 +13,33 @@ themselves and checked in
 ([ADR 0006](./adr/0006-the-contract-is-checked-in-and-the-web-client-is-generated-from-it.md)).
 
 **Most of it does not exist yet.** What has landed is the contract itself — the
-version in the path, the handshake, the error shape and the document. Identity,
-projects, environments and the secrets surface arrive with their own tickets, and
+version in the path, the handshake, the error shape and the document — and
+identity: the first run, signing in, the device-code login and token management.
+Projects, environments and the secrets surface arrive with their own tickets, and
 this file is kept accurate as each does.
 
 ## Where the endpoints are
 
 ```
-/api/v1/…            everything, once there is anything
+/api/v1/instance                 whether this instance has been started, and starting it
+/api/v1/sessions                 signing in; /sessions/current signs out
+/api/v1/me                       who the caller turned out to be
+/api/v1/device/authorizations    beginning a device-code login
+/api/v1/device/tokens            polling one
+/api/v1/tokens                   creating, listing and revoking tokens
+/device                          the page a human confirms a login on
+
 /api/handshake       what this instance is and what it serves
 /problems            every refusal this instance can make
 /problems/<code>     one of them
 /openapi/v1.json     the contract
 ```
 
-The version is the second segment of every path
-([ADR 0005](./adr/0005-the-api-carries-its-version-in-the-path.md)). The four
-paths outside it are the ones a client reads *before* it knows whether it and the
-instance agree on anything.
+The version is the second segment of every path a client calls
+([ADR 0005](./adr/0005-the-api-carries-its-version-in-the-path.md)). Four paths
+sit outside it because they are what a client reads *before* it knows whether it
+and the instance agree on anything, and one — `/device` — because it is a page for
+a person rather than part of the contract.
 
 ## The version exchange
 
@@ -76,6 +85,87 @@ old has to arrive as a sentence, not as a field that failed to parse
 `0.0.0` is never refused for being old. It is what an untagged build calls itself,
 and a working copy has nothing to upgrade to.
 
+## Getting in
+
+Every request but the handshake, the problem catalogue, the document, the first
+run, a sign-in and the two device-login endpoints carries a token:
+
+```
+Authorization: Bearer vaultaffe_session_…
+```
+
+All three token kinds arrive that way, and which one it is, is read from the
+prefix before anything is looked up ([ADR 0004](./adr/0004-the-token-format-and-the-envelope.md)).
+A request with **no** token is nobody, and an endpoint that needs a caller refuses
+it. A request with a token that does not authenticate — unknown, revoked, expired,
+malformed — is refused before it reaches an endpoint, with one sentence for all
+four: which of them it is, is information about a credential the caller does not
+hold.
+
+### The first run
+
+`GET /api/v1/instance` says whether this instance has been started, without a
+token. `POST /api/v1/instance` starts it: the default organization is created, the
+first user becomes its administrator, and the answer carries a session token. It
+needs no credential, because there is none yet, and it refuses the second time
+([ADR 0007](./adr/0007-the-first-run-is-unauthenticated-and-happens-once.md)).
+
+### Signing in
+
+`POST /api/v1/sessions` takes an email address and a password and answers a
+session token. **The token appears in that answer and nowhere else, ever.** A
+wrong password and an address nobody here has are the same refusal, and take the
+same time.
+
+`DELETE /api/v1/sessions/current` revokes the token the request came in under. The
+row stays — revoked rather than deleted, so that everything it ever signed in the
+change log keeps an author.
+
+`GET /api/v1/me` answers who the caller is: the organization, the person, the
+token and its scopes.
+
+### The device-code login
+
+The only login that works where there is no browser on the machine asking — an SSH
+session, a CI job, a container, an agent's sandbox
+([§6.2](../Specification.md#62-cli)).
+
+1. `POST /api/v1/device/authorizations` answers a **device code** the client keeps
+   and a **user code** it prints, with `verificationUri`, `expiresInSeconds` and
+   `intervalSeconds`. The user code is eight consonants as `XXXX-XXXX`: no vowel,
+   so it is never a word, and no digit, so none of `0/O`, `1/I`, `5/S` or `2/Z`
+   has a second half to be confused with.
+2. A human opens `/device` on any machine, types the code and their password, and
+   confirms. That page asks for a password every time and holds no session
+   ([ADR 0008](./adr/0008-a-session-is-a-token-and-the-only-page-asks-for-a-password.md)).
+3. `POST /api/v1/device/tokens` with the device code answers the session once a
+   human has confirmed. Until then it refuses, and **which refusal it is, is the
+   whole protocol**: `device-pending` means keep polling; `device-denied`,
+   `device-expired` and `not-found` mean stop.
+
+A device code hands over one token and never a second: the poll that collects it
+marks the login redeemed, so one left behind in a CI log is worth nothing to
+whoever finds it.
+
+### Tokens
+
+`POST /api/v1/tokens` creates a `service` or an `agent` token — a session comes
+from signing in, not from being created. `GET /api/v1/tokens` lists every token of
+the organization, newest first, revoked ones included and sessions among them.
+`DELETE /api/v1/tokens/{id}` revokes one.
+
+**The value is in the answer that created it and in no listing, ever.** All three
+need a human session: a token is itself a secret, and one an agent created through
+the CLI would be printed to stdout and thus into its own context
+([§6.1](../Specification.md#61-web-ui)).
+
+Scopes travel as words — `["names", "read", "write", "delete"]` — and not as the
+integer of flags the column holds, so that a client never has to know which bits
+those are. Omitting them means the default of that kind: **everything** for an
+agent token, because the point is attribution and not restriction
+([§6.4](../Specification.md#64-permissions-in-the-mvp)), and `names` plus `read`
+for a service token. Bindings omitted or empty mean the whole organization.
+
 ## Refusals
 
 Every error is `application/problem+json`
@@ -113,7 +203,14 @@ an untidiness. `detail` says what was refused, not what it was refused about.
 
 | Code | Status | When |
 | --- | --- | --- |
+| `validation` | 400 | A field is missing, malformed or over its limit. Carries `errors`, mapping field to messages. |
 | `not-found` | 404 | Nothing by that name. |
+| `unauthenticated` | 401 | No token, an unknown token, a revoked one — or the wrong password. |
+| `forbidden` | 403 | The caller is authenticated and still may not do this. |
+| `already-started` | 409 | The instance already has its first user. |
+| `device-pending` | 400 | Nobody has confirmed that login yet. Keep polling. |
+| `device-denied` | 400 | A human refused it. |
+| `device-expired` | 400 | Nobody confirmed it in time, or its token was already collected. |
 | `unsupported-api-version` | 404 | The path named a contract version this instance does not serve. Carries `apiVersions`. |
 | `client-too-old` | 426 | `Vaultaffe-Client` is below `minimumClient`. Carries `client` and `minimumClient`. |
 | `client-version-unreadable` | 400 | `Vaultaffe-Client` is not a version. |

@@ -1,14 +1,14 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Vaultaffe.Domain.Identities;
 using Vaultaffe.Domain.Organizations;
 using Vaultaffe.Domain.Tokens;
 
 namespace Vaultaffe.Infrastructure.Persistence.Configurations;
 
 /// <summary>
-/// The credential's own record (<c>docs/storage.md</c>): what it may touch, what
-/// it may do, and whether it still counts. Who owns it is not here — that
-/// arrives with the identity it belongs to.
+/// The credential's own record (<c>docs/storage.md</c>): whose it is, what it may
+/// touch, what it may do, and whether it still counts.
 /// </summary>
 public sealed class TokenConfiguration : IEntityTypeConfiguration<Token>
 {
@@ -24,6 +24,14 @@ public sealed class TokenConfiguration : IEntityTypeConfiguration<Token>
 
         builder.Property(t => t.Id).HasColumnName("id");
         builder.Property(t => t.OrganizationId).HasColumnName("organization_id").IsRequired();
+
+        // Whose token this is: the person a session authenticates, or the person
+        // who created a service or agent token and is accountable for it
+        // (Specification §6.4). Restricted rather than cascading, for the reason
+        // revoking beats deleting — a token row outlives nothing quietly.
+        builder.Property(t => t.UserId).HasColumnName("user_id").IsRequired();
+        builder.HasIndex(t => t.UserId).HasDatabaseName("ix_token_user");
+
         builder.Property(t => t.Kind).HasColumnName("kind").HasConversion<int>().IsRequired();
         builder.Property(t => t.Name).HasColumnName("name").HasMaxLength(NameLimit);
 
@@ -67,5 +75,11 @@ public sealed class TokenConfiguration : IEntityTypeConfiguration<Token>
             .HasForeignKey(t => t.OrganizationId)
             .OnDelete(DeleteBehavior.Restrict)
             .HasConstraintName("fk_token_organization");
+
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(t => t.UserId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_token_user");
     }
 }

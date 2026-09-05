@@ -37,3 +37,5 @@ material value to understanding the decision.
 - [0004 – The token format and the envelope](./0004-the-token-format-and-the-envelope.md)
 - [0005 – The API carries its version in the path](./0005-the-api-carries-its-version-in-the-path.md)
 - [0006 – The contract is checked in, and the web client is generated from it](./0006-the-contract-is-checked-in-and-the-web-client-is-generated-from-it.md)
+- [0007 – The first run is unauthenticated, and happens once](./0007-the-first-run-is-unauthenticated-and-happens-once.md)
+- [0008 – A session is a token, and the only page asks for a password](./0008-a-session-is-a-token-and-the-only-page-asks-for-a-password.md)

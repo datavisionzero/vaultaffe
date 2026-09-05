@@ -1,4 +1,5 @@
 using Vaultaffe.Api.Hosting;
+using Vaultaffe.Domain.Refusals;
 
 namespace Vaultaffe.Api.Http;
 
@@ -60,7 +61,7 @@ public static class ContractEndpoints
                 Problems.Parse(code) is { } known
                     ? Results.Ok(Describe(known))
                     : Problems.Result(
-                        ProblemCode.NotFound, "This instance does not raise a problem by that code."))
+                        RefusalCode.NotFound, "This instance does not raise a problem by that code."))
             .WithTags(Tag)
             .WithName("ReadProblem")
             .WithSummary("One refusal, by code.")
@@ -73,9 +74,9 @@ public static class ContractEndpoints
         // so it only ever answers for paths no endpoint claimed.
         endpoints.Map("/api/{version}/{**rest}", (string version) =>
                 ApiVersion.Serves(version)
-                    ? Problems.Result(ProblemCode.NotFound, "No endpoint at this path.")
+                    ? Problems.Result(RefusalCode.NotFound, "No endpoint at this path.")
                     : Problems.Result(
-                        ProblemCode.UnsupportedApiVersion,
+                        RefusalCode.UnsupportedApiVersion,
                         $"This instance serves {string.Join(", ", ApiVersion.Supported)}.",
                         new Dictionary<string, object?> { ["apiVersions"] = ApiVersion.Supported }))
             .ExcludeFromDescription();
@@ -84,8 +85,8 @@ public static class ContractEndpoints
     }
 
     private static IReadOnlyList<ProblemKind> ProblemCatalogue { get; } =
-        [.. Enum.GetValues<ProblemCode>().Select(Describe)];
+        [.. Enum.GetValues<RefusalCode>().Select(Describe)];
 
-    private static ProblemKind Describe(ProblemCode code) =>
+    private static ProblemKind Describe(RefusalCode code) =>
         new(Problems.CodeOf(code), Problems.StatusOf(code), Problems.TitleOf(code));
 }

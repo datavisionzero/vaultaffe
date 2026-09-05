@@ -1,4 +1,5 @@
 using Vaultaffe.Api.Hosting;
+using Vaultaffe.Domain.Refusals;
 
 namespace Vaultaffe.Api.Http;
 
@@ -37,7 +38,7 @@ public static class VersionExchange
             {
                 await Problems.WriteAsync(
                     context,
-                    ProblemCode.ClientVersionUnreadable,
+                    RefusalCode.ClientVersionUnreadable,
                     $"'{ClientVersion.Header}' carries a release such as 1.4.0, not '{announced}'.");
 
                 return;
@@ -47,7 +48,7 @@ public static class VersionExchange
             {
                 await Problems.WriteAsync(
                     context,
-                    ProblemCode.ClientTooOld,
+                    RefusalCode.ClientTooOld,
                     $"This instance serves clients from {ClientVersion.Minimum} onwards.",
                     new Dictionary<string, object?>
                     {
