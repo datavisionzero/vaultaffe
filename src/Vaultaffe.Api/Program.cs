@@ -46,6 +46,13 @@ builder.Services.AddScoped<ListEnvironments>();
 builder.Services.AddScoped<RenameEnvironment>();
 builder.Services.AddScoped<DeleteEnvironment>();
 builder.Services.AddScoped<RestoreEnvironment>();
+builder.Services.AddScoped<ListSecrets>();
+builder.Services.AddScoped<ReadSecret>();
+builder.Services.AddScoped<SetSecret>();
+builder.Services.AddScoped<DeleteSecret>();
+builder.Services.AddScoped<RestoreSecret>();
+builder.Services.AddScoped<ImportSecrets>();
+builder.Services.AddScoped<ExportEnvironment>();
 builder.Services.AddScoped<CreateToken>();
 builder.Services.AddScoped<ListTokens>();
 builder.Services.AddScoped<RevokeToken>();
@@ -86,6 +93,7 @@ app.MapDeviceLogin();
 app.MapDevicePage();
 app.MapTokens();
 app.MapProjects();
+app.MapSecrets();
 
 app.Run();
 

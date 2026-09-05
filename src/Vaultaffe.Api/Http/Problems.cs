@@ -57,7 +57,8 @@ public static class Problems
             or RefusalCode.OutOfReach =>
             StatusCodes.Status403Forbidden,
         RefusalCode.NotFound or RefusalCode.UnsupportedApiVersion => StatusCodes.Status404NotFound,
-        RefusalCode.AlreadyStarted or RefusalCode.NameTaken => StatusCodes.Status409Conflict,
+        RefusalCode.AlreadyStarted or RefusalCode.NameTaken or RefusalCode.ReplaceRequired =>
+            StatusCodes.Status409Conflict,
         RefusalCode.NotRecoverable => StatusCodes.Status410Gone,
         RefusalCode.ClientTooOld => StatusCodes.Status426UpgradeRequired,
         RefusalCode.Internal => StatusCodes.Status500InternalServerError,
@@ -76,6 +77,7 @@ public static class Problems
         RefusalCode.AlreadyStarted => "This instance already has its first user",
         RefusalCode.NameTaken => "Something of that name is already here",
         RefusalCode.NotRecoverable => "That was deleted longer ago than the recovery window",
+        RefusalCode.ReplaceRequired => "That key already holds a value",
         RefusalCode.DevicePending => "Nobody has confirmed this login yet",
         RefusalCode.DeviceDenied => "A human refused this login",
         RefusalCode.DeviceExpired => "This login expired, or its token was already collected",

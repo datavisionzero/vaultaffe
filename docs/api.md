@@ -15,10 +15,11 @@ themselves and checked in
 **Most of it does not exist yet.** What has landed is the contract itself — the
 version in the path, the handshake, the error shape and the document — identity:
 the first run, signing in, the device-code login and token management — the
-authorization every endpoint after it is enforced by — and the catalogue:
-projects and environments, with the change log that every write path since has
-been in. The secrets surface and the change log's own endpoint arrive with their
-own tickets, and this file is kept accurate as each does.
+authorization every endpoint after it is enforced by — the catalogue: projects
+and environments, with the change log that every write path since has been in —
+and the secrets surface itself. Reading the change log and the value history, and
+purging, arrive with their own tickets, and this file is kept accurate as each
+does.
 
 ## Where the endpoints are
 
@@ -30,6 +31,7 @@ own tickets, and this file is kept accurate as each does.
 /api/v1/device/tokens            polling one
 /api/v1/tokens                   creating, listing and revoking tokens
 /api/v1/projects                 the catalogue, by name
+/api/v1/projects/…/secrets       names and status; one value at a time
 /device                          the page a human confirms a login on
 
 /api/handshake       what this instance is and what it serves
@@ -182,11 +184,15 @@ the human narrows it: **the point is attribution, not restriction.**
 **Human-only actions** are the short list where an agent's mistake could not be
 undone or the output is itself a secret: purging value history or deleted
 objects, creating and revoking tokens, and administering the organization and its
-users. They are refused with `human-only` for every token that is not a session,
+users. **Exporting an environment is on the list too.** §6.4 does not enumerate it and
+§6.2 states it directly, and it belongs there for the list's own second reason:
+the output is itself a secret — every value of an environment at once.
+
+They are refused with `human-only` for every token that is not a session,
 whatever its scopes — being human-only is not a permission a token can be given.
 
 The document carries `humanAction`: one of `purge`, `create-token`,
-`revoke-token`, `administer-organization`.
+`revoke-token`, `administer-organization`, `export`.
 
 ```json
 {
@@ -292,6 +298,79 @@ the first write path rather than to a later ticket, and an entry is committed by
 the same transaction as the change it describes. Reading it is `GET`-able with its
 own ticket; writing it starts here.
 
+## Secrets
+
+The product itself, and the two endpoints that are not the same endpoint:
+
+```
+GET    …/environments/{environment}/secrets           names and status. Never a value.
+GET    …/environments/{environment}/secrets/{KEY}     one value, by name
+PUT    …/environments/{environment}/secrets/{KEY}     write one, or make a placeholder
+DELETE …/environments/{environment}/secrets/{KEY}     delete it, recoverably
+POST   …/environments/{environment}/secrets/{KEY}/restore
+POST   …/environments/{environment}/import            a .env in
+GET    …/environments/{environment}/export            every value out, for a person
+```
+
+All of them under `/api/v1/projects/{project}`. Import and export hang off the
+environment rather than off `secrets/` because a literal route beats a parameter
+and matching ignores case — `secrets/export` beside `secrets/{name}` would shadow
+a secret somebody called `EXPORT`.
+
+**Names and values are two endpoints and two scopes.** The listing answers
+`[{name, status}]` where status is `set` or `empty`, and needs `names`. Reading a
+value is a second request, one key at a time, and needs `read`. That split is what
+lets an agent be issued a token that can see which keys exist and which a human
+still has to fill, and cannot read one — the normal case
+([§4](../Specification.md#4-guiding-principles),
+[§8](../Specification.md#8-agentic-use--the-guiding-scenarios)) — and it is the
+shape a later MCP server needs, where a tool returning a value must not exist.
+
+**Writing.** `PUT` takes `{"value": …}`. `{"value": null}` asks for an **empty
+placeholder** — the state that means a human still has to do something, which
+stops `run` and which the listing reports. An empty *string* is refused: one
+standing in for the other is the bug the placeholder exists to prevent.
+
+**Overwriting is explicit.** A `PUT` over a key that already holds a value is
+`replace-required` unless the request says `"replace": true`. Filling a
+placeholder needs nothing. **Nothing is trimmed here**: §6.2 strips exactly one
+trailing newline and does it in the CLI, where the bytes came off a pipe and
+`--raw` can say not to.
+
+**The answer never carries the value back.** A confirmation that echoed it would
+put into a transcript exactly what piping a vendor's command straight in kept out
+of one.
+
+**Superseded values are kept, briefly.** Five versions or 72 hours, whichever is
+reached first, and what falls out is deleted rather than tombstoned — every
+retained old value is usually a still-valid credential
+([§6.5](../Specification.md#65-logging-and-history)). The bounds are applied on
+the write that creates a version, so a history is never over its limit waiting for
+a sweep.
+
+**Import** takes a whole `.env` and applies all of it or none of it. The answer
+names keys — `created`, `filled`, `replaced`, `unchanged`, `skipped` with a
+reason, `unreadable` with a line number — and never values, so an agent can
+migrate a file it never displays. Migration is a success criterion
+([§11](../Specification.md#11-success-criteria-for-the-mvp)) and must not be
+UI-only. `KEY=` creates an empty placeholder; a key already holding a value is
+skipped unless `"replace": true`.
+
+The format is written down rather than inferred, because there is no standard for
+it: `#` comments and blank lines are skipped, a leading `export` is allowed,
+single quotes are literal, double quotes may span lines and understand `
+`,
+``, `	`, `\` and `"`, and an unquoted value keeps its `#` — a trailing
+comment cannot be told from a password containing one. Export always quotes and
+escapes, so what it writes is something import reads.
+
+**Export is for a person.** It writes every value of an environment in plaintext,
+which is precisely the contradiction `inject` was rejected for
+([§7](../Specification.md#7-explicitly-not-in-the-mvp)). It stays because a way
+back out is part of being trustworthy, and it is `human-only` with
+`humanAction: "export"` — an agent or service token is refused however many scopes
+it carries. Nothing is recorded for it: the change log holds mutations, not reads.
+
 ## Refusals
 
 Every error is `application/problem+json`
@@ -339,6 +418,7 @@ an untidiness. `detail` says what was refused, not what it was refused about.
 | `already-started` | 409 | The instance already has its first user. |
 | `name-taken` | 409 | Something of that name is here. Carries `takenBySomethingDeleted`. |
 | `not-recoverable` | 410 | Deleted longer ago than the 72-hour window. |
+| `replace-required` | 409 | That key holds a value and the request did not say to overwrite. Carries `secretName`. |
 | `device-pending` | 400 | Nobody has confirmed that login yet. Keep polling. |
 | `device-denied` | 400 | A human refused it. |
 | `device-expired` | 400 | Nobody confirmed it in time, or its token was already collected. |

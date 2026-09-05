@@ -163,6 +163,11 @@ year and was replaced this morning is this morning's undo. The index
 `ix_secret_value_version_secret_replaced_at` is what both the rollback and the
 retention sweep read.
 
+**Both bounds are applied on the write that creates a version**, in the same
+transaction. A history is therefore never over its limit waiting for a job to run,
+and there is nothing for a sweep to catch up on except versions that aged out
+without anybody writing again — which is the only case a sweep is actually for.
+
 ## The change log has no value column, and no foreign keys
 
 Timestamp, project, environment, secret name, action — and identity along with

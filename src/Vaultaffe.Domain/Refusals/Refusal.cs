@@ -118,4 +118,16 @@ public sealed class Refusal : Exception
 
     /// <summary>Deleted longer ago than the recovery window. There is nothing to restore.</summary>
     public static Refusal NotRecoverable(string detail) => new(RefusalCode.NotRecoverable, detail);
+
+    /// <summary>
+    /// The key already holds a value, and overwriting one is explicit
+    /// (Specification §6.2). Its own code because the remedy is one word and a
+    /// client can offer it: say so and try again.
+    /// </summary>
+    public static Refusal ReplaceRequired(string name) =>
+        new(
+            RefusalCode.ReplaceRequired,
+            $"'{name}' already holds a value. Overwriting one is as destructive as deleting it, "
+            + "so it has to be asked for.",
+            new Dictionary<string, object?> { ["secretName"] = name });
 }

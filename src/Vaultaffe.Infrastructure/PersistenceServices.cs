@@ -31,6 +31,7 @@ public static class PersistenceServices
         // and what the change log records about it reach the database in the same
         // transaction (docs/storage.md).
         services.AddScoped<IProjectStore, ProjectStore>();
+        services.AddScoped<ISecretStore, SecretStore>();
         services.AddScoped<IChangeLogStore, ChangeLogStore>();
 
         services.AddSingleton<SchemaMigrator>();

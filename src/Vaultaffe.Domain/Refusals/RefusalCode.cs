@@ -71,4 +71,7 @@ public enum RefusalCode
 
     /// <summary>It was deleted longer ago than the recovery window, and is gone.</summary>
     NotRecoverable = 17,
+
+    /// <summary>That key already holds a value, and overwriting one is explicit.</summary>
+    ReplaceRequired = 18,
 }

@@ -43,6 +43,15 @@ public enum HumanAction
     /// what the organization is. Who may be in here is a decision about people.
     /// </summary>
     AdministerOrganization = 4,
+
+    /// <summary>
+    /// Exporting an environment. It writes every value in plaintext, which is the
+    /// contradiction <c>inject</c> was rejected for (§7); it stays because a way
+    /// back out is part of being trustworthy, and §6.2 puts it behind a session
+    /// for exactly the reason the rest of this list exists — the output is itself
+    /// a secret, all of them at once.
+    /// </summary>
+    Export = 5,
 }
 
 /// <summary>
@@ -65,6 +74,7 @@ public static class HumanActions
         HumanAction.CreateToken => "create-token",
         HumanAction.RevokeToken => "revoke-token",
         HumanAction.AdministerOrganization => "administer-organization",
+        HumanAction.Export => "export",
         _ => throw new ArgumentOutOfRangeException(
             nameof(action), action, "A human-only action without a name."),
     };
@@ -88,6 +98,10 @@ public static class HumanActions
             + "back. Hand it to a human, who does it under their own session.",
         HumanAction.AdministerOrganization =>
             "Administering the organization and its users is reserved for a person. Hand it to a "
+            + "human, who does it under their own session.",
+        HumanAction.Export =>
+            "Exporting is reserved for a person: it writes every value of an environment in "
+            + "plaintext at once. Read the one value you need instead, or hand the export to a "
             + "human, who does it under their own session.",
         _ => throw new ArgumentOutOfRangeException(
             nameof(action), action, "A human-only action without a refusal."),

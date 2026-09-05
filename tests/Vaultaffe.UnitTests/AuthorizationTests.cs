@@ -167,6 +167,7 @@ public sealed class AuthorizationTests
     [InlineData(HumanAction.CreateToken)]
     [InlineData(HumanAction.RevokeToken)]
     [InlineData(HumanAction.AdministerOrganization)]
+    [InlineData(HumanAction.Export)]
     public void The_human_only_list_is_closed_to_every_machine_token(HumanAction action)
     {
         Acting(A.Session()).RequiresAHuman(action);

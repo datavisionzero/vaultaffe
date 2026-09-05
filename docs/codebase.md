@@ -17,8 +17,10 @@ of a refusal, and the document all of it is captured into
 ([`api.md`](./api.md)) — identity: the first run, signing in, the device-code
 login with the one page it needs, and token management — the authorization
 every endpoint after it is held to: the scope set, the binding, and the short
-list only a person may do — and the catalogue: projects and environments, with
-the change log that every write path since has been in. Beside it the Go module
+list only a person may do — the catalogue: projects and environments, with
+the change log that every write path since has been in — and the secrets surface
+itself: names without values, one value at a time, a file in and a file out.
+Beside it the Go module
 with one command that prints its version, and the workflow that builds and tests
 both. This document is kept accurate from here on: a file that lands
 somewhere it does not describe means one of the two is wrong.
@@ -77,7 +79,9 @@ secret with the name rule `^[A-Z_][A-Z0-9_]*$`; the three token kinds with their
 prefixes, bindings and scope sets, and the shape of a token value itself; what
 an empty placeholder is and what it stops; the bounds on value history — five
 versions, 72 hours, whichever is hit first — and the recovery window on a
-deletion. The test of whether something
+deletion. `Secrets/DotEnv` is here for the same reason the name rules are: there
+is no standard for that format, every tool differs at its edges, and what this one
+does at them is a decision this product makes rather than a library's habit. The test of whether something
 belongs here: **anything the specification already states as a rule.** A token
 that can be constructed without a binding, or a value version that can outlive
 both of its bounds, is a rule that escaped. `Authorization/` is the one to look
@@ -88,10 +92,10 @@ refusal says about them — which name the action and never a command
 **`Vaultaffe.Application` holds the acts and the ports.** An act is one thing a
 caller does, a port is one thing the acts need answered. Starting the instance,
 signing in, the three steps of a device login, creating and revoking tokens,
-creating and listing and renaming and deleting and restoring a project or an
-environment; and still to come, setting a secret, reading one, listing names
-without values, importing an environment, rolling back and purging. Beside them
-the ports: the stores, the identity of the caller, the thing that hashes a
+creating and listing and renaming and deleting and restoring a project, an
+environment or a secret, writing a value, reading one, importing a file and
+exporting one; and still to come, reading the change log and the value history,
+rolling back and purging. Beside them the ports: the stores, the identity of the caller, the thing that hashes a
 password, the key ring that seals a value and opens it again, and the clock —
 which is `TimeProvider` from the base class libraries rather than a port of ours.
 
@@ -200,6 +204,13 @@ action's name in the document and no command in it, that a refused request wrote
 nothing, and — in the unit tests, where the rules are — that a scope set is
 carried whole or not at all, that a token bound to one environment does not reach
 its neighbour, and that no refusal this product can make spells a command. Then
+the secrets surface, which is mostly a set of assertions about what an answer does
+**not** contain: that a write is not echoed back, that no listing carries a value
+or even the word, that a token with `names` and not `read` sees the keys and is
+refused one of them, that a token that may write and not read can still rotate a
+credential without ever seeing either half of it, that a multi-line value survives
+a round trip through the export format, that the history stays inside both of its
+bounds, and that an agent with every scope there is still cannot export. Then
 the catalogue: that a project arrives with its three environments, that a deleted
 one keeps its name reserved and comes back with the subtree it had rather than
 the one it would have had, that past the window there is a refusal and not a
