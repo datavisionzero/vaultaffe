@@ -20,6 +20,8 @@ artifacts/
 src/Vaultaffe.Api/wwwroot/
 
 # Go
+# The Go client of the contract, generated before vet, test and build (ADR 0011)
+/src/cli/internal/api/client.gen.go
 /dist/
 # The CLI binary, wherever a `go build` in the module root drops it
 /src/cli/vaultaffe

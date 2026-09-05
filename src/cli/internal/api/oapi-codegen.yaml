@@ -1,0 +1,9 @@
+# Types and client, nothing else: `vaultaffe` is a client of the contract and
+# serves none of it.
+package: api
+output: client.gen.go
+generate:
+  models: true
+  client: true
+output-options:
+  skip-prune: true

@@ -22,9 +22,9 @@ the change log that every write path since has been in — and the secrets surfa
 itself: names without values, one value at a time, a file in and a file out, and
 the change log and value history read back and rolled back, and what deletion
 means at the end: purge, and the sweep that enforces the deadline. Beside it the
-Go module
-with one command that prints its version, and the workflow that builds and tests
-both. This document is kept accurate from here on: a file that lands
+CLI's own skeleton — the command tree, the client generated from that contract,
+the device-code login, and the prefix table that says what a directory means
+([`cli.md`](./cli.md)) — and the workflow that builds and tests both. This document is kept accurate from here on: a file that lands
 somewhere it does not describe means one of the two is wrong.
 
 Three decisions shape the layout. Two of them the specification already made —
@@ -44,6 +44,7 @@ vaultaffe/
 │  ├─ adr/
 │  ├─ api.md                   the HTTP surface: versions, headers, the shape of a refusal
 │  ├─ api/openapi.json         the contract, captured from a running instance and checked in
+│  ├─ cli.md                   the CLI surface: the token, the binding, the exit codes
 │  └─ storage.md               the data model: tables, constraints, what is enforced where
 ├─ src/
 │  ├─ Vaultaffe.Domain/         the rules
@@ -65,7 +66,8 @@ invent something more descriptive.
 Documents that describe a surface — the data model, the HTTP API, the CLI, the
 screens, running an instance — get their own file under `docs/` as that surface
 arrives. Writing the empty files now would only invite them to drift. Two are
-here so far: [`storage.md`](./storage.md) and [`api.md`](./api.md).
+here so far: [`storage.md`](./storage.md), [`api.md`](./api.md) and
+[`cli.md`](./cli.md).
 
 ## The four layers
 
@@ -158,7 +160,40 @@ into the data.
 `src/cli/` is an ordinary Go module — `cmd/vaultaffe` the binary, `internal/`
 the packages. It references nothing in `src/` and knows an instance only through
 its public HTTP API, which is what lets the same static binary run on a laptop,
-a CI runner or inside an agent's container. It ships as its own release artifact,
+a CI runner or inside an agent's container.
+
+`internal/api` is that API, generated from `docs/api/openapi.json` and **not
+committed**: `go generate ./...` produces it before vet, test and build, so a
+working tree is never a state where the client agrees with a contract that has
+moved ([ADR 0011](./adr/0011-the-cli-generates-its-client-from-the-same-document.md)).
+Nothing calls it raw. `internal/client` wraps it with what every request carries
+and every answer is checked for — the bearer token, the release this build is,
+and the turning of a problem document into a sentence and an exit code — and
+`internal/exit` is that code, one per kind of outcome, so that a script branches
+on a number rather than on wording. `internal/problem` keeps the extension
+members of a refusal, which is how a command prints what its own code carries
+without this CLI having to know every code there will ever be.
+
+`internal/config` is the one to read: it holds no token and decides three
+things — which instance, as whom, and what this directory means. The binding is a
+prefix table in the user's own configuration, and the optional checked-in
+`.vaultaffe` file is an input to `setup` rather than a second source of truth, so
+that a repository cannot rebind somebody's directories by being cloned. The
+refusal of plain HTTP off loopback lives here too, because it is a property of an
+address rather than of a request. `internal/keychain` is where a person's session
+goes, and the interesting part of it is the failure case: no store means a
+sentence and two named alternatives, never a quiet file
+([ADR 0012](./adr/0012-a-session-lives-in-the-keychain-and-nowhere-quietly.md)).
+
+`internal/cmd` is the tree, and it carries the client half of
+[ADR 0010](./adr/0010-a-refusal-names-the-action-and-the-client-names-the-command.md):
+a table from the action a refusal names to the command *this* CLI has for it,
+checked against the real command tree, so that an entry outliving its command
+cannot become a suggestion to run something that does not exist. Its `Env` is
+what makes the surface testable — the environment, the directory, the three
+streams, the HTTP client, the keychain, and the call that replaces this process.
+
+It ships as its own release artifact,
 one binary per platform, and is versioned with the server it was cut from: the
 tag sets `-ldflags -X …/internal/version.Value` here and `-p:Version=` on the
 .NET side, so the two halves of a release cannot disagree about which release
@@ -236,7 +271,12 @@ window measured in days has no other way of being asked about, and everything
 else in that host is the installation an operator gets.
 
 The frontend will carry its own tests inside `src/web/`, and the CLI carries its
-own inside `src/cli/`, each run by the CI job that builds it.
+own inside `src/cli/`, each run by the CI job that builds it. The CLI's are Go
+tests against an `httptest` instance and an injected keychain, and much of what
+they assert is what an invocation did **not** print: that the session token
+`login` collected is in neither stream, that a password piped into the first run
+is not echoed, and that nothing is sent at all to a plain-HTTP host that is not
+loopback.
 
 ## One workflow, and it is the gate
 
@@ -244,7 +284,10 @@ own inside `src/cli/`, each run by the CI job that builds it.
 on demand. There is no review step between a commit and the trunk (ADR 0001), so
 that workflow is the only thing standing between a mistake and `main`: the
 format check, the unit tests, the integration tests on Testcontainers, and the
-Go job that formats, vets, tests and builds the CLI.
+Go job that generates the client from the checked-in contract and then formats,
+vets, tests and builds the CLI. Generating it there rather than committing it
+makes that job a second reader of the same document the contract job verifies
+against a running instance.
 
 The contract job is the fifth: it starts the installation against a Postgres,
 captures the document it serves and fails on a diff against the one checked in
