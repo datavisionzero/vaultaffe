@@ -10,9 +10,9 @@ This file says what the command help cannot: which rules hold across every
 command, where a token and a binding come from, and what an exit code means.
 
 **Most of it does not exist yet.** What has landed is the skeleton and the two
-commands that come before all the others: `login`, `setup`, and the first run.
-`run`, the secrets surface and the catalogue have their own tickets, and this
-file is kept accurate as each lands.
+commands that come before all the others — `login`, `setup`, and the first run —
+and `run` itself. The secrets surface and the catalogue have their own tickets,
+and this file is kept accurate as each lands.
 
 ## The two rules that hold everywhere
 
@@ -38,6 +38,7 @@ vaultaffe setup                  bind this directory to a project and an environ
 vaultaffe status                 which instance, as whom, and what this directory means
 vaultaffe instance               whether this instance has been started
 vaultaffe instance start         the first run: the organization, the first person, a session
+vaultaffe run -- <command>       start a process with this environment's secrets in it
 ```
 
 Data goes to **stdout**, everything a person reads goes to **stderr**, and the
@@ -119,6 +120,58 @@ In CI and in containers, `VAULTAFFE_PROJECT` and `VAULTAFFE_ENVIRONMENT` are the
 binding and there is no table at all. Each half resolves on its own — `--project`
 on the command line does not throw away the environment this directory is bound
 to.
+
+## `run`
+
+```sh
+vaultaffe run -- npm run dev
+```
+
+The command in front of every other command. This CLI does not stay as a parent:
+it builds the environment, says everything it has to say, and then **replaces
+itself** with the process through `exec()`
+([ADR 0009](./adr/0009-run-replaces-itself-and-does-everything-else-first.md)).
+Signal forwarding, exit codes and process groups then take care of themselves — a
+command killed by a signal reports `128+N` rather than `255`, and a `kill` aimed
+at this pid reaches the real process instead of a wrapper standing in front of
+it. Windows has no `exec()` and is not an MVP target; WSL runs the Linux binary.
+
+Everything is therefore said **before** the call, because after it there is
+nobody left to say anything.
+
+**Values reach the process as environment variables.** No temporary `.env`, no
+plaintext on disk. Nothing of the process's own output is masked: if it prints
+its own secret, it printed it, and we promise nothing else.
+
+**Every collision is reported on stderr**, and in `--json`. A value from the
+store beats one that was already in the environment, and a collision usually
+means machine-specific configuration has leaked into the store
+([§5](../Specification.md#5-core-concepts)) — which is worth a line each time.
+
+**The protected list is fixed and documented.** Never overwritten by a value
+from the store:
+
+```
+PATH  HOME  USER  SHELL  TMPDIR      anything starting with LD_ or DYLD_      anything starting with VAULTAFFE_
+```
+
+The loader variables are on it so that a token which may write cannot inject
+code into every `run` on the machine. `VAULTAFFE_` goes further than the others:
+those variables are **removed from the child altogether**, so that the token an
+agent runs under never reaches what it starts.
+
+**An empty placeholder stops `run`** and is named. A placeholder means a person
+still has to do something, and injecting an empty string would hide exactly
+that; `--allow-empty` starts anyway and says which keys were empty. Nothing is
+read for a process that is not going to start.
+
+**`--` separates the two command lines.** Flags stop at the command, so
+`run -- npm run dev --json` passes `--json` to npm.
+
+Two exit codes are the shell's rather than this table's, because `exec()` takes a
+path and `run` resolves it: **127** for a command that is not on the `PATH`, and
+**126** for one that is there and not executable. Everything after the call is
+the process's own, `128+N` included.
 
 ## The version exchange
 

@@ -8,6 +8,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"syscall"
 
 	"github.com/datavisionzero/vaultaffe/src/cli/internal/cmd"
 )
@@ -17,9 +18,14 @@ func main() {
 	defer stop()
 
 	os.Exit(cmd.Run(ctx, os.Args[1:], cmd.Env{
-		Getenv: os.Getenv,
-		Stdin:  os.Stdin,
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
+		Getenv:  os.Getenv,
+		Stdin:   os.Stdin,
+		Stdout:  os.Stdout,
+		Stderr:  os.Stderr,
+		Environ: os.Environ,
+		// `run` replaces this process with the one it was asked to start
+		// (ADR 0009). There is no wrapper, no signal forwarding and nothing to
+		// do afterwards, because afterwards this process does not exist.
+		Exec: syscall.Exec,
 	}))
 }

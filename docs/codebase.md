@@ -192,6 +192,10 @@ checked against the real command tree, so that an entry outliving its command
 cannot become a suggestion to run something that does not exist. Its `Env` is
 what makes the surface testable — the environment, the directory, the three
 streams, the HTTP client, the keychain, and the call that replaces this process.
+That last one is what makes `run` testable at all: a test sees the path, the
+argument vector and the environment that would have been handed to `exec()`
+instead of the process ceasing to exist, which is how the protected list, the
+stripped `VAULTAFFE_` variables and the two lookup exit codes are held.
 
 It ships as its own release artifact,
 one binary per platform, and is versioned with the server it was cut from: the

@@ -104,6 +104,26 @@ type console struct {
 	Keychain map[string]string
 	Config   config.File
 	Dir      string
+	// What `run` would have replaced this process with, and with what
+	// environment (ADR 0009). Nil where exec() was never reached.
+	Exec *replacement
+}
+
+type replacement struct {
+	Path        string
+	Argv        []string
+	Environment []string
+}
+
+// Value answers what the child would have found in name, and whether it is
+// there at all.
+func (r *replacement) Value(name string) (string, bool) {
+	for _, entry := range r.Environment {
+		if key, value, found := strings.Cut(entry, "="); found && key == name {
+			return value, true
+		}
+	}
+	return "", false
 }
 
 // Everything says nothing leaked: the two streams and the files this CLI wrote.
@@ -116,6 +136,7 @@ type session struct {
 	env      map[string]string
 	keychain map[string]string
 	stdin    string
+	environ  []string
 	store    func(instance, token string) error
 }
 
@@ -143,12 +164,19 @@ func (s *session) run(t *testing.T, args ...string) console {
 		store = func(instance, token string) error { s.keychain[instance] = token; return nil }
 	}
 
+	var replaced *replacement
+
 	code := Run(context.Background(), args, Env{
-		Getenv: func(name string) string { return s.env[name] },
-		Dir:    s.dir,
-		Stdin:  strings.NewReader(s.stdin),
-		Stdout: stdout,
-		Stderr: stderr,
+		Getenv:  func(name string) string { return s.env[name] },
+		Dir:     s.dir,
+		Stdin:   strings.NewReader(s.stdin),
+		Stdout:  stdout,
+		Stderr:  stderr,
+		Environ: func() []string { return s.environ },
+		Exec: func(path string, argv []string, environment []string) error {
+			replaced = &replacement{Path: path, Argv: argv, Environment: environment}
+			return nil
+		},
 		Keychain: Keychain{
 			Read: func(instance string) (string, error) {
 				token, ok := s.keychain[instance]
@@ -174,5 +202,6 @@ func (s *session) run(t *testing.T, args ...string) console {
 		Keychain: s.keychain,
 		Config:   file,
 		Dir:      s.dir,
+		Exec:     replaced,
 	}
 }

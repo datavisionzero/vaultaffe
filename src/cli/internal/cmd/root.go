@@ -43,6 +43,8 @@ type Env struct {
 	Stderr   io.Writer
 	HTTP     *http.Client
 	Keychain Keychain
+	// Environ is the environment `run` starts from and takes things out of.
+	Environ func() []string
 	// Exec replaces this process with another (Specification §6.2). It is here
 	// rather than called directly so that a test of `run` can see what would
 	// have been executed instead of ceasing to exist.
@@ -138,7 +140,7 @@ func newRoot(env Env) *cobra.Command {
 		return &config.UsageError{Message: err.Error()}
 	})
 
-	root.AddCommand(newLogin(g), newLogout(g), newSetup(g), newStatus(g), newInstance(g))
+	root.AddCommand(newLogin(g), newLogout(g), newSetup(g), newStatus(g), newInstance(g), newRun(g))
 	g.root = root
 	return root
 }
