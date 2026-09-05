@@ -9,11 +9,13 @@ Most of it does not exist yet. **The skeleton was raised before there was
 anything to break, so that CI could be green from the first commit** (ADR 0001);
 what has landed in it so far is the data model — the eight tables, the
 migrations that apply themselves on startup, and the one place two organizations
-are kept apart ([`storage.md`](./storage.md)) — and the two formats nothing can
+are kept apart ([`storage.md`](./storage.md)) — the two formats nothing can
 change afterwards: the token value and the envelope a secret rests in
-([ADR 0004](./adr/0004-the-token-format-and-the-envelope.md)). Beside it the Go
-module with one command that prints its version, and the workflow that builds
-and tests both. This document is kept accurate from here on: a file that lands
+([ADR 0004](./adr/0004-the-token-format-and-the-envelope.md)) — and the contract
+the rest of the API arrives inside: the version in the path, the handshake, the
+shape of a refusal, and the document all of it is captured into
+([`api.md`](./api.md)). Beside it the Go module with one command that prints its
+version, and the workflow that builds and tests both. This document is kept accurate from here on: a file that lands
 somewhere it does not describe means one of the two is wrong.
 
 Three decisions shape the layout. Two of them the specification already made —
@@ -31,6 +33,8 @@ vaultaffe/
 ├─ .github/workflows/          ci on every push
 ├─ docs/                       the decisions, and this
 │  ├─ adr/
+│  ├─ api.md                   the HTTP surface: versions, headers, the shape of a refusal
+│  ├─ api/openapi.json         the contract, captured from a running instance and checked in
 │  └─ storage.md               the data model: tables, constraints, what is enforced where
 ├─ src/
 │  ├─ Vaultaffe.Domain/         the rules
@@ -51,7 +55,8 @@ invent something more descriptive.
 
 Documents that describe a surface — the data model, the HTTP API, the CLI, the
 screens, running an instance — get their own file under `docs/` as that surface
-arrives. Writing the empty files now would only invite them to drift.
+arrives. Writing the empty files now would only invite them to drift. Two are
+here so far: [`storage.md`](./storage.md) and [`api.md`](./api.md).
 
 ## The four layers
 
@@ -127,13 +132,22 @@ version falling out of the history window is deleted rather than tombstoned. The
 split is by what a test needs rather than by what it covers, because that is the
 distinction CI has to act on.
 
+Beside them the contract, which needs a third thing: the whole application in
+the test process, on a database of its own. `AnInstance` is that — a
+`WebApplicationFactory` with the two values an operator configures — so that what
+a test asks about the API is asked of a running installation over HTTP,
+migrations and all, rather than of a handler somebody called directly.
+
 What is in it today is the schema, the tenancy and the envelope: that the
 migrations apply and that applying them twice is uneventful, that a name outside
 its rule is refused by the database and not only by the domain, that a deleted
 object keeps its name reserved, that a half-sealed value cannot be written, that
 one organization never sees another's rows, that a value written under a
 secret's own data key comes back out of Postgres unchanged and a superseded one
-with it — and that the change log has no column a value could live in.
+with it — and that the change log has no column a value could live in. Then the
+contract: that a client too old is told so rather than left to fail at a field,
+that a refusal is a problem document whose `code` a client can switch on, and
+that the document a running instance serves is the one checked in.
 
 The frontend will carry its own tests inside `src/web/`, and the CLI carries its
 own inside `src/cli/`, each run by the CI job that builds it.
@@ -146,9 +160,15 @@ that workflow is the only thing standing between a mistake and `main`: the
 format check, the unit tests, the integration tests on Testcontainers, and the
 Go job that formats, vets, tests and builds the CLI.
 
-The web build, the contract check and the image are not in it yet. Each of them
-would have to settle a question another ticket owns, and each arrives in the
-commit that creates its subject.
+The contract job is the fifth: it starts the installation against a Postgres,
+captures the document it serves and fails on a diff against the one checked in
+([ADR 0006](./adr/0006-the-contract-is-checked-in-and-the-web-client-is-generated-from-it.md)).
+`ContractTests` makes the same comparison from the other side, which is
+deliberate — the capture and the test check each other.
+
+The web build and the image are not in it yet. Each of them would have to settle
+a question another ticket owns, and each arrives in the commit that creates its
+subject.
 
 ## What is deliberately not here
 

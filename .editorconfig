@@ -40,7 +40,18 @@ csharp_style_prefer_primary_constructors = true:suggestion
 csharp_prefer_braces = true:warning
 csharp_style_prefer_pattern_matching = true:suggestion
 
-# Naming: private fields are _camelCase
+# Naming: a constant is PascalCase whoever may see it, and every other private
+# field is _camelCase. The constant rule comes first because the first matching
+# rule wins — without it, `private const string TypePrefix` would be asked to
+# call itself `_typePrefix`, which is a spelling nothing in .NET uses.
+dotnet_naming_rule.constants_pascal_cased.symbols = constants
+dotnet_naming_rule.constants_pascal_cased.style = pascal
+dotnet_naming_rule.constants_pascal_cased.severity = warning
+dotnet_naming_symbols.constants.applicable_kinds = field
+dotnet_naming_symbols.constants.applicable_accessibilities = *
+dotnet_naming_symbols.constants.required_modifiers = const
+dotnet_naming_style.pascal.capitalization = pascal_case
+
 dotnet_naming_rule.private_fields_underscored.symbols = private_fields
 dotnet_naming_rule.private_fields_underscored.style = underscore_camel
 dotnet_naming_rule.private_fields_underscored.severity = warning

@@ -1,0 +1,193 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "vaultaffe",
+    "description": "The HTTP surface of one vaultaffe instance, and the only way in or out of it (Specification §9). Every instance is at its own address. Everything but the handshake and the problem catalogue lives under /api/v1/, and every refusal is an application/problem+json document whose `code` names it.",
+    "version": "v1"
+  },
+  "paths": {
+    "/api/handshake": {
+      "get": {
+        "tags": [
+          "Contract"
+        ],
+        "summary": "What this instance is and which versions of the contract it serves.",
+        "operationId": "Handshake",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Handshake"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/problems": {
+      "get": {
+        "tags": [
+          "Contract"
+        ],
+        "summary": "Every refusal this instance can make, by code.",
+        "operationId": "ReadProblems",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProblemKind"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/problems/{code}": {
+      "get": {
+        "tags": [
+          "Contract"
+        ],
+        "summary": "One refusal, by code.",
+        "operationId": "ReadProblem",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemKind"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Handshake": {
+        "required": [
+          "product",
+          "release",
+          "apiVersions",
+          "minimumClient"
+        ],
+        "type": "object",
+        "properties": {
+          "product": {
+            "type": "string"
+          },
+          "release": {
+            "type": "string"
+          },
+          "apiVersions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "minimumClient": {
+            "type": "string"
+          }
+        }
+      },
+      "ProblemDetails": {
+        "required": [
+          "code"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "code": {
+            "type": "string"
+          }
+        }
+      },
+      "ProblemKind": {
+        "required": [
+          "code",
+          "status",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Contract"
+    }
+  ]
+}

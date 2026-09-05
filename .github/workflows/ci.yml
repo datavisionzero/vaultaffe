@@ -18,11 +18,9 @@ permissions:
 # nobody is tempted to push past it, which is why the toolchains run beside each
 # other rather than in one job.
 #
-# What is deliberately not here yet: the web build, the contract check and the
-# image. Their subjects do not exist, and each of them would have to settle a
-# question another ticket owns — whether the OpenAPI document is checked in and
-# compared against a running instance is the API contract's decision, not this
-# file's. Each job arrives in the commit that creates its subject.
+# What is deliberately not here yet: the web build and the image. Their subjects
+# do not exist, and each of them arrives in the commit that creates its subject —
+# as the contract job below did.
 
 # One run at a time, and nothing is cancelled. With a single maintainer pushing
 # there is nothing to gain from two racing, and a pull request waiting a few
@@ -79,6 +77,68 @@ jobs:
       - run: dotnet restore Vaultaffe.slnx
       - run: dotnet build Vaultaffe.slnx -c Release --no-restore
       - run: dotnet test tests/Vaultaffe.IntegrationTests -c Release --no-build
+
+  # The document both the reader and the generated web client take the API from
+  # (ADR 0006), captured from an installation that is actually running rather
+  # than from a build that was asked what it would serve. `ContractTests` makes
+  # the same comparison from the other side, against Testcontainers; this one
+  # makes it against an installation started the way an operator starts one, so
+  # that neither the test nor the capture can be the only thing that was right.
+  contract:
+    name: OpenAPI contract
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:18
+        env:
+          POSTGRES_DB: vaultaffe
+          POSTGRES_USER: vaultaffe
+          POSTGRES_PASSWORD: vaultaffe
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vaultaffe -d vaultaffe"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      # An empty database and no migration step: the installation applies its own
+      # migrations on start (Specification §6.3), so a schema this job prepared
+      # would be a second place that creates one.
+      #
+      # The master key is generated here and thrown away with the runner. It
+      # encrypts nothing — this installation serves one document and takes no
+      # value — but an instance without a usable one does not start, which is the
+      # behaviour under test everywhere else.
+      - name: Start the installation
+        run: |
+          set -euo pipefail
+          export Vaultaffe__MasterKey="$(openssl rand -base64 32)"
+          dotnet run --project src/Vaultaffe.Api -c Release --no-launch-profile &
+        env:
+          ConnectionStrings__Postgres: Host=localhost;Port=5432;Database=vaultaffe;Username=vaultaffe;Password=vaultaffe
+          ASPNETCORE_HTTP_PORTS: "5142"
+
+      - name: Capture the contract
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 45); do
+            curl --fail --silent http://localhost:5142/openapi/v1.json -o /tmp/openapi.json && break
+            sleep 2
+          done
+          test -s /tmp/openapi.json || { echo "the installation never served a document"; exit 1; }
+          # Formatted by the json module rather than by json.tool, whose --indent
+          # flag is not in every Python the runner might carry. ensure_ascii off,
+          # so that a dash in a summary stays a dash, as ContractTests writes it.
+          python3 -c 'import json,pathlib; d=json.loads(pathlib.Path("/tmp/openapi.json").read_text(encoding="utf-8")); pathlib.Path("docs/api/openapi.json").write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")'
+
+      - name: The checked-in contract is the one being served
+        run: git diff --exit-code -- docs/api/openapi.json
 
   # `vaultaffe` is a client of the public API and references nothing in `src/`
   # (Specification §9), so it is a plain Go module built by a plain Go job. The

@@ -35,3 +35,5 @@ material value to understanding the decision.
 - [0002 – The backend is four layers, not one project](./0002-the-backend-is-four-layers-not-one-project.md)
 - [0003 – A name inside a reference is narrow and lower-case](./0003-a-name-inside-a-reference-is-narrow-and-lower-case.md)
 - [0004 – The token format and the envelope](./0004-the-token-format-and-the-envelope.md)
+- [0005 – The API carries its version in the path](./0005-the-api-carries-its-version-in-the-path.md)
+- [0006 – The contract is checked in, and the web client is generated from it](./0006-the-contract-is-checked-in-and-the-web-client-is-generated-from-it.md)
