@@ -41,3 +41,5 @@ material value to understanding the decision.
 - [0008 – A session is a token, and the only page asks for a password](./0008-a-session-is-a-token-and-the-only-page-asks-for-a-password.md)
 - [0009 – `run` replaces itself, and does everything else first](./0009-run-replaces-itself-and-does-everything-else-first.md)
 - [0010 – A refusal names the action, and the client names the command](./0010-a-refusal-names-the-action-and-the-client-names-the-command.md)
+- [0011 – The CLI generates its client from the same document](./0011-the-cli-generates-its-client-from-the-same-document.md)
+- [0012 – A session lives in the keychain, and nowhere quietly](./0012-a-session-lives-in-the-keychain-and-nowhere-quietly.md)

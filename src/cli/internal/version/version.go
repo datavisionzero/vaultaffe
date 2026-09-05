@@ -12,3 +12,9 @@ var Value = "0.0.0-dev"
 // handshake between CLI and server has to tell an installed release from a
 // working copy, and this is the one place that knows.
 func Released() bool { return Value != "0.0.0-dev" }
+
+// Contract is the API version this binary speaks. It is the second segment of
+// every path it calls (ADR 0005), and the whole of what "too new" means: an
+// instance that does not serve it is older than this CLI, and no amount of
+// retrying will change that.
+const Contract = "v1"

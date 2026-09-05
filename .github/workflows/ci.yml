@@ -155,11 +155,15 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: src/cli/go.mod
-          # The module has no dependencies yet and therefore no `go.sum`, which
-          # is what the cache keys on — asking for it would fail the job over a
-          # file that is correctly absent. Turned on in the commit that adds the
-          # first dependency.
-          cache: false
+          cache-dependency-path: src/cli/go.sum
+
+      # The client of the contract is generated and not committed (ADR 0011), so
+      # it is generated here before anything reads it — from the same
+      # `docs/api/openapi.json` this workflow verifies a running instance
+      # against in the job above. A CLI that compiles here is a CLI that
+      # compiles against the contract the instance actually serves.
+      - name: Generate the API client
+        run: go generate ./...
 
       # gofmt has no --check, and it reports by printing names: a non-empty
       # listing is the failure. This is the Go half of the `format` job above.
