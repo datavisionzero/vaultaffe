@@ -75,18 +75,11 @@ public sealed class Secret : IBelongToAnOrganization
     /// to overwrite (Specification §6.2) and what becomes of the returned
     /// version; this only refuses to lose one silently.
     /// </summary>
-    public SecretValueVersion? Seal(
-        Guid versionId,
-        byte[] wrappedDataKey,
-        byte[] nonce,
-        byte[] ciphertext,
-        DateTimeOffset moment)
+    public SecretValueVersion? Seal(Guid versionId, SealedValue value, DateTimeOffset moment)
     {
-        ArgumentNullException.ThrowIfNull(wrappedDataKey);
-        ArgumentNullException.ThrowIfNull(nonce);
-        ArgumentNullException.ThrowIfNull(ciphertext);
+        ArgumentNullException.ThrowIfNull(value);
 
-        if (WrappedDataKey is not null && !WrappedDataKey.SequenceEqual(wrappedDataKey))
+        if (WrappedDataKey is not null && !WrappedDataKey.SequenceEqual(value.WrappedDataKey))
         {
             throw new InvalidOperationException(
                 "A secret keeps one data key for its lifetime; replacing it would strand "
@@ -98,9 +91,9 @@ public sealed class Secret : IBelongToAnOrganization
             : new SecretValueVersion(
                 versionId, OrganizationId, Id, Nonce!, Ciphertext, ValueWrittenAt ?? CreatedAt, moment);
 
-        WrappedDataKey = wrappedDataKey;
-        Nonce = nonce;
-        Ciphertext = ciphertext;
+        WrappedDataKey = value.WrappedDataKey;
+        Nonce = value.Nonce;
+        Ciphertext = value.Ciphertext;
         ValueWrittenAt = moment;
 
         return superseded;

@@ -8,10 +8,10 @@ namespace Vaultaffe.Domain.Tokens;
 /// </summary>
 /// <remarks>
 /// What a token value looks like — the prefix per kind that lets a secret scanner
-/// find it in a repository or a log, and how it is hashed — is not decided here.
-/// Who owns a token is not decided here either; that arrives with the identity
-/// this one belongs to. This type is the credential's own record: what it may
-/// touch, what it may do, and whether it still counts.
+/// find it in a repository or a log, and how it is hashed — is
+/// <see cref="TokenValue"/>. Who owns a token is not decided here; that arrives
+/// with the identity this one belongs to. This type is the credential's own
+/// record: what it may touch, what it may do, and whether it still counts.
 /// </remarks>
 public sealed class Token : IBelongToAnOrganization
 {
@@ -37,6 +37,28 @@ public sealed class Token : IBelongToAnOrganization
         Scopes = scopes;
         CreatedAt = createdAt;
         ExpiresAt = expiresAt;
+    }
+
+    /// <summary>
+    /// Mint one: a value of that kind, and the record that keeps nothing but its
+    /// hash. Two returns rather than one, because the value exists exactly once —
+    /// the caller shows it and lets it go, and nothing can ask this record for it
+    /// afterwards (Specification §6.1).
+    /// </summary>
+    public static (Token Token, TokenValue Value) Issue(
+        Guid id,
+        Guid organizationId,
+        TokenKind kind,
+        string? name,
+        Scopes scopes,
+        DateTimeOffset createdAt,
+        DateTimeOffset? expiresAt = null)
+    {
+        var value = TokenValue.Issue(kind);
+
+        return (
+            new Token(id, organizationId, kind, name, value.Hash(), scopes, createdAt, expiresAt),
+            value);
     }
 
     public Guid Id { get; private set; }

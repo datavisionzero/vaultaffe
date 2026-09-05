@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -6,6 +7,7 @@ using Microsoft.EntityFrameworkCore.Migrations.Internal;
 using Npgsql;
 using Vaultaffe.Domain.Projects;
 using Vaultaffe.Domain.Secrets;
+using Vaultaffe.Infrastructure.Encryption;
 using Environment = Vaultaffe.Domain.Environments.Environment;
 
 namespace Vaultaffe.IntegrationTests;
@@ -215,24 +217,32 @@ public sealed class SchemaTests(PostgresFixture postgres)
     }
 
     /// <summary>
-    /// The whole envelope, written and read back: this asserts the columns are
-    /// there and hold what they are for, not that any particular algorithm is.
+    /// The whole envelope through the database and back (Specification §6.3): a
+    /// value sealed under a data key of the secret's own, that data key wrapped
+    /// by the instance master key, the superseded version sealed under the same
+    /// key — and every one of them opening again from what the columns actually
+    /// hold. `EnvelopeTests` reads the encryption on its own; this is the part no
+    /// substitute can vouch for.
     /// </summary>
     [Fact]
     public async Task A_sealed_value_survives_the_round_trip_and_supersedes_the_old_one()
     {
         await using var migrated = await Migrated.SeededAsync(postgres);
 
-        byte[] dataKey = [1, 2, 3];
+        var keyRing = new KeyRing(
+            new MasterKey(RandomNumberGenerator.GetBytes(MasterKey.Length)));
 
         await using (var writing = migrated.Writer(migrated.Organization.Id))
         {
             var secret = await writing.Secrets.SingleAsync(TestContext.Current.CancellationToken);
 
-            Assert.Null(secret.Seal(Guid.NewGuid(), dataKey, [9], [10], Migrated.Now));
+            Assert.Null(secret.Seal(
+                Guid.NewGuid(), keyRing.Seal("the first value", null), Migrated.Now));
 
             var superseded = secret.Seal(
-                Guid.NewGuid(), dataKey, [11], [12], Migrated.Now.AddHours(1));
+                Guid.NewGuid(),
+                keyRing.Seal("the second value", secret.WrappedDataKey),
+                Migrated.Now.AddHours(1));
 
             writing.Add(Assert.IsType<SecretValueVersion>(superseded));
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -244,9 +254,18 @@ public sealed class SchemaTests(PostgresFixture postgres)
         var history = await reading.SecretValueVersions.SingleAsync(
             TestContext.Current.CancellationToken);
 
-        Assert.Equal<byte[]>([12], stored.Ciphertext!);
-        Assert.Equal<byte[]>(dataKey, stored.WrappedDataKey!);
-        Assert.Equal<byte[]>([10], history.Ciphertext);
+        Assert.Equal(
+            "the second value",
+            keyRing.Open(new SealedValue(
+                stored.WrappedDataKey!, stored.Nonce!, stored.Ciphertext!)));
+
+        // The superseded value opens under the secret's data key and not one of
+        // its own, which is what makes the rollback of §6.5 possible at all.
+        Assert.Equal(
+            "the first value",
+            keyRing.Open(new SealedValue(
+                stored.WrappedDataKey!, history.Nonce, history.Ciphertext)));
+
         Assert.Equal(Migrated.Now.AddHours(1), history.ReplacedAt);
     }
 }

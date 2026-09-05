@@ -9,10 +9,12 @@ Most of it does not exist yet. **The skeleton was raised before there was
 anything to break, so that CI could be green from the first commit** (ADR 0001);
 what has landed in it so far is the data model — the eight tables, the
 migrations that apply themselves on startup, and the one place two organizations
-are kept apart ([`storage.md`](./storage.md)). Beside it the Go module with one
-command that prints its version, and the workflow that builds and tests both.
-This document is kept accurate from here on: a file that lands somewhere it does
-not describe means one of the two is wrong.
+are kept apart ([`storage.md`](./storage.md)) — and the two formats nothing can
+change afterwards: the token value and the envelope a secret rests in
+([ADR 0004](./adr/0004-the-token-format-and-the-envelope.md)). Beside it the Go
+module with one command that prints its version, and the workflow that builds
+and tests both. This document is kept accurate from here on: a file that lands
+somewhere it does not describe means one of the two is wrong.
 
 Three decisions shape the layout. Two of them the specification already made —
 the CLI is **Go** and the frontend is **React**, both for the reasons in
@@ -62,9 +64,10 @@ pointing outward.
 
 **`Vaultaffe.Domain` holds the rules.** Organization, project, environment and
 secret with the name rule `^[A-Z_][A-Z0-9_]*$`; the three token kinds with their
-prefixes, bindings and scope sets; what an empty placeholder is and what it
-stops; the bounds on value history — five versions, 72 hours, whichever is hit
-first — and the recovery window on a deletion. The test of whether something
+prefixes, bindings and scope sets, and the shape of a token value itself; what
+an empty placeholder is and what it stops; the bounds on value history — five
+versions, 72 hours, whichever is hit first — and the recovery window on a
+deletion. The test of whether something
 belongs here: **anything the specification already states as a rule.** A token
 that can be constructed without a binding, or a value version that can outlive
 both of its bounds, is a rule that escaped.
@@ -73,16 +76,18 @@ both of its bounds, is a rule that escaped.
 caller does, a port is one thing the acts need answered. Setting a secret,
 reading one, listing names without values, importing an environment, rolling
 back, deleting recoverably and restoring, creating tokens under a human session.
-Beside them the ports: the stores, the identity of the caller, the key ring the
-encryption asks, and the clock — which is `TimeProvider` from the base class
-libraries rather than a port of ours.
+Beside them the ports: the stores, the identity of the caller, the key ring that
+seals a value and opens it again, and the clock — which is `TimeProvider` from
+the base class libraries rather than a port of ours.
 
 **`Vaultaffe.Infrastructure` answers those ports.** `Persistence/` is the one
 place that declares schema: the context, one configuration per table, the
-migrations and the migrator that applies them before anything is served. The
-envelope encryption of [Specification §6.3](../Specification.md#63-operations) —
-a data key per secret under the instance master key — lands in the columns that
-model already carries. The organization filter of
+migrations and the migrator that applies them before anything is served.
+`Encryption/` is the envelope of
+[Specification §6.3](../Specification.md#63-operations) — a data key per secret
+under the instance master key, in the columns that model already carries — and
+the only place in this product that holds a value in the clear on purpose. The
+organization filter of
 [§9](../Specification.md#9-technical-guardrails) sits here too, in
 `VaultaffeDbContext.OnModelCreating` and nowhere else:
 [`storage.md`](./storage.md) has the whole of it.
@@ -122,12 +127,13 @@ version falling out of the history window is deleted rather than tombstoned. The
 split is by what a test needs rather than by what it covers, because that is the
 distinction CI has to act on.
 
-What is in it today is the schema and the tenancy: that the migrations apply and
-that applying them twice is uneventful, that a name outside its rule is refused
-by the database and not only by the domain, that a deleted object keeps its name
-reserved, that a half-sealed value cannot be written, that one organization never
-sees another's rows — and that the change log has no column a value could live
-in.
+What is in it today is the schema, the tenancy and the envelope: that the
+migrations apply and that applying them twice is uneventful, that a name outside
+its rule is refused by the database and not only by the domain, that a deleted
+object keeps its name reserved, that a half-sealed value cannot be written, that
+one organization never sees another's rows, that a value written under a
+secret's own data key comes back out of Postgres unchanged and a superseded one
+with it — and that the change log has no column a value could live in.
 
 The frontend will carry its own tests inside `src/web/`, and the CLI carries its
 own inside `src/cli/`, each run by the CI job that builds it.

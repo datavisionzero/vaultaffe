@@ -13,6 +13,12 @@ public sealed class SecretTests
     private static Secret ASecret() =>
         new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "STRIPE_KEY", _now);
 
+    // Bytes that stand for an envelope rather than being one. What the sealing
+    // actually produces is Infrastructure's, and `EnvelopeTests` reads it there;
+    // here they only have to be told apart.
+    private static SealedValue Sealed(byte[] wrappedDataKey, byte[] nonce, byte[] ciphertext) =>
+        new(wrappedDataKey, nonce, ciphertext);
+
     /// <summary>
     /// Specification §6.2: an empty placeholder means a human still has to do
     /// something, and it is what makes `run` refuse to start and name the key.
@@ -34,7 +40,7 @@ public sealed class SecretTests
     {
         var secret = ASecret();
 
-        Assert.Null(secret.Seal(Guid.NewGuid(), [1], [2], [3], _now));
+        Assert.Null(secret.Seal(Guid.NewGuid(), Sealed([1], [2], [3]), _now));
         Assert.False(secret.IsPlaceholder);
         Assert.Equal(_now, secret.ValueWrittenAt);
     }
@@ -43,9 +49,9 @@ public sealed class SecretTests
     public void Sealing_over_a_value_hands_the_old_one_back_rather_than_losing_it()
     {
         var secret = ASecret();
-        secret.Seal(Guid.NewGuid(), [1], [2], [3], _now);
+        secret.Seal(Guid.NewGuid(), Sealed([1], [2], [3]), _now);
 
-        var superseded = secret.Seal(Guid.NewGuid(), [1], [4], [5], _now.AddHours(1));
+        var superseded = secret.Seal(Guid.NewGuid(), Sealed([1], [4], [5]), _now.AddHours(1));
 
         Assert.NotNull(superseded);
         Assert.Equal<byte[]>([3], superseded.Ciphertext);
@@ -64,10 +70,10 @@ public sealed class SecretTests
     public void A_secret_keeps_one_data_key()
     {
         var secret = ASecret();
-        secret.Seal(Guid.NewGuid(), [1], [2], [3], _now);
+        secret.Seal(Guid.NewGuid(), Sealed([1], [2], [3]), _now);
 
         Assert.Throws<InvalidOperationException>(() =>
-            secret.Seal(Guid.NewGuid(), [99], [4], [5], _now.AddHours(1)));
+            secret.Seal(Guid.NewGuid(), Sealed([99], [4], [5]), _now.AddHours(1)));
     }
 
     /// <summary>
@@ -79,11 +85,25 @@ public sealed class SecretTests
     public void A_superseded_version_expires_from_the_moment_it_was_replaced()
     {
         var secret = ASecret();
-        secret.Seal(Guid.NewGuid(), [1], [2], [3], _now.AddYears(-1));
+        secret.Seal(Guid.NewGuid(), Sealed([1], [2], [3]), _now.AddYears(-1));
 
-        var superseded = secret.Seal(Guid.NewGuid(), [1], [4], [5], _now)!;
+        var superseded = secret.Seal(Guid.NewGuid(), Sealed([1], [4], [5]), _now)!;
 
         Assert.Equal(_now + ValueHistory.Window, superseded.ExpiresAt);
+    }
+
+    /// <summary>
+    /// The same rule the database holds in <c>ck_secret_value_sealed_whole</c>:
+    /// a ciphertext without the nonce and data key it was sealed under is a value
+    /// nobody can open again, and it should not be constructible either.
+    /// </summary>
+    [Fact]
+    public void A_value_is_sealed_whole_or_not_at_all()
+    {
+        Assert.Throws<ArgumentException>(() => new SealedValue([1], [2], []));
+        Assert.Throws<ArgumentException>(() => new SealedValue([1], [], [3]));
+        Assert.Throws<ArgumentException>(() => new SealedValue([], [2], [3]));
+        Assert.Throws<ArgumentNullException>(() => new SealedValue([1], [2], null!));
     }
 
     /// <summary>

@@ -96,8 +96,22 @@ state a human still has to fill, that stops `run` and that the names listing
 reports ([§6.2](../Specification.md#62-cli)). It is a state, never an empty
 string pretending to be a value.
 
-*What the algorithm is, and how the master key is read, is not decided here.*
-These are the columns those decisions land in.
+Both levels are AES-256-GCM, and both blobs start with a format byte so that a
+later algorithm is a new byte rather than a guess about what an old row means
+([ADR 0004](./adr/0004-the-token-format-and-the-envelope.md)):
+
+```
+ciphertext        [format][ciphertext][tag]
+wrapped_data_key  [format][master key id][nonce][data key][tag]
+```
+
+The master key itself is not in the database and never will be: it is
+`Vaultaffe__MasterKey` in the instance environment, 32 bytes in base64, read
+once at startup — an instance without a usable one does not start. The four
+bytes of `master key id` are derived from that key with HKDF and say which key a
+row is under, which is how a half-restored backup produces the sentence *"this
+value was sealed under a different master key"* instead of a database that reads
+as damaged.
 
 ## Deleting keeps the row, and the name
 
@@ -157,8 +171,16 @@ guide when there is one, not in a footnote.
 ## Tokens store a hash, and nothing else
 
 `token.value_hash` is unique, because authentication looks a token up by exactly
-that column. The value itself is shown once at creation and never stored — a
-token this instance could read back would be a credential it holds in the clear.
+that column. It holds `sha256` of the token value — plain, because the input is
+256 bits of randomness rather than a password, and because a per-row salt would
+turn every request into a table scan. The value itself is shown once at creation
+and never stored: a token this instance could read back would be a credential it
+holds in the clear.
+
+A value reads `vaultaffe_session_…`, `vaultaffe_service_…` or `vaultaffe_agent_…`
+([ADR 0004](./adr/0004-the-token-format-and-the-envelope.md)). Nothing in the
+schema knows that — the prefix is read before a lookup happens, and `kind` is
+what the row carries.
 
 The scope set is one integer of flags (`names`, `read`, `write`, `delete`), so
 that "may write but never read" is expressible and adding a scope later is a new

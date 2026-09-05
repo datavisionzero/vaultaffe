@@ -9,6 +9,7 @@ using Vaultaffe.Infrastructure;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddVaultaffePersistence(builder.Configuration);
+builder.Services.AddVaultaffeEncryption(builder.Configuration);
 
 // Nothing authenticates a caller yet, so nobody is inside an organization and
 // every query filter answers nothing. That is the safe end of the comparison

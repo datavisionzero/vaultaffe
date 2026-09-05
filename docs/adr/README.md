@@ -34,3 +34,4 @@ material value to understanding the decision.
 - [0001 – The repository is a trunk](./0001-the-repository-is-a-trunk.md)
 - [0002 – The backend is four layers, not one project](./0002-the-backend-is-four-layers-not-one-project.md)
 - [0003 – A name inside a reference is narrow and lower-case](./0003-a-name-inside-a-reference-is-narrow-and-lower-case.md)
+- [0004 – The token format and the envelope](./0004-the-token-format-and-the-envelope.md)
