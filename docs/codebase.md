@@ -5,12 +5,14 @@
 that lives: how the repository is laid out, which project holds what, which way
 the dependencies point, and what is built by which toolchain.
 
-Right now almost none of it exists. **The skeleton was raised before there was
-anything to break, so that CI could be green from the first commit** (ADR 0001).
-What is here is the six .NET projects with nothing in them, the Go module with
-one command that prints its version, and the workflow that builds and tests
-both. This document is kept accurate from here on: a file that lands somewhere
-it does not describe means one of the two is wrong.
+Most of it does not exist yet. **The skeleton was raised before there was
+anything to break, so that CI could be green from the first commit** (ADR 0001);
+what has landed in it so far is the data model — the eight tables, the
+migrations that apply themselves on startup, and the one place two organizations
+are kept apart ([`storage.md`](./storage.md)). Beside it the Go module with one
+command that prints its version, and the workflow that builds and tests both.
+This document is kept accurate from here on: a file that lands somewhere it does
+not describe means one of the two is wrong.
 
 Three decisions shape the layout. Two of them the specification already made —
 the CLI is **Go** and the frontend is **React**, both for the reasons in
@@ -26,7 +28,8 @@ carries two of them.
 vaultaffe/
 ├─ .github/workflows/          ci on every push
 ├─ docs/                       the decisions, and this
-│  └─ adr/
+│  ├─ adr/
+│  └─ storage.md               the data model: tables, constraints, what is enforced where
 ├─ src/
 │  ├─ Vaultaffe.Domain/         the rules
 │  ├─ Vaultaffe.Application/    the use cases and their ports
@@ -74,12 +77,15 @@ Beside them the ports: the stores, the identity of the caller, the key ring the
 encryption asks, and the clock — which is `TimeProvider` from the base class
 libraries rather than a port of ours.
 
-**`Vaultaffe.Infrastructure` answers those ports.** Postgres and the schema, the
+**`Vaultaffe.Infrastructure` answers those ports.** `Persistence/` is the one
+place that declares schema: the context, one configuration per table, the
+migrations and the migrator that applies them before anything is served. The
 envelope encryption of [Specification §6.3](../Specification.md#63-operations) —
-a data key per secret under the instance master key — and the migrations that
-apply themselves on startup, so there is exactly one place that creates schema.
-The organization filter of [§9](../Specification.md#9-technical-guardrails) sits
-here, in one place, rather than in every handler.
+a data key per secret under the instance master key — lands in the columns that
+model already carries. The organization filter of
+[§9](../Specification.md#9-technical-guardrails) sits here too, in
+`VaultaffeDbContext.OnModelCreating` and nowhere else:
+[`storage.md`](./storage.md) has the whole of it.
 
 **`Vaultaffe.Api` is the adapters and the composition root.** The endpoints,
 the token and session authentication, the version handshake, the one place a
@@ -116,9 +122,12 @@ version falling out of the history window is deleted rather than tombstoned. The
 split is by what a test needs rather than by what it covers, because that is the
 distinction CI has to act on.
 
-Today the integration project holds one test, and it asserts only that the
-harness starts at all. That is worth finding out while a red trunk is still
-cheap.
+What is in it today is the schema and the tenancy: that the migrations apply and
+that applying them twice is uneventful, that a name outside its rule is refused
+by the database and not only by the domain, that a deleted object keeps its name
+reserved, that a half-sealed value cannot be written, that one organization never
+sees another's rows — and that the change log has no column a value could live
+in.
 
 The frontend will carry its own tests inside `src/web/`, and the CLI carries its
 own inside `src/cli/`, each run by the CI job that builds it.

@@ -10,6 +10,20 @@
        encryption and the contract each bring their own with the code that needs
        them. -->
 
+  <ItemGroup Label="Persistence">
+    <!-- The one place that declares schema (docs/codebase.md): EF Core owns the
+         tables and the migrations that apply themselves on startup. The
+         design-time package is what `dotnet ef migrations add` needs, and it
+         stays out of the runtime through PrivateAssets on the reference. -->
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11" />
+    <!-- The Npgsql provider asks for an older EF Core patch than the design-time
+         package does. Pinned to one version so the two do not meet as a runtime
+         binding conflict in the test project, where both arrive. -->
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
+  </ItemGroup>
+
   <ItemGroup Label="Tests">
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.13.0" />

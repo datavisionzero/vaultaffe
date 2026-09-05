@@ -19,7 +19,8 @@ never pushed (see below).
   no `ee/` directory and no feature behind a second license.
 - **Layout**: where the code lives, which project holds what, and which way the
   dependencies point is [`docs/codebase.md`](docs/codebase.md). Read it before
-  adding a file.
+  adding a file. The data model and the rules the database itself holds are
+  [`docs/storage.md`](docs/storage.md).
 - **Language of the domain**:
   [Specification §5](Specification.md#5-core-concepts) is the glossary —
   organization, project, environment, secret, token. Code, identifiers, the HTTP

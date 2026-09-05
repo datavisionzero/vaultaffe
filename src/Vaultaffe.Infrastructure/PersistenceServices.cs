@@ -1,0 +1,33 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Vaultaffe.Infrastructure.Persistence;
+
+namespace Vaultaffe.Infrastructure;
+
+/// <summary>
+/// What the composition root has to add to reach Postgres. Everything the
+/// application asks for through a port is answered from here, and the connection
+/// string is the one piece of it that is the operator's.
+/// </summary>
+public static class PersistenceServices
+{
+    /// <summary>The configuration key an installation sets its database under.</summary>
+    public const string ConnectionStringName = "Postgres";
+
+    public static IServiceCollection AddVaultaffePersistence(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        var connectionString = configuration.GetConnectionString(ConnectionStringName)
+            ?? throw new InvalidOperationException(
+                $"No connection string named '{ConnectionStringName}'. An installation sets "
+                + $"ConnectionStrings__{ConnectionStringName} in its environment.");
+
+        services.AddDbContext<VaultaffeDbContext>(options => options.UseNpgsql(connectionString));
+
+        services.AddSingleton<SchemaMigrator>();
+
+        return services;
+    }
+}
