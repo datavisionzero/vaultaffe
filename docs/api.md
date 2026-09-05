@@ -17,9 +17,9 @@ version in the path, the handshake, the error shape and the document — identit
 the first run, signing in, the device-code login and token management — the
 authorization every endpoint after it is enforced by — the catalogue: projects
 and environments, with the change log that every write path since has been in —
-and the secrets surface itself. Reading the change log and the value history, and
-purging, arrive with their own tickets, and this file is kept accurate as each
-does.
+the secrets surface itself — and the change log and the value history, read and
+rolled back. Purging arrives with its own ticket, and this file is kept accurate
+as it does.
 
 ## Where the endpoints are
 
@@ -32,6 +32,7 @@ does.
 /api/v1/tokens                   creating, listing and revoking tokens
 /api/v1/projects                 the catalogue, by name
 /api/v1/projects/…/secrets       names and status; one value at a time
+/api/v1/changes                  what was changed, by whom, and of what kind
 /device                          the page a human confirms a login on
 
 /api/handshake       what this instance is and what it serves
@@ -360,7 +361,8 @@ The format is written down rather than inferred, because there is no standard fo
 it: `#` comments and blank lines are skipped, a leading `export` is allowed,
 single quotes are literal, double quotes may span lines and understand `
 `,
-``, `	`, `\` and `"`, and an unquoted value keeps its `#` — a trailing
+`
+`, `	`, `\` and `"`, and an unquoted value keeps its `#` — a trailing
 comment cannot be told from a password containing one. Export always quotes and
 escapes, so what it writes is something import reads.
 
@@ -370,6 +372,65 @@ which is precisely the contradiction `inject` was rejected for
 back out is part of being trustworthy, and it is `human-only` with
 `humanAction: "export"` — an agent or service token is refused however many scopes
 it carries. Nothing is recorded for it: the change log holds mutations, not reads.
+
+## The change log and the value history
+
+Two things that get lumped together and have completely different risk profiles
+([§6.5](../Specification.md#65-logging-and-history)). The log holds no value at
+all; the history holds a few under tight bounds and hands none of them out.
+
+```
+GET  /api/v1/changes                                     what was changed, by whom
+GET  …/environments/{environment}/secrets/{KEY}/versions  what it used to hold, and when
+POST …/environments/{environment}/secrets/{KEY}/rollback  put one back
+```
+
+**The log never contains a value**, not even as a diff. An entry is a moment, an
+action, the project, environment and secret name it happened to, and the acting
+identity **with its type** — `human-session`, `service-token` or `agent-token`.
+That last field is what the log exists for: with writing agents, what kind of
+thing acted is the interesting question, and it is why an agent gets a token of
+its own on day one. Doppler puts the old and new value in the log and had to bolt
+on a redaction that does not truly delete; we follow AWS.
+
+Actions are words: `created`, `renamed`, `value-set`, `value-rolled-back`,
+`placeholder-created`, `deleted`, `restored`, `purged`.
+
+**Reads are not in it.** `run` reads values, but a successful read does not prove
+an application started, and the MVP records mutations rather than every
+invocation. An export is a read too, and is not recorded either.
+
+**A reader names what they are asking about.** The entries carry names and no
+ids, so a binding cannot narrow the answer afterwards — instead `project`,
+`environment` and `secret` are the filter, and the same authority as everywhere
+else says whether the caller reaches it. No `project` needs a token that reaches
+the whole organization; a bound token names its project, and a token bound to one
+environment names that too. `environment` without `project`, or `secret` without
+`environment`, is a validation failure rather than a silently wider search: a
+filter matching every project's `prod` is not what anybody meant.
+
+`limit` (default 50, at most 200) and `offset` page it, newest first, over a
+total order of moment and then id — one act writes several entries at the same
+instant, and a page boundary in the middle of them has to fall in the same place
+twice. Entries arriving while a reader pages will shift it; that is what an
+append-only log does, and it is not worth a cursor here.
+
+**The version listing says when, and never what.** Id, `writtenAt`, `replacedAt`
+and `expiresAt` — no value, because five old credentials in one answer would be
+the bulk disclosure the rest of this product spends every decision avoiding, and
+nothing needs it.
+
+**Rollback is a write like any other and available to agents.** An agent that
+wrecks a value overnight is exactly who needs an undo button. It costs `write`
+and nothing else — there is no `replace` to give, because asking to undo already
+says what is meant. `{"versionId": …}` names one; omitted means the value before
+this one.
+
+Nothing is opened to do it: every version of a secret is sealed under that
+secret's own data key, so a rollback moves ciphertext and never asks the key ring
+for anything. The version rolled back to leaves the history, because it is the
+current value again, and what it replaced takes its place — one credential is not
+counted twice against a bound that exists to hold few of them.
 
 ## Refusals
 

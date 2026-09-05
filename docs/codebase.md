@@ -19,8 +19,9 @@ login with the one page it needs, and token management — the authorization
 every endpoint after it is held to: the scope set, the binding, and the short
 list only a person may do — the catalogue: projects and environments, with
 the change log that every write path since has been in — and the secrets surface
-itself: names without values, one value at a time, a file in and a file out.
-Beside it the Go module
+itself: names without values, one value at a time, a file in and a file out, and
+the change log and value history read back and rolled back. Beside it the Go
+module
 with one command that prints its version, and the workflow that builds and tests
 both. This document is kept accurate from here on: a file that lands
 somewhere it does not describe means one of the two is wrong.
@@ -94,8 +95,9 @@ caller does, a port is one thing the acts need answered. Starting the instance,
 signing in, the three steps of a device login, creating and revoking tokens,
 creating and listing and renaming and deleting and restoring a project, an
 environment or a secret, writing a value, reading one, importing a file and
-exporting one; and still to come, reading the change log and the value history,
-rolling back and purging. Beside them the ports: the stores, the identity of the caller, the thing that hashes a
+exporting one, reading the change log and the value history, rolling back to an
+earlier value; and still to come, purging and the sweep that expires what the
+bounds have passed. Beside them the ports: the stores, the identity of the caller, the thing that hashes a
 password, the key ring that seals a value and opens it again, and the clock —
 which is `TimeProvider` from the base class libraries rather than a port of ours.
 
@@ -210,7 +212,11 @@ or even the word, that a token with `names` and not `read` sees the keys and is
 refused one of them, that a token that may write and not read can still rotate a
 credential without ever seeing either half of it, that a multi-line value survives
 a round trip through the export format, that the history stays inside both of its
-bounds, and that an agent with every scope there is still cannot export. Then
+bounds, and that an agent with every scope there is still cannot export. Then the two
+histories: that the log names the identity and its type — an agent as an agent —
+that no value reaches it however often one is written, that a read is not in it,
+that pages do not overlap, that a bound token has to name what it is asking about,
+and that a rollback puts a value back without anybody having read it. Then
 the catalogue: that a project arrives with its three environments, that a deleted
 one keeps its name reserved and comes back with the subtree it had rather than
 the one it would have had, that past the window there is a refusal and not a

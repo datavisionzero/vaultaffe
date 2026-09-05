@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Vaultaffe.Application.Ports;
 using Vaultaffe.Domain.History;
 
@@ -15,4 +16,38 @@ namespace Vaultaffe.Infrastructure.Persistence;
 public sealed class ChangeLogStore(VaultaffeDbContext context) : IChangeLogStore
 {
     public void Add(ChangeLogEntry entry) => context.Add(entry);
+
+    public async Task<IReadOnlyList<ChangeLogEntry>> ReadAsync(
+        ChangeLogFilter filter, int limit, int offset, CancellationToken cancellationToken) =>
+        await Matching(filter)
+            .OrderByDescending(entry => entry.OccurredAt)
+            .ThenByDescending(entry => entry.Id)
+            .Skip(offset)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+
+    public Task<int> CountAsync(ChangeLogFilter filter, CancellationToken cancellationToken) =>
+        Matching(filter).CountAsync(cancellationToken);
+
+    private IQueryable<ChangeLogEntry> Matching(ChangeLogFilter filter)
+    {
+        var entries = context.ChangeLog.AsQueryable();
+
+        if (filter.ProjectName is { } project)
+        {
+            entries = entries.Where(entry => entry.ProjectName == project);
+        }
+
+        if (filter.EnvironmentName is { } environment)
+        {
+            entries = entries.Where(entry => entry.EnvironmentName == environment);
+        }
+
+        if (filter.SecretName is { } secret)
+        {
+            entries = entries.Where(entry => entry.SecretName == secret);
+        }
+
+        return entries;
+    }
 }

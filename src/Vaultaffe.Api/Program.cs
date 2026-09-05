@@ -53,6 +53,9 @@ builder.Services.AddScoped<DeleteSecret>();
 builder.Services.AddScoped<RestoreSecret>();
 builder.Services.AddScoped<ImportSecrets>();
 builder.Services.AddScoped<ExportEnvironment>();
+builder.Services.AddScoped<ReadChangeLog>();
+builder.Services.AddScoped<ReadValueHistory>();
+builder.Services.AddScoped<RollBackSecret>();
 builder.Services.AddScoped<CreateToken>();
 builder.Services.AddScoped<ListTokens>();
 builder.Services.AddScoped<RevokeToken>();
@@ -94,6 +97,7 @@ app.MapDevicePage();
 app.MapTokens();
 app.MapProjects();
 app.MapSecrets();
+app.MapHistory();
 
 app.Run();
 
