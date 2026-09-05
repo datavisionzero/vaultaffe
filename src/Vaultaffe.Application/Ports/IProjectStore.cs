@@ -39,6 +39,18 @@ public interface IProjectStore
     Task AddProjectAsync(
         Project project, IReadOnlyList<Environment> environments, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The deleted projects of this organization, newest deletion first — what a
+    /// person picks from to restore or to purge. Purge is a visible feature and
+    /// not a support ticket (Specification §6.5), and a feature nothing can list
+    /// is one.
+    /// </summary>
+    Task<IReadOnlyList<Project>> ListDeletedProjectsAsync(CancellationToken cancellationToken);
+
+    /// <summary>The deleted environments of that project, newest deletion first.</summary>
+    Task<IReadOnlyList<Environment>> ListDeletedEnvironmentsAsync(
+        Guid projectId, CancellationToken cancellationToken);
+
     /// <summary>Every environment of that project, deleted ones left out, by name.</summary>
     Task<IReadOnlyList<Environment>> ListEnvironmentsAsync(
         Guid projectId, CancellationToken cancellationToken);
@@ -52,6 +64,22 @@ public interface IProjectStore
         Guid projectId, string name, CancellationToken cancellationToken);
 
     Task AddEnvironmentAsync(Environment environment, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Mark a project and everything retained under it for permanent removal
+    /// (§6.5). Enlists rather than writes, so the entry the change log recorded
+    /// about it commits with it.
+    /// </summary>
+    /// <remarks>
+    /// The subtree goes explicitly, because the schema deliberately has no
+    /// cascade between the containers: a database cascade would have made every
+    /// ordinary deletion permanent, and this is the one place where permanent is
+    /// what was asked for.
+    /// </remarks>
+    Task PurgeAsync(Project project, CancellationToken cancellationToken);
+
+    /// <summary>The same, one level down: an environment and the secrets in it.</summary>
+    Task PurgeAsync(Environment environment, CancellationToken cancellationToken);
 
     /// <summary>
     /// Write back what the acts changed — and, in the same transaction, whatever

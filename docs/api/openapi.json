@@ -617,8 +617,17 @@
         "tags": [
           "Projects"
         ],
-        "summary": "Every project this token reaches, with its environments.",
+        "summary": "Every project this token reaches. `deleted=true` lists the recoverable ones.",
         "operationId": "ReadProjects",
+        "parameters": [
+          {
+            "name": "deleted",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -1005,12 +1014,162 @@
         }
       }
     },
+    "/api/v1/projects/{project}/purge": {
+      "post": {
+        "tags": [
+          "Projects"
+        ],
+        "summary": "Remove a deleted project and its retained subtree, now. Human sessions only.",
+        "operationId": "PurgeProject",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Purged"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/environments/{environment}/purge": {
+      "post": {
+        "tags": [
+          "Projects"
+        ],
+        "summary": "Remove a deleted environment and its secrets, now. Human sessions only.",
+        "operationId": "PurgeEnvironment",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Purged"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/projects/{project}/environments": {
       "get": {
         "tags": [
           "Projects"
         ],
-        "summary": "Every environment of a project this token reaches.",
+        "summary": "Every environment of a project. `deleted=true` lists the recoverable ones.",
         "operationId": "ReadEnvironments",
         "parameters": [
           {
@@ -1019,6 +1178,13 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "deleted",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
             }
           }
         ],
@@ -1408,7 +1574,7 @@
         "tags": [
           "Secrets"
         ],
-        "summary": "Every key of an environment and whether it is set. Never a value.",
+        "summary": "Every key and whether it is set, never a value. `deleted=true` lists the recoverable ones.",
         "operationId": "ReadSecretNames",
         "parameters": [
           {
@@ -1425,6 +1591,13 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "deleted",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
             }
           }
         ],
@@ -1908,13 +2081,13 @@
         }
       }
     },
-    "/api/v1/projects/{project}/environments/{environment}/export": {
-      "get": {
+    "/api/v1/projects/{project}/environments/{environment}/secrets/{name}/purge": {
+      "post": {
         "tags": [
           "Secrets"
         ],
-        "summary": "Every value of an environment as a .env. Human sessions only.",
-        "operationId": "ExportEnvironment",
+        "summary": "Remove a deleted secret and everything it held, now. Human sessions only.",
+        "operationId": "PurgeSecret",
         "parameters": [
           {
             "name": "project",
@@ -1931,15 +2104,33 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
+              "application/json": {
                 "schema": {
-                  "type": "string"
+                  "$ref": "#/components/schemas/Purged"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -1978,6 +2169,81 @@
       }
     },
     "/api/v1/projects/{project}/environments/{environment}/secrets/{name}/versions": {
+      "delete": {
+        "tags": [
+          "Secrets"
+        ],
+        "summary": "Remove what this secret used to hold, keeping it. Human sessions only.",
+        "operationId": "PurgeSecretVersions",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Purged"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
       "get": {
         "tags": [
           "History"
@@ -2020,6 +2286,75 @@
                   "items": {
                     "$ref": "#/components/schemas/Version"
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/environments/{environment}/export": {
+      "get": {
+        "tags": [
+          "Secrets"
+        ],
+        "summary": "Every value of an environment as a .env. Human sessions only.",
+        "operationId": "ExportEnvironment",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -2667,6 +3002,39 @@
             "items": {
               "$ref": "#/components/schemas/Environment"
             }
+          }
+        }
+      },
+      "Purged": {
+        "required": [
+          "project",
+          "environment",
+          "secret",
+          "versions"
+        ],
+        "type": "object",
+        "properties": {
+          "project": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "environment": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "secret": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "versions": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },

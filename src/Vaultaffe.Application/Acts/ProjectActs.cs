@@ -203,16 +203,24 @@ public sealed class CreateProject(
 /// <remarks>
 /// A binding narrows a listing rather than refusing it: a token bound to one
 /// project sees that project, and being told "forbidden" for the eleven it is not
-/// bound to would be a listing nobody could use. Deleted projects are out of it
-/// entirely — they are out of listings and use until they are restored (§6.5).
+/// bound to would be a listing nobody could use.
+/// <para>
+/// Deleted projects are out of the ordinary listing — they are out of listings and
+/// use until they are restored (§6.5) — and asking for them is a second listing
+/// rather than a mixed one. Purge is a visible feature and not a support ticket,
+/// and a feature nothing can list is one.
+/// </para>
 /// </remarks>
 public sealed class ListProjects(IProjectStore projects, Authority authority)
 {
-    public async Task<IReadOnlyList<ProjectRow>> ExecuteAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ProjectRow>> ExecuteAsync(
+        bool deleted, CancellationToken cancellationToken)
     {
         var acting = authority.Caller;
 
-        var visible = (await projects.ListProjectsAsync(cancellationToken))
+        var visible = (await (deleted
+                ? projects.ListDeletedProjectsAsync(cancellationToken)
+                : projects.ListProjectsAsync(cancellationToken)))
             .Where(project => acting.Reaches(project.Id))
             .ToList();
 

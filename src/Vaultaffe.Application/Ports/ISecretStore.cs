@@ -24,7 +24,25 @@ public interface ISecretStore
     /// <summary>That secret of that environment, deleted or not, or null.</summary>
     Task<Secret?> FindAsync(Guid environmentId, string name, CancellationToken cancellationToken);
 
+    /// <summary>The deleted secrets of that environment, newest deletion first.</summary>
+    Task<IReadOnlyList<Secret>> ListDeletedAsync(
+        Guid environmentId, CancellationToken cancellationToken);
+
     void Add(Secret secret);
+
+    /// <summary>
+    /// Mark a deleted secret for permanent removal, its retained values with it
+    /// — the one cascade in this schema, and the case it was declared for
+    /// (<c>docs/storage.md</c>).
+    /// </summary>
+    void Purge(Secret secret);
+
+    /// <summary>
+    /// Mark everything this secret used to hold for permanent removal, keeping
+    /// the secret and its current value. The headline case: after a suspected
+    /// compromise, a key's history genuinely disappears (§6.5).
+    /// </summary>
+    Task PurgeHistoryAsync(Guid secretId, CancellationToken cancellationToken);
 
     /// <summary>
     /// Keep a value the secret no longer holds, and drop whatever that put over

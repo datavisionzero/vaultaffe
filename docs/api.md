@@ -17,9 +17,10 @@ version in the path, the handshake, the error shape and the document — identit
 the first run, signing in, the device-code login and token management — the
 authorization every endpoint after it is enforced by — the catalogue: projects
 and environments, with the change log that every write path since has been in —
-the secrets surface itself — and the change log and the value history, read and
-rolled back. Purging arrives with its own ticket, and this file is kept accurate
-as it does.
+the secrets surface itself — the change log and the value history, read and
+rolled back — and what deletion means at the end: purge, and the deadline that
+arrives on its own. The CLI, the web application and the deployment have their own
+tickets, and this file is kept accurate as each lands.
 
 ## Where the endpoints are
 
@@ -431,6 +432,68 @@ secret's own data key, so a rollback moves ciphertext and never asks the key rin
 for anything. The version rolled back to leaves the history, because it is the
 current value again, and what it replaced takes its place — one credential is not
 counted twice against a bound that exists to hold few of them.
+
+## Deleting, restoring, purging, expiring
+
+Deleting takes something out of listings and use immediately and keeps its last
+active state for **72 hours**
+([§6.5](../Specification.md#65-logging-and-history)). Three things can end that:
+a restore, a purge, or the deadline.
+
+```
+DELETE …/projects/{project}                      delete, recoverably
+POST   …/projects/{project}/restore              bring it back
+POST   …/projects/{project}/purge                remove it now — human sessions only
+DELETE …/secrets/{KEY}/versions                  remove what it used to hold — human sessions only
+GET    …?deleted=true                            what is recoverable, at any of the three levels
+```
+
+`purge` exists at all three levels and `?deleted=true` on all three listings.
+
+**A container keeps its subtree, and gets it back.** Deleting a project or an
+environment retains its active descendants and their current values as one
+recoverable subtree and never cascades into permanent deletion. Descendants
+deleted **before** it keep their original deadlines and stay deleted when it comes
+back: the subtree returns as it was, not as it would have been. Value versions
+keep their own five-version and 72-hour bounds; a deletion does not restart those
+clocks. Repeating a deletion does not extend the window.
+
+**Names stay reserved for the whole window**, so recreating something cannot
+silently replace its recoverable predecessor — `name-taken` with
+`takenBySomethingDeleted: true` says which case it is. The name frees itself when
+the row goes, whether that is a purge or the deadline.
+
+**Purge is a visible feature, not a support ticket.** After a suspected
+compromise the normal expectation is that a key's history genuinely disappears,
+and neither Doppler nor AWS offers that cleanly. `DELETE …/secrets/{KEY}/versions`
+is that request: it removes everything the key used to hold and keeps the key and
+its current value. The other three remove a **deleted** object and everything
+retained under it — a purge is the second half of a deletion, not a faster one, so
+asking for it on something in use is refused.
+
+**Every purge is human-only**, with `humanAction: "purge"`. It is the one action
+that destroys the undo button, and in an agent's hands it would be anti-forensics.
+An agent carrying every scope there is is still refused; being human-only is not a
+permission a token can be given.
+
+**The deadline removes what nobody purged.** An expiry sweep runs inside the
+instance every fifteen minutes — a window nothing enforces is a promise rather
+than a window, and a self-hosted product whose safety property depends on somebody
+having set up a cron job does not have that property. It removes superseded values
+past their window and deleted objects past theirs, subtree included, and writes
+nothing to the change log: an entry names the identity that acted, and no identity
+acted — a deadline did.
+
+**Neither purge nor expiry removes change-log entries.** That is what keeps the
+log able to say what happened to something that no longer exists, and it is why
+the log records names rather than keys.
+
+**And the honest part.** A purge reaches this database and nothing else. It does
+not reach last night's backup, and this product promises backups
+([§6.3](../Specification.md#63-operations)). If a value has to be gone
+everywhere, the backups holding it are part of that job and no API call here can
+do it for you. No product we looked at says this out loud; it is true of all of
+them.
 
 ## Refusals
 

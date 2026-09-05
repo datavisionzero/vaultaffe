@@ -151,6 +151,19 @@ deadline. So an object past its window is found and then refused —
 `not-recoverable`, not `not-found` — and its name stays reserved until the row
 itself is gone.
 
+`ExpirySweep` is that sweep, and it is the one query in this product that steps
+past the organization filter for a reason that is not a login: it is the instance
+acting rather than a caller, so it is inside no organization and the filter would
+answer it with nothing at all. It runs every fifteen minutes inside the
+installation rather than as an operator's cron job, because a window nothing
+enforces is a promise rather than a window. It removes the containers in the order
+the schema demands — there is no cascade between them, on purpose — and leaves
+the one cascade, a secret's versions, to the database that declares it.
+
+A purge is the same removal asked for early by a person, and it goes through the
+tracked change tracker rather than `ExecuteDelete` so that the change-log entry
+recorded about it commits in the same transaction as the rows it describes.
+
 ## Value history is bounded, and the clock is `replaced_at`
 
 Five versions, at most 72 hours, whichever is reached first; what falls out is
@@ -187,8 +200,11 @@ entry with it. `identity_name` is kept for the same reason: a revoked token's
 entries should still read as something other than a bare id.
 
 **What deserves honest documentation** (Specification §6.5): a purge in the
-database does not reach into last night's backup. That belongs in the operations
-guide when there is one, not in a footnote.
+database does not reach into last night's backup, and this product promises
+backups (§6.3). If a value has to be gone everywhere, the backups holding it are
+part of that job and no API call can do it for you. `docs/api.md` says so where
+purge is described; it belongs in the operations guide too, when there is one. No
+product we looked at says it out loud, and it is true of all of them.
 
 ## A person is `app_user`, and the name is the one compromise
 

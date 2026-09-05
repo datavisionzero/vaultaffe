@@ -20,8 +20,9 @@ every endpoint after it is held to: the scope set, the binding, and the short
 list only a person may do — the catalogue: projects and environments, with
 the change log that every write path since has been in — and the secrets surface
 itself: names without values, one value at a time, a file in and a file out, and
-the change log and value history read back and rolled back. Beside it the Go
-module
+the change log and value history read back and rolled back, and what deletion
+means at the end: purge, and the sweep that enforces the deadline. Beside it the
+Go module
 with one command that prints its version, and the workflow that builds and tests
 both. This document is kept accurate from here on: a file that lands
 somewhere it does not describe means one of the two is wrong.
@@ -96,8 +97,9 @@ signing in, the three steps of a device login, creating and revoking tokens,
 creating and listing and renaming and deleting and restoring a project, an
 environment or a secret, writing a value, reading one, importing a file and
 exporting one, reading the change log and the value history, rolling back to an
-earlier value; and still to come, purging and the sweep that expires what the
-bounds have passed. Beside them the ports: the stores, the identity of the caller, the thing that hashes a
+earlier value, purging one early. Beside them the sweep that removes what the
+deadlines have passed, which is the one thing here that is not an act because
+nobody asked for it. Beside them the ports: the stores, the identity of the caller, the thing that hashes a
 password, the key ring that seals a value and opens it again, and the clock —
 which is `TimeProvider` from the base class libraries rather than a port of ours.
 
@@ -216,7 +218,12 @@ bounds, and that an agent with every scope there is still cannot export. Then th
 histories: that the log names the identity and its type — an agent as an agent —
 that no value reaches it however often one is written, that a read is not in it,
 that pages do not overlap, that a bound token has to name what it is asking about,
-and that a rollback puts a value back without anybody having read it. Then
+and that a rollback puts a value back without anybody having read it. Then the end
+of a deletion: that a purge is human-only however many scopes a token carries,
+that it takes the retained subtree and frees the name, that a key's history can be
+made to genuinely disappear while the key stays, that the deadline removes what
+nobody purged, that a descendant deleted first expires on its own clock — and that
+the change log outlives every one of those. Then
 the catalogue: that a project arrives with its three environments, that a deleted
 one keeps its name reserved and comes back with the subtree it had rather than
 the one it would have had, that past the window there is a refusal and not a

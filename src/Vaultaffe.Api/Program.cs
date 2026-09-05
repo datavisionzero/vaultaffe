@@ -53,6 +53,10 @@ builder.Services.AddScoped<DeleteSecret>();
 builder.Services.AddScoped<RestoreSecret>();
 builder.Services.AddScoped<ImportSecrets>();
 builder.Services.AddScoped<ExportEnvironment>();
+builder.Services.AddScoped<PurgeProject>();
+builder.Services.AddScoped<PurgeEnvironment>();
+builder.Services.AddScoped<PurgeSecret>();
+builder.Services.AddScoped<PurgeValueHistory>();
 builder.Services.AddScoped<ReadChangeLog>();
 builder.Services.AddScoped<ReadValueHistory>();
 builder.Services.AddScoped<RollBackSecret>();
@@ -61,6 +65,9 @@ builder.Services.AddScoped<ListTokens>();
 builder.Services.AddScoped<RevokeToken>();
 
 builder.Services.AddHostedService<SchemaAtStartup>();
+
+// A window nothing enforces is a promise rather than a window (§6.5).
+builder.Services.AddHostedService<ExpiryAtIntervals>();
 
 // Every refusal is a problem document, including the ones nobody wrote a handler
 // for: an exception that escaped an endpoint becomes `internal` and the reason

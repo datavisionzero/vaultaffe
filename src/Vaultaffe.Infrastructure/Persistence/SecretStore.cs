@@ -34,7 +34,28 @@ public sealed class SecretStore(VaultaffeDbContext context) : ISecretStore
             secret => secret.EnvironmentId == environmentId && secret.Name == name,
             cancellationToken);
 
+    public async Task<IReadOnlyList<Secret>> ListDeletedAsync(
+        Guid environmentId, CancellationToken cancellationToken) =>
+        await context.Secrets
+            .Where(secret => secret.EnvironmentId == environmentId && secret.DeletedAt != null)
+            .OrderByDescending(secret => secret.DeletedAt)
+            .ToListAsync(cancellationToken);
+
     public void Add(Secret secret) => context.Add(secret);
+
+    /// <summary>The retained values follow, by the cascade the schema declares.</summary>
+    public void Purge(Secret secret) => context.Remove(secret);
+
+    /// <summary>
+    /// Tracked removal rather than ExecuteDelete, so that the change-log entry
+    /// recorded about this purge commits in the same transaction as the rows it
+    /// describes.
+    /// </summary>
+    public async Task PurgeHistoryAsync(Guid secretId, CancellationToken cancellationToken) =>
+        context.RemoveRange(
+            await context.SecretValueVersions
+                .Where(version => version.SecretId == secretId)
+                .ToListAsync(cancellationToken));
 
     public void Keep(SecretValueVersion version, IReadOnlyList<SecretValueVersion> falling)
     {

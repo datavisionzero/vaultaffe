@@ -1,4 +1,5 @@
 using Vaultaffe.Application.Acts;
+using Vaultaffe.Domain.Authorization;
 using Vaultaffe.Domain.Tokens;
 
 namespace Vaultaffe.Api.Http;
@@ -56,11 +57,13 @@ public static class ProjectEndpoints
     {
         var api = endpoints.MapGroup($"{ApiVersion.Route}/projects").WithTags(Tag);
 
-        api.MapGet("", async (ListProjects list, CancellationToken cancellation) =>
-                (await list.ExecuteAsync(cancellation)).Select(Catalogued.Project).ToList())
+        api.MapGet("", async (
+                bool? deleted, ListProjects list, CancellationToken cancellation) =>
+                (await list.ExecuteAsync(deleted ?? false, cancellation))
+                    .Select(Catalogued.Project).ToList())
             .Needing(Scopes.Names)
             .WithName("ReadProjects")
-            .WithSummary("Every project this token reaches, with its environments.")
+            .WithSummary("Every project this token reaches. `deleted=true` lists the recoverable ones.")
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status403Forbidden);
 
@@ -124,13 +127,45 @@ public static class ProjectEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status410Gone);
 
+        api.MapPost("/{project}/purge", async (
+                string project, PurgeProject purge, CancellationToken cancellation) =>
+                Results.Ok(await purge.ExecuteAsync(project, cancellation)))
+            .Needing(Scopes.Delete)
+            .HumanOnly(HumanAction.Purge)
+            .WithName("PurgeProject")
+            .WithSummary("Remove a deleted project and its retained subtree, now. Human sessions only.")
+            .Produces<Purged>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        api.MapPost("/{project}/environments/{environment}/purge", async (
+                string project,
+                string environment,
+                PurgeEnvironment purge,
+                CancellationToken cancellation) =>
+                Results.Ok(await purge.ExecuteAsync(project, environment, cancellation)))
+            .Needing(Scopes.Delete)
+            .HumanOnly(HumanAction.Purge)
+            .WithName("PurgeEnvironment")
+            .WithSummary("Remove a deleted environment and its secrets, now. Human sessions only.")
+            .Produces<Purged>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
         api.MapGet("/{project}/environments", async (
-                string project, ListEnvironments list, CancellationToken cancellation) =>
-                (await list.ExecuteAsync(project, cancellation))
+                string project,
+                bool? deleted,
+                ListEnvironments list,
+                CancellationToken cancellation) =>
+                (await list.ExecuteAsync(project, deleted ?? false, cancellation))
                     .Select(Catalogued.Environment).ToList())
             .Needing(Scopes.Names)
             .WithName("ReadEnvironments")
-            .WithSummary("Every environment of a project this token reaches.")
+            .WithSummary("Every environment of a project. `deleted=true` lists the recoverable ones.")
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound);

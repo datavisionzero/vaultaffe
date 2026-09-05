@@ -30,6 +30,20 @@ public sealed class ProjectStore(VaultaffeDbContext context) : IProjectStore
             .OrderBy(project => project.Name)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<Project>> ListDeletedProjectsAsync(
+        CancellationToken cancellationToken) =>
+        await context.Projects
+            .Where(project => project.DeletedAt != null)
+            .OrderByDescending(project => project.DeletedAt)
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<Environment>> ListDeletedEnvironmentsAsync(
+        Guid projectId, CancellationToken cancellationToken) =>
+        await context.Environments
+            .Where(one => one.ProjectId == projectId && one.DeletedAt != null)
+            .OrderByDescending(one => one.DeletedAt)
+            .ToListAsync(cancellationToken);
+
     public Task<Project?> FindProjectAsync(string name, CancellationToken cancellationToken) =>
         context.Projects.FirstOrDefaultAsync(project => project.Name == name, cancellationToken);
 
@@ -70,8 +84,45 @@ public sealed class ProjectStore(VaultaffeDbContext context) : IProjectStore
         await context.SaveChangesAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// The subtree goes explicitly. The schema has no cascade between the
+    /// containers on purpose — one would have made every ordinary deletion
+    /// permanent — so the one case where permanent is what was asked for spells
+    /// it out. Tracked removal rather than ExecuteDelete, so that the change-log
+    /// entry recorded about this commits in the same transaction.
+    /// </summary>
+    public async Task PurgeAsync(Project project, CancellationToken cancellationToken)
+    {
+        var environments = await context.Environments
+            .Where(one => one.ProjectId == project.Id)
+            .ToListAsync(cancellationToken);
+
+        foreach (var environment in environments)
+        {
+            await RemoveSecretsOfAsync(environment.Id, cancellationToken);
+        }
+
+        context.RemoveRange(environments);
+        context.Remove(project);
+    }
+
+    public async Task PurgeAsync(Environment environment, CancellationToken cancellationToken)
+    {
+        await RemoveSecretsOfAsync(environment.Id, cancellationToken);
+
+        context.Remove(environment);
+    }
+
     public Task SaveAsync(CancellationToken cancellationToken) =>
         context.SaveChangesAsync(cancellationToken);
+
+    // A secret's retained values follow it, which is the one cascade this schema
+    // declares and exactly the case it was declared for.
+    private async Task RemoveSecretsOfAsync(Guid environmentId, CancellationToken cancellationToken) =>
+        context.RemoveRange(
+            await context.Secrets
+                .Where(secret => secret.EnvironmentId == environmentId)
+                .ToListAsync(cancellationToken));
 
     private IQueryable<Environment> Live(
         System.Linq.Expressions.Expression<Func<Environment, bool>> which) =>

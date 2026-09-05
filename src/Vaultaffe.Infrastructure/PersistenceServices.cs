@@ -35,6 +35,7 @@ public static class PersistenceServices
         services.AddScoped<IChangeLogStore, ChangeLogStore>();
 
         services.AddSingleton<SchemaMigrator>();
+        services.AddSingleton<ExpirySweep>();
 
         return services;
     }

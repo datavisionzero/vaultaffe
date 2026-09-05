@@ -53,14 +53,16 @@ public sealed class CreateEnvironment(
 public sealed class ListEnvironments(IProjectStore projects, Authority authority)
 {
     public async Task<IReadOnlyList<EnvironmentRow>> ExecuteAsync(
-        string project, CancellationToken cancellationToken)
+        string project, bool deleted, CancellationToken cancellationToken)
     {
         var found = await Catalogue.InUseAsync(projects, project, cancellationToken);
         var acting = authority.RequiresReachInto(found.Id);
 
         return
         [
-            .. (await projects.ListEnvironmentsAsync(found.Id, cancellationToken))
+            .. (await (deleted
+                    ? projects.ListDeletedEnvironmentsAsync(found.Id, cancellationToken)
+                    : projects.ListEnvironmentsAsync(found.Id, cancellationToken)))
                 .Where(one => acting.Reaches(found.Id, one.Id))
                 .Select(Catalogue.Row),
         ];

@@ -81,13 +81,14 @@ public static class SecretEndpoints
         api.MapGet(Under, async (
                 string project,
                 string environment,
+                bool? deleted,
                 ListSecrets list,
                 CancellationToken cancellation) =>
-                (await list.ExecuteAsync(project, environment, cancellation))
+                (await list.ExecuteAsync(project, environment, deleted ?? false, cancellation))
                     .Select(Vaulted.Secret).ToList())
             .Needing(Scopes.Names)
             .WithName("ReadSecretNames")
-            .WithSummary("Every key of an environment and whether it is set. Never a value.")
+            .WithSummary("Every key and whether it is set, never a value. `deleted=true` lists the recoverable ones.")
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound);
@@ -169,6 +170,41 @@ public static class SecretEndpoints
             .WithSummary("Take a .env in, all of it or none of it. The answer names keys only.")
             .Produces<ImportShape>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        api.MapPost($"{Under}/{{name}}/purge", async (
+                string project,
+                string environment,
+                string name,
+                PurgeSecret purge,
+                CancellationToken cancellation) =>
+                Results.Ok(await purge.ExecuteAsync(project, environment, name, cancellation)))
+            .Needing(Scopes.Delete)
+            .HumanOnly(HumanAction.Purge)
+            .WithName("PurgeSecret")
+            .WithSummary("Remove a deleted secret and everything it held, now. Human sessions only.")
+            .Produces<Purged>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        // The headline case of §6.5: after a suspected compromise, a key's
+        // history genuinely disappears. Neither Doppler nor AWS offers that
+        // cleanly; here it is one request.
+        api.MapDelete($"{Under}/{{name}}/versions", async (
+                string project,
+                string environment,
+                string name,
+                PurgeValueHistory purge,
+                CancellationToken cancellation) =>
+                await purge.ExecuteAsync(project, environment, name, cancellation))
+            .Needing(Scopes.Delete)
+            .HumanOnly(HumanAction.Purge)
+            .WithName("PurgeSecretVersions")
+            .WithSummary("Remove what this secret used to hold, keeping it. Human sessions only.")
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound);

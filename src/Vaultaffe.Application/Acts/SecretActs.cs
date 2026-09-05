@@ -155,12 +155,17 @@ public sealed class ListSecrets(
     IProjectStore projects, ISecretStore secrets, Authority authority)
 {
     public async Task<IReadOnlyList<SecretRow>> ExecuteAsync(
-        string project, string environment, CancellationToken cancellationToken)
+        string project, string environment, bool deleted, CancellationToken cancellationToken)
     {
         var (_, inside) = await Vault.InAsync(
             projects, authority, project, environment, cancellationToken);
 
-        return [.. (await secrets.ListAsync(inside.Id, cancellationToken)).Select(Vault.Row)];
+        return
+        [
+            .. (await (deleted
+                ? secrets.ListDeletedAsync(inside.Id, cancellationToken)
+                : secrets.ListAsync(inside.Id, cancellationToken))).Select(Vault.Row),
+        ];
     }
 }
 
