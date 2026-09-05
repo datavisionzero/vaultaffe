@@ -135,6 +135,10 @@ Windows is not a target ([Specification §6.2](../Specification.md#62-cli)):
 `run` replaces itself with the child process through `exec()`, and Windows has
 no such call. WSL runs the Linux binary.
 
+What `exec()` actually does — and the four things it leaves for `run` to do
+before the call — was measured on both target platforms rather than inferred:
+[ADR 0009](./adr/0009-run-replaces-itself-and-does-everything-else-first.md).
+
 ## Tests are split by what they need
 
 **`Vaultaffe.UnitTests`** runs in seconds and needs nothing installed: the rules

@@ -635,8 +635,15 @@ and it should never be sold as one. Three points remain, and they hold:
 
 ### 10.3 What is still open
 
-- Process group and signal behavior needs to be verified in practice, not just
-  inferred from someone else's source.
+- ~~Process group and signal behavior needs to be verified in practice, not just
+  inferred from someone else's source.~~ **Answered.** Measured on macOS and Linux
+  under a real terminal:
+  [ADR 0009](docs/adr/0009-run-replaces-itself-and-does-everything-else-first.md).
+  `exec()` holds — the process is the same one, a signalled command reports
+  `128+N`, Ctrl-C and Ctrl-Z including `fg` behave as if the shell had started it,
+  and a `kill` aimed at the pid reaches the command rather than orphaning it. What
+  it does not solve is `run`'s to do before the call: the reporting, the `PATH`
+  lookup with 126 and 127, and the environment it hands over.
 - Doppler's API reference was consistently blocked by Cloudflare; the HTTP field
   names are evidenced only from the Go structs in the CLI.
 - A fallback cache for offline operation: whether we want one in the MVP at all.

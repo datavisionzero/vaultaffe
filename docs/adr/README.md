@@ -39,3 +39,4 @@ material value to understanding the decision.
 - [0006 – The contract is checked in, and the web client is generated from it](./0006-the-contract-is-checked-in-and-the-web-client-is-generated-from-it.md)
 - [0007 – The first run is unauthenticated, and happens once](./0007-the-first-run-is-unauthenticated-and-happens-once.md)
 - [0008 – A session is a token, and the only page asks for a password](./0008-a-session-is-a-token-and-the-only-page-asks-for-a-password.md)
+- [0009 – `run` replaces itself, and does everything else first](./0009-run-replaces-itself-and-does-everything-else-first.md)
