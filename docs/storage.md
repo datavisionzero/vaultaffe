@@ -28,6 +28,7 @@ an exception for generated code that is checked in like any other file.
 ```
 organization
 ├─ app_user                 (organization_id, email unique across the instance)
+├─ invitation               (organization_id, the hash of the code in a link)
 └─ project                  (organization_id, name unique per organization)
    └─ environment           (project_id, name unique per project)
       └─ secret             (environment_id, name unique per environment)
@@ -44,7 +45,8 @@ change_log_entry            (points at nothing)
 | Table | What it holds |
 | --- | --- |
 | `organization` | The tenancy boundary. Exactly one row in the MVP. |
-| `app_user` | A person: the address they sign in with, their password hash, and whether they administer the organization. |
+| `app_user` | A person: the address they sign in with, their password hash, whether they administer the organization, and since when they are out of it. |
+| `invitation` | Somebody an administrator asked to join: an address, what accepting makes them, and the hash of the code in the link. |
 | `project` | An application or service. |
 | `environment` | `dev`, `staging`, `prod` — one level, no branch or personal configs. |
 | `secret` | A key, and its current value sealed under the secret's data key. |
@@ -232,6 +234,34 @@ and its parameters with the value. Raising the cost later is therefore a new has
 on the next sign-in rather than a migration, and nothing in the schema has to know
 which parameters a given row was written under.
 
+`deactivated_at` is null while somebody is in the organization. A moment rather
+than a flag, because "since when" is what anybody asks about a person who is no
+longer here — and the row stays either way, so everything they ever changed keeps
+an author, exactly as a revoked token's entries do
+([§6.5](../Specification.md#65-logging-and-history)). Authentication reads it: a
+token belonging to somebody who is out authenticates nobody, their sessions and
+the agent tokens they are accountable for included.
+
+## An invitation is a credential, so the row holds a hash
+
+`invitation` is the second table that stores the hash of something it can never
+read back, and for the same reason the first two do. This instance sends no mail,
+so an invitation is a **link an administrator copies and hands over**
+([ADR 0015](./adr/0015-an-invitation-is-a-credential-in-a-link.md)) — which makes
+it a credential rather than a message, good for 72 hours and spendable once.
+
+`ux_invitation_code_hash` is unique, because that column is how one is looked up —
+by whoever is holding the link and is not inside an organization yet.
+`ix_invitation_email` is not unique: an address may be invited again after the
+first invitation was withdrawn or ran out, and the earlier row stays, because it
+is what says who invited whom and when. What is refused is a second *open* one,
+which is a rule about state rather than about a column.
+
+Everything else on the row is a moment — accepted, withdrawn, expires — and the
+state is read from them rather than stored as one, exactly as a device login's
+is. `accepted_by_user_id` is the person it turned into, so an administrator
+reading the list can see which of the people below arrived through which link.
+
 ## A login in progress is a row, and it holds no code
 
 `device_authorization` is the device-code flow of
@@ -300,6 +330,10 @@ revoking beats deleting: nothing here disappears quietly.
   `app_user.is_administrator` — who may invite users and administer the
   organization (§6.4). The granularity is the token's, and it is already two
   columns away.
+- **No password reset table.** A reset is an administrator setting a password and
+  handing it over (§6.1), so there is no second link kind to store — the one row
+  type that carries a code is `invitation`
+  ([ADR 0015](./adr/0015-an-invitation-is-a-credential-in-a-link.md)).
 - **No session table.** A session *is* a token
   ([ADR 0008](./adr/0008-a-session-is-a-token-and-the-only-page-asks-for-a-password.md)),
   which is why signing out is a revocation and a session appears in the token

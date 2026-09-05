@@ -58,6 +58,11 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.IsAdministrator).HasColumnName("is_administrator").IsRequired();
         builder.Property(u => u.CreatedAt).HasColumnName("created_at").IsRequired();
 
+        // Null while they are in the organization. Nullable rather than a
+        // boolean, because "since when" is the question anybody asks about a
+        // person who is no longer here, and a flag cannot answer it.
+        builder.Property(u => u.DeactivatedAt).HasColumnName("deactivated_at");
+
         builder.HasOne<Organization>()
             .WithMany()
             .HasForeignKey(u => u.OrganizationId)

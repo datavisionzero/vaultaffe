@@ -50,6 +50,28 @@ public sealed class Authority(ICallerIdentity identity)
         return acting.IsHumanSession ? acting : throw Refusal.HumanOnly(action);
     }
 
+    /// <summary>
+    /// One of the short list, <i>and</i> an administrator of the organization —
+    /// the one line §6.4 draws between two people.
+    /// </summary>
+    /// <remarks>
+    /// The two halves are refused differently on purpose. A token is told the
+    /// action is a person's, because the remedy is to hand it to one; a person
+    /// who is not an administrator is told they are not, because the remedy is to
+    /// ask one. Flattening both into "forbidden" would leave each of them without
+    /// their own way on.
+    /// </remarks>
+    public Caller RequiresAnAdministrator(HumanAction action)
+    {
+        var acting = RequiresAHuman(action);
+
+        return acting.IsAdministrator
+            ? acting
+            : throw Refusal.Forbidden(
+                "Administering the organization and its people is an administrator's. Everything "
+                + "else in this organization is yours to change; this is the one line there is.");
+    }
+
     /// <summary>Every scope in <paramref name="wanted"/>, or a refusal naming what is missing.</summary>
     public Caller Requires(Scopes wanted)
     {

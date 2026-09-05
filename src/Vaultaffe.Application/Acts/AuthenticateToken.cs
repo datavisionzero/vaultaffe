@@ -37,7 +37,12 @@ public sealed class AuthenticateToken(IIdentityStore identities, TimeProvider cl
 
         // The prefix said which kind this is before anything was looked up. A row
         // that disagrees with it is not a token this instance issued.
-        return token.Kind == value.Kind && token.IsUsableAt(clock.GetUtcNow())
+        //
+        // And a token belonging to somebody who is out of the organization
+        // authenticates nobody, whatever state the row itself is in: deactivating
+        // a person takes their sessions with it, and the agent tokens they are
+        // accountable for with them.
+        return token.Kind == value.Kind && token.IsUsableAt(clock.GetUtcNow()) && user.IsActive
             ? Caller.Of(user, token)
             : null;
     }

@@ -18,9 +18,10 @@ the first run, signing in, the device-code login and token management — the
 authorization every endpoint after it is enforced by — the catalogue: projects
 and environments, with the change log that every write path since has been in —
 the secrets surface itself — the change log and the value history, read and
-rolled back — and what deletion means at the end: purge, and the deadline that
-arrives on its own. The CLI, the web application and the deployment have their own
-tickets, and this file is kept accurate as each lands.
+rolled back — what deletion means at the end: purge, and the deadline that
+arrives on its own — and the people of the organization, who arrived with the
+screens that needed them. The CLI, the rest of the web application and the
+deployment have their own tickets, and this file is kept accurate as each lands.
 
 ## Where the endpoints are
 
@@ -31,6 +32,8 @@ tickets, and this file is kept accurate as each lands.
 /api/v1/device/authorizations    beginning a device-code login
 /api/v1/device/tokens            polling one
 /api/v1/tokens                   creating, listing and revoking tokens
+/api/v1/users                    the people of the organization
+/api/v1/invitations              the links that invite them, and accepting one
 /api/v1/projects                 the catalogue, by name
 /api/v1/projects/…/secrets       names and status; one value at a time
 /api/v1/changes                  what was changed, by whom, and of what kind
@@ -238,6 +241,69 @@ those are. Omitting them means the default of that kind: **everything** for an
 agent token, because the point is attribution and not restriction
 ([§6.4](../Specification.md#64-permissions-in-the-mvp)), and `names` plus `read`
 for a service token. Bindings omitted or empty mean the whole organization.
+
+## The people of the organization
+
+The instance sends **no email** ([§6.1](../Specification.md#61-web-ui)), so
+everything here is something a person does and hands over. That is the price of
+having no external dependency to operate ([§4](../Specification.md#4-guiding-principles)),
+and for teams of this size the right one.
+
+```
+GET    /api/v1/users                        who is here, oldest first
+POST   /api/v1/users/{id}/password          an administrator sets one
+POST   /api/v1/users/{id}/deactivate        take somebody out of the organization
+POST   /api/v1/users/{id}/reactivate        put them back
+
+POST   /api/v1/invitations                  write one out — its link appears once
+GET    /api/v1/invitations                  every invitation, in whatever state
+DELETE /api/v1/invitations/{id}             withdraw one nobody has used
+POST   /api/v1/invitations/offer            what a link is for
+POST   /api/v1/invitations/acceptance       accept it: a password, and a session
+```
+
+**An invitation is a credential, not a message**
+([ADR 0015](./adr/0015-an-invitation-is-a-credential-in-a-link.md)). The answer
+that created it carries a **relative link with the code in the fragment** —
+`/invite#…` — and no listing carries one afterwards, exactly as a token's value
+appears once and never again. It is good for 72 hours, this product's one window,
+and it is spendable once.
+
+The code travels in the **fragment** of the link and in the **body** of the two
+requests that use it, never in a path or a query string: a fragment does not leave
+the browser, and this instance serves the web application itself — a code in the
+request line would land in its own access log. `POST /invitations/offer` and
+`POST /invitations/acceptance` are therefore both `POST`, and both are
+unauthenticated, because the person holding a link has no identity here until
+accepting gives them one. Accepting takes a password and a name; the **address and
+the administrator flag are the invitation's** and not the request's.
+
+For a code this instance wrote, the answer carries the state — `open`, `accepted`,
+`withdrawn`, `expired` — and a code nothing here issued is `not-found` and learns
+nothing. That is deliberately unlike the one sentence a bad token gets: whoever
+presents an invitation code is holding it, and "this was already used" is what
+tells them to ask for a new one.
+
+**A password reset is an administrator's**, and it **ends every session that
+person had** — a reset that leaves the sessions opened with the old password
+working is not one. Their service and agent tokens are untouched: those never
+depended on the password.
+
+**Deactivating somebody takes every token of theirs with it**, their sessions and
+the agent tokens they are accountable for included — a person who is out of the
+organization does not go on acting in it through something they left running. The
+row stays, so everything they ever changed keeps an author, and reactivating is
+the undo. **Nobody deactivates themselves**: it is the one way to leave an
+instance with nothing that can administer it.
+
+Everything on this surface is human-only with `humanAction: administer-organization`,
+and everything that changes something also needs the person to **be an
+administrator** — the one line §6.4 draws between two people. The two halves are
+refused differently on purpose: a token is told the action is a person's, because
+the remedy is to hand it to one; a person who is not an administrator is told they
+are not, because the remedy is to ask one. Reading the list of people is
+human-only and not an administrator's — everybody in an organization sees
+everybody in it.
 
 ## Projects and environments
 
@@ -535,7 +601,7 @@ an untidiness. `detail` says what was refused, not what it was refused about.
 | `validation` | 400 | A field is missing, malformed or over its limit. Carries `errors`, mapping field to messages. |
 | `not-found` | 404 | Nothing by that name. |
 | `unauthenticated` | 401 | No token, an unknown token, a revoked one — or the wrong password. |
-| `forbidden` | 403 | The caller is authenticated and still may not do this. |
+| `forbidden` | 403 | The caller is authenticated and still may not do this — a person who is not an administrator, or an invitation that cannot be accepted any more. |
 | `human-only` | 403 | One of the short list only a person may do. Carries `humanAction`. |
 | `insufficient-scope` | 403 | The token is missing a scope. Carries `requiredScopes` and `grantedScopes`. |
 | `out-of-reach` | 403 | The token is bound elsewhere. Carries `projectId` and `environmentId`. |
