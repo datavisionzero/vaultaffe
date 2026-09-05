@@ -10,11 +10,12 @@ namespace Vaultaffe.Infrastructure.Persistence;
 /// The identity rows, over the one context (<c>docs/storage.md</c>).
 /// </summary>
 /// <remarks>
-/// Six of these reach past the organization filter with
+/// Eight of these reach past the organization filter with
 /// <see cref="EntityFrameworkQueryableExtensions.IgnoreQueryFilters{T}"/>, and
 /// every one of them is a question asked before anybody is inside an
 /// organization: whether this instance has been started, who owns an address, who
-/// a token belongs to, and the three steps of a device login. Specification §9
+/// a token belongs to, the three steps of a device login, and the two an invited
+/// person takes before they are anybody here. Specification §9
 /// wants the filter central and unavoidable, which is exactly why stepping past
 /// it is written out here — in one file, on the queries that have to, with the
 /// reason on each.
@@ -30,6 +31,13 @@ public sealed class IdentityStore(VaultaffeDbContext context) : IIdentityStore
             .IgnoreQueryFilters()
             .OrderBy(organization => organization.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
+
+    /// <summary>
+    /// The caller's own organization. Inside the filter, which for this table is
+    /// its own key — a caller reading the name of the organization they are in.
+    /// </summary>
+    public Task<Organization?> FindOrganizationAsync(CancellationToken cancellationToken) =>
+        context.Organizations.FirstOrDefaultAsync(cancellationToken);
 
     /// <summary>
     /// A user by the address they sign in with. Past the filter: a sign-in has
@@ -78,6 +86,75 @@ public sealed class IdentityStore(VaultaffeDbContext context) : IIdentityStore
         // One SaveChanges, so whatever else an act changed on a row this store
         // handed out goes in the same transaction — which is what makes redeeming
         // a device login and issuing its token one step rather than two.
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// The people of this organization, inside the filter like every ordinary
+    /// query: whoever is asking is one of them.
+    /// </summary>
+    public async Task<IReadOnlyList<User>> ListUsersAsync(CancellationToken cancellationToken) =>
+        await context.Users
+            .OrderBy(user => user.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+    public Task<User?> FindUserAsync(Guid id, CancellationToken cancellationToken) =>
+        context.Users.FirstOrDefaultAsync(user => user.Id == id, cancellationToken);
+
+    /// <summary>
+    /// The sessions that person is signed in with and that still work. Service
+    /// and agent tokens are deliberately not in it: a password reset ends what
+    /// the password opened.
+    /// </summary>
+    public async Task<IReadOnlyList<Token>> ListSessionsOfAsync(
+        Guid userId, CancellationToken cancellationToken) =>
+        await context.Tokens
+            .Where(token =>
+                token.UserId == userId
+                && token.Kind == TokenKind.Session
+                && token.RevokedAt == null)
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<Invitation>> ListInvitationsAsync(
+        CancellationToken cancellationToken) =>
+        await context.Invitations
+            .OrderByDescending(invitation => invitation.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+    public Task<Invitation?> FindInvitationAsync(Guid id, CancellationToken cancellationToken) =>
+        context.Invitations.FirstOrDefaultAsync(
+            invitation => invitation.Id == id, cancellationToken);
+
+    public async Task AddInvitationAsync(
+        Invitation invitation, CancellationToken cancellationToken)
+    {
+        context.Add(invitation);
+
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// An invitation by the hash of the code in its link. Past the filter:
+    /// whoever holds that link is not in an organization yet, and this row is
+    /// what puts them in one.
+    /// </summary>
+    public Task<Invitation?> FindInvitationByCodeHashAsync(
+        byte[] codeHash, CancellationToken cancellationToken) =>
+        context.Invitations
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(
+                invitation => invitation.CodeHash == codeHash, cancellationToken);
+
+    /// <summary>
+    /// The person an invitation just created, their session, and the spent
+    /// invitation, in one transaction. Past the filter, for the same reason: the
+    /// request that accepts an invitation carries nothing that authenticated.
+    /// </summary>
+    public async Task AcceptInvitationAsync(
+        User user, Token token, CancellationToken cancellationToken)
+    {
+        context.AddRange(user, token);
+
         await context.SaveChangesAsync(cancellationToken);
     }
 

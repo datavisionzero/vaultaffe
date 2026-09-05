@@ -24,9 +24,10 @@ the change log and value history read back and rolled back, and what deletion
 means at the end: purge, and the sweep that enforces the deadline. Beside it the
 CLI's own skeleton — the command tree, the client generated from that contract,
 the device-code login, and the prefix table that says what a directory means
-([`cli.md`](./cli.md)) — and now the web application's: the frame every screen
-of [`human-interface.md`](./human-interface.md) will sit in, with none of the
-screens in it yet — and the workflow that builds and tests all three. This
+([`cli.md`](./cli.md)) — and the web application: the frame, the way in, the
+people of the organization, and the catalogue screens the product is used on
+([`human-interface.md`](./human-interface.md)) — and the workflow that builds
+and tests all three. This
 document is kept accurate from here on: a file that lands somewhere it does not
 describe means one of the two is wrong.
 
@@ -252,6 +253,13 @@ the instance's own, because a refusal names the action and the client names the
 command ([ADR 0010](./adr/0010-a-refusal-names-the-action-and-the-client-names-the-command.md))
 and a paraphrase loses both.
 
+`src/api/useAsk.ts` is how every screen reads. A question is **named** —
+`"users"`, `"secrets:landing-page/prod"` — rather than watched through a
+dependency array, so an answer belongs to the question it was asked for and the
+last one never shows under the next; and `answered()` beside it turns a refusal
+into something to catch, so an act shows the instance's own sentence where it was
+asked for.
+
 `src/session/` is where that token lives, and the interesting part is the same
 as the CLI's: the store, not the happy path. It is `sessionStorage`, so the tab
 is the session's lifetime, and a browser that refuses storage gets a token in
@@ -270,19 +278,39 @@ The frame asks the instance for nothing — it renders before the organization's
 data and is not remounted by navigation, which is what makes a loading state a
 skeleton inside a frame rather than a blank page.
 
-**The screens themselves are not here yet.** Every route of
-[`human-interface.md`](./human-interface.md)'s matrix exists and leads to a
-screen that says it is not built; each is replaced whole by the screen it names.
+The screens sit beside the frame, one directory per part of the matrix.
+`src/entry/` is what a tab that is nobody can reach — signing in, and accepting
+an invitation — and neither is inside the shell, because there is no session
+behind them yet. `src/catalogue/` is the product itself: the projects, one
+project, the environment screen and one key. `src/settings/` is the area list
+beside the area: the tokens, the people, the organization's one word, and the
+two things a person changes about themselves. `src/shared/` holds what more than one of them needs — the
+page header, the two confirmation dialogs, a labelled field that knows where a
+refusal goes, and the two spellings of a moment.
+
+**What is not built yet** is the change log, and the value history with its
+rollback and the purge beside it; those routes exist and lead to a screen that
+says so, and each is replaced whole by the screen it names.
+
+The masking rule is visible in the code rather than described by it: the
+environment screen renders a listing that **has no values in it** — the endpoint
+does not carry them — and `catalogue/Secret.tsx` is the only file that reads one,
+one key at a time, holding it in component state that a reload, the back button
+and leaving the screen all take away. The other two values this product hands
+over exactly once — an invitation link and a token — appear in the dialog that
+made them and in no listing afterwards, which is the instance's rule showing
+through rather than a decision of these screens.
 
 Two things this application deliberately does not have. There is no route for
 `/device`: that page is rendered by the instance, holds no session and asks for
 a password every time
 ([ADR 0008](./adr/0008-a-session-is-a-token-and-the-only-page-asks-for-a-password.md)),
 so it is reached by leaving rather than by routing. And the palette searches the
-names of screens and nothing the instance holds — when the catalogue joins it,
-it will find projects, environments and key names, and never a value, because
-the listing endpoints do not carry one and a palette that turned one up would be
-a reveal nobody asked for.
+names of screens and the names of the catalogue — projects and their
+environments, asked for when it opens — and **never a value**, because the
+listing endpoints do not carry one and a palette that turned one up would be a
+reveal nobody asked for. Key names are deliberately not in it: finding one would
+mean a listing per environment on every open.
 
 `npm run build` lands in `src/Vaultaffe.Api/wwwroot`, which the API serves as
 static files with everything unclaimed falling back to `index.html`. One

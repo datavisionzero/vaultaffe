@@ -7,7 +7,9 @@ import { useSession } from "@/session/useSession";
 import { cn } from "@/lib/utils";
 import { Keys } from "./ShortcutsDialog";
 import { is } from "./shortcuts";
-import { areas, settingsPath, views } from "./views";
+import { api, type Project } from "@/api/client";
+import { useAsk } from "@/api/useAsk";
+import { areas, environmentPath, projectPath, settingsPath, views } from "./views";
 
 type Command = {
   id: string;
@@ -21,12 +23,16 @@ type Command = {
  * The command palette — ⌘K, or Ctrl+K — over everywhere the frame can go and
  * the few acts it owns itself.
  *
- * It searches **names of screens, and nothing the instance holds**. When the
- * catalogue arrives it will find projects, environments and key names here too,
- * and it will never find a value: the listing endpoints do not carry values at
- * all (`docs/api.md`), and a palette that turned up one would be a reveal
- * nobody asked for. Revealing is an act on a secret, on the secret's own screen
- * (`docs/human-interface.md`).
+ * It searches the names of screens and **the names of the catalogue** — the
+ * projects of the organization and their environments, asked for when the
+ * palette opens and not before. It will never find a value: the listing
+ * endpoints do not carry values at all (`docs/api.md`), and a palette that
+ * turned one up would be a reveal nobody asked for. Revealing is an act on a
+ * secret, on the secret's own screen (`docs/human-interface.md`).
+ *
+ * Key names are deliberately not in it. Finding one would mean a listing per
+ * environment on every open, and the environment screen is one keystroke away
+ * from a project that is in here.
  *
  * Owned rather than imported: a filtered list with a roving index inside a Base
  * UI dialog, which is what a palette is before it does more.
@@ -61,6 +67,10 @@ function PaletteBody({ onOpenChange, onShortcuts }: Omit<PaletteProps, "open">) 
   const [index, setIndex] = useState(0);
   const searchId = useId();
 
+  // Only while the palette is open, because this body is only mounted then: the
+  // frame itself asks the instance for nothing.
+  const [catalogue] = useAsk<Project[]>("palette:projects", () => api.GET("/api/v1/projects"));
+
   const commands = useMemo<Command[]>(() => {
     const go = (to: string) => () => {
       onOpenChange(false);
@@ -79,6 +89,28 @@ function PaletteBody({ onOpenChange, onShortcuts }: Omit<PaletteProps, "open">) 
       list.push({ id: `area:${area.id}`, label: area.label, hint: area.hint, group: "Settings", run: go(area.path) });
     }
 
+    if (catalogue.at === "answered") {
+      for (const project of catalogue.data) {
+        list.push({
+          id: `project:${project.id}`,
+          label: project.name,
+          hint: "Project",
+          group: "The catalogue",
+          run: go(projectPath(project.name)),
+        });
+
+        for (const environment of project.environments) {
+          list.push({
+            id: `environment:${environment.id}`,
+            label: `${project.name}/${environment.name}`,
+            hint: "Environment",
+            group: "The catalogue",
+            run: go(environmentPath(project.name, environment.name)),
+          });
+        }
+      }
+    }
+
     list.push(
       { id: "theme:light", label: "Light theme", group: "Appearance", run: () => { onOpenChange(false); setTheme("light"); } },
       { id: "theme:dark", label: "Dark theme", group: "Appearance", run: () => { onOpenChange(false); setTheme("dark"); } },
@@ -94,7 +126,7 @@ function PaletteBody({ onOpenChange, onShortcuts }: Omit<PaletteProps, "open">) 
     );
 
     return list;
-  }, [navigate, onOpenChange, onShortcuts, setTheme, signOut]);
+  }, [catalogue, navigate, onOpenChange, onShortcuts, setTheme, signOut]);
 
   const matching = useMemo(() => {
     const lowered = query.trim().toLowerCase();

@@ -55,7 +55,11 @@ public sealed class ContractTests(PostgresFixture postgres)
                 "/api/handshake",
                 "/api/v1/changes",
                 "/api/v1/device/authorizations", "/api/v1/device/tokens",
-                "/api/v1/instance", "/api/v1/me",
+                "/api/v1/instance",
+                "/api/v1/invitations", "/api/v1/invitations/acceptance",
+                "/api/v1/invitations/offer", "/api/v1/invitations/{id}",
+                "/api/v1/me", "/api/v1/me/password",
+                "/api/v1/organization",
                 "/api/v1/projects", "/api/v1/projects/{project}",
                 "/api/v1/projects/{project}/environments",
                 "/api/v1/projects/{project}/environments/{environment}",
@@ -73,6 +77,8 @@ public sealed class ContractTests(PostgresFixture postgres)
                 "/api/v1/projects/{project}/restore",
                 "/api/v1/sessions", "/api/v1/sessions/current",
                 "/api/v1/tokens", "/api/v1/tokens/{id}",
+                "/api/v1/users", "/api/v1/users/{id}/deactivate",
+                "/api/v1/users/{id}/password", "/api/v1/users/{id}/reactivate",
                 "/problems", "/problems/{code}",
             ],
             paths);
@@ -87,6 +93,9 @@ public sealed class ContractTests(PostgresFixture postgres)
         Assert.Contains("Session", schemas);
         Assert.Contains("Token", schemas);
         Assert.Contains("Me", schemas);
+        Assert.Contains("User", schemas);
+        Assert.Contains("Invitation", schemas);
+        Assert.Contains("Organization", schemas);
         Assert.Contains("Project", schemas);
         Assert.Contains("Environment", schemas);
         Assert.Contains("Secret", schemas);

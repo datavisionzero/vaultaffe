@@ -198,6 +198,82 @@ namespace Vaultaffe.Infrastructure.Persistence.Migrations
                     b.ToTable("device_authorization", (string)null);
                 });
 
+            modelBuilder.Entity("Vaultaffe.Domain.Identities.Invitation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("AcceptedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("accepted_at");
+
+                    b.Property<Guid?>("AcceptedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("accepted_by_user_id");
+
+                    b.Property<byte[]>("CodeHash")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("code_hash");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)")
+                        .HasColumnName("email");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<Guid>("InvitedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("invited_by_user_id");
+
+                    b.Property<bool>("IsAdministrator")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_administrator");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("organization_id");
+
+                    b.Property<DateTimeOffset?>("WithdrawnAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("withdrawn_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_invitation");
+
+                    b.HasIndex("CodeHash")
+                        .IsUnique()
+                        .HasDatabaseName("ux_invitation_code_hash");
+
+                    b.HasIndex("Email")
+                        .HasDatabaseName("ix_invitation_email");
+
+                    b.HasIndex("InvitedByUserId");
+
+                    b.HasIndex("OrganizationId");
+
+                    b.ToTable("invitation", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_invitation_email", "email ~ '^[^@\\s]+@[^@\\s]+$'");
+                        });
+                });
+
             modelBuilder.Entity("Vaultaffe.Domain.Identities.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -208,6 +284,10 @@ namespace Vaultaffe.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DeactivatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deactivated_at");
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -553,6 +633,23 @@ namespace Vaultaffe.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_device_authorization_organization");
+                });
+
+            modelBuilder.Entity("Vaultaffe.Domain.Identities.Invitation", b =>
+                {
+                    b.HasOne("Vaultaffe.Domain.Identities.User", null)
+                        .WithMany()
+                        .HasForeignKey("InvitedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_invitation_invited_by");
+
+                    b.HasOne("Vaultaffe.Domain.Organizations.Organization", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_invitation_organization");
                 });
 
             modelBuilder.Entity("Vaultaffe.Domain.Identities.User", b =>

@@ -4,14 +4,22 @@ import { Navigate, Route, Routes, useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { Environment } from "@/catalogue/Environment";
+import { Project } from "@/catalogue/Project";
+import { Projects } from "@/catalogue/Projects";
+import { Secret } from "@/catalogue/Secret";
 import { SettingsShell } from "@/settings/SettingsShell";
+import { Organization } from "@/settings/Organization";
+import { Profile } from "@/settings/Profile";
+import { Tokens } from "@/settings/Tokens";
+import { Users } from "@/settings/Users";
 import { AccountMenu } from "./AccountMenu";
 import { AppSidebar } from "./AppSidebar";
 import { Palette } from "./Palette";
 import { Keys, ShortcutsDialog } from "./ShortcutsDialog";
 import { is, overlaid, typing } from "./shortcuts";
 import { Nowhere, Unbuilt } from "./Unbuilt";
-import { areas, settingsPath, views } from "./views";
+import { settingsPath, views } from "./views";
 
 /**
  * The frame every screen sits in: the navigation, the header, the palette and
@@ -106,42 +114,10 @@ export function Shell() {
         <Routes>
           <Route path="/" element={<Navigate to={views[0].path} replace />} />
 
-          <Route
-            path="/projects"
-            element={
-              <Unbuilt
-                screen="Projects"
-                what="Every project this session reaches, each with its environments, and a switch for what is deleted and recoverable."
-              />
-            }
-          />
-          <Route
-            path="/projects/:project"
-            element={
-              <Unbuilt
-                screen="Project"
-                what="The project's environments, each with a key count and its last change, and the project's own acts."
-              />
-            }
-          />
-          <Route
-            path="/projects/:project/:environment"
-            element={
-              <Unbuilt
-                screen="Environment"
-                what="The keys of this environment, their status and when each was last written — never their values — with import and export."
-              />
-            }
-          />
-          <Route
-            path="/projects/:project/:environment/:name"
-            element={
-              <Unbuilt
-                screen="Secret"
-                what="The masked value with its reveal, the bounded version history, and this key's own change log."
-              />
-            }
-          />
+          <Route path="/projects" element={<Projects />} />
+          <Route path="/projects/:project" element={<Project />} />
+          <Route path="/projects/:project/:environment" element={<Environment />} />
+          <Route path="/projects/:project/:environment/:name" element={<Secret />} />
           <Route
             path="/changes"
             element={
@@ -152,11 +128,14 @@ export function Shell() {
             }
           />
 
+          {/* The settings area, screen by screen rather than by looping over
+              the list: each of these was replaced whole by the one it names. */}
           <Route path="/settings" element={<SettingsShell />}>
             <Route index element={<Navigate to={settingsPath} replace />} />
-            {areas.map((area) => (
-              <Route key={area.id} path={area.id} element={<Unbuilt screen={area.label} what={area.hint} />} />
-            ))}
+            <Route path="tokens" element={<Tokens />} />
+            <Route path="users" element={<Users />} />
+            <Route path="organization" element={<Organization />} />
+            <Route path="profile" element={<Profile />} />
           </Route>
 
           <Route path="*" element={<Nowhere />} />

@@ -43,6 +43,17 @@ public sealed class SignIn(
             throw Refusal.Unauthenticated("That email address and password do not match.");
         }
 
+        // Said plainly rather than folded into the sentence above: whoever gets
+        // here typed the right password, so they are not a stranger being told
+        // something about an address, and "your password is wrong" would send
+        // them to change a password that is fine.
+        if (!user.IsActive)
+        {
+            throw Refusal.Unauthenticated(
+                "That person is not in this organization any more. An administrator can put "
+                + "them back.");
+        }
+
         var now = clock.GetUtcNow();
         var expiresAt = now + Sessions.Lifetime;
 

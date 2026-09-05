@@ -10,7 +10,9 @@ namespace Vaultaffe.Api.Http;
 /// </summary>
 /// <param name="Scopes">Every scope the token has to carry, or null when the endpoint needs none.</param>
 /// <param name="HumanAction">The human-only action this is, or null when an agent may do it.</param>
-public sealed record Needs(Scopes? Scopes = null, HumanAction? HumanAction = null);
+/// <param name="Administrator">Whether the person also has to administer the organization (§6.4).</param>
+public sealed record Needs(
+    Scopes? Scopes = null, HumanAction? HumanAction = null, bool Administrator = false);
 
 /// <summary>
 /// The authorization of Specification §6.4 as one middleware over every endpoint.
@@ -37,6 +39,16 @@ public static class EndpointAuthorization
         where TBuilder : IEndpointConventionBuilder =>
         builder.WithMetadata(new Needs(HumanAction: action));
 
+    /// <summary>
+    /// This endpoint administers the organization or its people: a person, and
+    /// one who administers it (§6.4).
+    /// </summary>
+    public static TBuilder AdministratorOnly<TBuilder>(this TBuilder builder)
+        where TBuilder : IEndpointConventionBuilder =>
+        builder.WithMetadata(new Needs(
+            HumanAction: Domain.Authorization.HumanAction.AdministerOrganization,
+            Administrator: true));
+
     /// <summary>This endpoint needs every scope in <paramref name="scopes"/>.</summary>
     public static TBuilder Needing<TBuilder>(this TBuilder builder, Scopes scopes)
         where TBuilder : IEndpointConventionBuilder =>
@@ -56,7 +68,14 @@ public static class EndpointAuthorization
 
                 if (needs.HumanAction is { } action)
                 {
-                    authority.RequiresAHuman(action);
+                    if (needs.Administrator)
+                    {
+                        authority.RequiresAnAdministrator(action);
+                    }
+                    else
+                    {
+                        authority.RequiresAHuman(action);
+                    }
                 }
 
                 if (needs.Scopes is { } scopes)

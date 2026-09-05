@@ -30,6 +30,12 @@ public interface IIdentityStore
     Task<Organization?> FindTheOrganizationAsync(CancellationToken cancellationToken);
 
     /// <summary>
+    /// The organization the caller is in — the same row as above, asked from
+    /// inside it, so the filter answers rather than being stepped past.
+    /// </summary>
+    Task<Organization?> FindOrganizationAsync(CancellationToken cancellationToken);
+
+    /// <summary>
     /// A user by the address they sign in with, already normalized. Reaches past
     /// the filter, for the same reason.
     /// </summary>
@@ -58,6 +64,44 @@ public interface IIdentityStore
     /// redeeming a device login and issuing its token one step rather than two.
     /// </summary>
     Task AddTokenAsync(Token token, CancellationToken cancellationToken);
+
+    /// <summary>The people of this organization, oldest first, deactivated ones included.</summary>
+    Task<IReadOnlyList<User>> ListUsersAsync(CancellationToken cancellationToken);
+
+    /// <summary>One of them, by id.</summary>
+    Task<User?> FindUserAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The sessions that person is signed in with and that still work — what a
+    /// password reset has to end, since a session opened with the old password
+    /// would outlive it otherwise. Their service and agent tokens are not in it:
+    /// those never depended on the password.
+    /// </summary>
+    Task<IReadOnlyList<Token>> ListSessionsOfAsync(
+        Guid userId, CancellationToken cancellationToken);
+
+    /// <summary>Every invitation of this organization, newest first, in whatever state.</summary>
+    Task<IReadOnlyList<Invitation>> ListInvitationsAsync(CancellationToken cancellationToken);
+
+    Task<Invitation?> FindInvitationAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>Write one out. An administrator has asked, so this is inside the filter.</summary>
+    Task AddInvitationAsync(Invitation invitation, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// An invitation by the hash of the code in its link. Reaches past the
+    /// filter: whoever is holding that link is not in an organization yet — the
+    /// invitation is what puts them in one.
+    /// </summary>
+    Task<Invitation?> FindInvitationByCodeHashAsync(
+        byte[] codeHash, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The person an accepted invitation just created and the session they
+    /// signed up into, in one transaction, together with the invitation that is
+    /// now spent. Reaches past the filter, for the same reason.
+    /// </summary>
+    Task AcceptInvitationAsync(User user, Token token, CancellationToken cancellationToken);
 
     /// <summary>Every token of this organization, newest first, revoked ones included.</summary>
     Task<IReadOnlyList<Token>> ListTokensAsync(CancellationToken cancellationToken);

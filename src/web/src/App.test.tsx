@@ -14,6 +14,9 @@ const refused = {
   body: { type: "/problems/unauthenticated", title: "unauthenticated", status: 401, code: "unauthenticated" },
 };
 
+/** An instance somebody has started, which is what a sign-in screen asks about. */
+const started = { started: true, organizationName: "Default" };
+
 describe("the first paint", () => {
   // `docs/human-interface.md`: loading is a designed state, not a blank page.
   it("says what it is waiting for while it asks who this tab is", async () => {
@@ -27,10 +30,10 @@ describe("the first paint", () => {
 
   it("sends the token of this tab, and nothing else identifying", async () => {
     const forget = signedIn("vaultaffe_session_abc");
-    const { calls } = installInstance({ "GET /api/v1/me": refused });
+    const { calls } = installInstance({ "GET /api/v1/me": refused, "GET /api/v1/instance": started });
 
     renderAt("/", <App />);
-    await screen.findByText("The sign-in screen is not built yet.");
+    await screen.findByRole("heading", { name: "Sign in" });
 
     expect(calls[0]!.headers.get("Authorization")).toBe("Bearer vaultaffe_session_abc");
     // The contract says a browser sends no client version: it is served by the
@@ -43,10 +46,10 @@ describe("the first paint", () => {
   // information about a credential the caller does not hold (`docs/api.md`).
   it("forgets a token the instance would not admit", async () => {
     const forget = signedIn("vaultaffe_session_stale");
-    installInstance({ "GET /api/v1/me": refused });
+    installInstance({ "GET /api/v1/me": refused, "GET /api/v1/instance": started });
 
     renderAt("/", <App />);
-    await screen.findByText("The sign-in screen is not built yet.");
+    await screen.findByRole("heading", { name: "Sign in" });
 
     expect(heldToken()).toBeUndefined();
     forget();

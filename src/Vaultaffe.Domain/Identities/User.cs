@@ -71,6 +71,23 @@ public sealed class User : IBelongToAnOrganization
     public DateTimeOffset CreatedAt { get; private set; }
 
     /// <summary>
+    /// When an administrator took this person out of the organization, or null
+    /// while they are in it.
+    /// </summary>
+    /// <remarks>
+    /// Deactivated rather than deleted, for the reason a token is revoked rather
+    /// than deleted: everything they ever changed keeps an author (§6.5). What it
+    /// costs them is everything at once — <b>no token of theirs authenticates any
+    /// more</b>, their sessions included and the agent tokens they are
+    /// accountable for with them, because a person who is out of the organization
+    /// cannot go on acting in it through something they left running.
+    /// </remarks>
+    public DateTimeOffset? DeactivatedAt { get; private set; }
+
+    /// <summary>Whether this person is still in the organization.</summary>
+    public bool IsActive => DeactivatedAt is null;
+
+    /// <summary>
     /// Set a new password hash. An administrator performs a reset, because the
     /// instance sends no mail and therefore has no link to send (§6.1).
     /// </summary>
@@ -79,6 +96,16 @@ public sealed class User : IBelongToAnOrganization
 
     /// <summary>Rename.</summary>
     public void RenameTo(string name) => Name = Named(name);
+
+    /// <summary>Take them out of the organization. Repeating it does not move the moment.</summary>
+    public void DeactivateAt(DateTimeOffset moment) => DeactivatedAt ??= moment;
+
+    /// <summary>
+    /// Put them back. Deactivation is the reversible half of this pair on
+    /// purpose: it is a decision about a person and the second-most likely thing
+    /// after making it is having made it about the wrong one.
+    /// </summary>
+    public void Reactivate() => DeactivatedAt = null;
 
     private static string Named(string name)
     {
