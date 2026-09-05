@@ -4,6 +4,10 @@ import { Navigate, Route, Routes, useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { Environment } from "@/catalogue/Environment";
+import { Project } from "@/catalogue/Project";
+import { Projects } from "@/catalogue/Projects";
+import { Secret } from "@/catalogue/Secret";
 import { SettingsShell } from "@/settings/SettingsShell";
 import { Users } from "@/settings/Users";
 import { AccountMenu } from "./AccountMenu";
@@ -112,42 +116,10 @@ export function Shell() {
         <Routes>
           <Route path="/" element={<Navigate to={views[0].path} replace />} />
 
-          <Route
-            path="/projects"
-            element={
-              <Unbuilt
-                screen="Projects"
-                what="Every project this session reaches, each with its environments, and a switch for what is deleted and recoverable."
-              />
-            }
-          />
-          <Route
-            path="/projects/:project"
-            element={
-              <Unbuilt
-                screen="Project"
-                what="The project's environments, each with a key count and its last change, and the project's own acts."
-              />
-            }
-          />
-          <Route
-            path="/projects/:project/:environment"
-            element={
-              <Unbuilt
-                screen="Environment"
-                what="The keys of this environment, their status and when each was last written — never their values — with import and export."
-              />
-            }
-          />
-          <Route
-            path="/projects/:project/:environment/:name"
-            element={
-              <Unbuilt
-                screen="Secret"
-                what="The masked value with its reveal, the bounded version history, and this key's own change log."
-              />
-            }
-          />
+          <Route path="/projects" element={<Projects />} />
+          <Route path="/projects/:project" element={<Project />} />
+          <Route path="/projects/:project/:environment" element={<Environment />} />
+          <Route path="/projects/:project/:environment/:name" element={<Secret />} />
           <Route
             path="/changes"
             element={

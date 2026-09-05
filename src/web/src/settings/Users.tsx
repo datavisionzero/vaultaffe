@@ -1,5 +1,5 @@
-import { CheckIcon, CopyIcon, MoreHorizontalIcon, UserPlusIcon } from "lucide-react";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { MoreHorizontalIcon, UserPlusIcon } from "lucide-react";
+import { useState, type FormEvent } from "react";
 import { answered, api, describe, type Invitation, type User } from "@/api/client";
 import { useAsk } from "@/api/useAsk";
 import { Button } from "@/components/ui/button";
@@ -17,11 +17,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useSession } from "@/session/useSession";
 import { ActionDialog } from "@/shared/ActionDialog";
+import { Copyable } from "@/shared/Copyable";
 import { Field, Refusal } from "@/shared/Form";
 import { around, when } from "@/shared/moments";
+import { Rows } from "@/shared/Rows";
 
 /**
  * `/settings/users` — the people of the organization, the invitation link to
@@ -498,45 +499,5 @@ function Invitations() {
           </ul>
         ))}
     </section>
-  );
-}
-
-/** A value a reader is meant to take with them, and the control that takes it. */
-function Copyable({ value, label }: { value: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-
-  return (
-    <div className="flex items-center gap-2">
-      <code className="min-w-0 flex-1 truncate rounded-md border bg-muted/50 px-2 py-1.5 font-mono text-xs">
-        {value}
-      </code>
-      <Button
-        variant="outline"
-        size="sm"
-        aria-label={`Copy the ${label.toLowerCase()}`}
-        onClick={() => {
-          void navigator.clipboard.writeText(value).then(() => {
-            setCopied(true);
-            window.setTimeout(() => setCopied(false), 2000);
-          });
-        }}
-      >
-        {copied ? <CheckIcon /> : <CopyIcon />}
-        {copied ? "Copied" : "Copy"}
-      </Button>
-    </div>
-  );
-}
-
-/** A list on its way: a skeleton of rows inside the frame, never a spinner. */
-function Rows({ count = 3 }: { count?: number }): ReactNode {
-  return (
-    <ul aria-busy className="divide-y rounded-lg border">
-      {Array.from({ length: count }, (_, row) => (
-        <li key={row} className="px-3 py-3">
-          <Skeleton className="h-4 w-40" />
-        </li>
-      ))}
-    </ul>
   );
 }

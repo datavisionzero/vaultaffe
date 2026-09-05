@@ -59,7 +59,7 @@ more would be a promise the product does not keep.
 | `/invite` | Join | what the link is for, the address it was written to, a name and a password — or the sentence saying it was used, withdrawn or ran out | centred single column; the code is in the fragment and never in a request line |
 | `/device` | Confirm a login | the eight-consonant code, the password, confirm or deny | centred single column; the code field is the first focus |
 | `/projects` | Projects | every project this session reaches, each with its environments, and a switch for what is deleted and recoverable | one card per project, environments as chips that wrap |
-| `/projects/:project` | Project | the project's environments, each with a key count and its last change, and the project's own acts | environments stack; the acts move into the row's menu |
+| `/projects/:project` | Project | the project's environments, each with a key count, how many keys are still waiting for a value, and when a value in it was last written; and the project's own acts | environments stack; the acts move into the row's menu |
 | `/projects/:project/:environment` | Environment | **the main screen**: the keys of this environment, their status and when each was last written; import, export and the deleted switch | two-line rows — name and status above, the moment below; no horizontal scroll |
 | `/projects/:project/:environment/:KEY` | Secret | the masked value with its reveal, the bounded version history, and this key's own change log | one column; the value block stays above the history |
 | `/changes` | Change log | what was changed, by whom and **by what kind of thing**, filtered by project, environment and key | the identity and its type stay; the filters open as a dismissible sheet |

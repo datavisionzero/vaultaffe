@@ -10,15 +10,16 @@ afterEach(() => {
 });
 
 describe("the frame", () => {
-  // The frame renders before any of the organization's data arrives, and it
-  // asks the instance for none of it.
-  it("stands without asking the instance anything", async () => {
-    const { calls } = installInstance({});
+  // The frame renders before any of the organization's data arrives: it asks
+  // the instance for nothing itself, and what the screen inside it asks for has
+  // not answered yet here.
+  it("stands before any of the organization's data arrives", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
 
     renderUnderShell("/projects", <Shell />);
 
     expect(await screen.findByRole("navigation", { name: "The organization" })).toBeInTheDocument();
-    expect(calls).toHaveLength(0);
+    expect(screen.getByRole("heading", { name: "Projects" })).toBeInTheDocument();
   });
 
   it("leads everywhere the screen matrix names", () => {
@@ -142,5 +143,41 @@ describe("the palette", () => {
     await user.type(field, "reveal");
 
     expect(await screen.findByText("Nothing matches.")).toBeInTheDocument();
+  });
+});
+
+describe("the palette", () => {
+  // What the frame promised and the catalogue makes good on: names of screens
+  // and names of the catalogue, and no value anywhere near it.
+  it("finds a project and an environment, and asks only when it is opened", async () => {
+    const { calls } = installInstance({
+      "GET /api/v1/projects": [
+        {
+          id: "0199a000-0000-7000-8000-000000000010",
+          name: "landing-page",
+          createdAt: "2026-09-01T09:00:00+00:00",
+          deletedAt: null,
+          environments: [
+            {
+              id: "0199a000-0000-7000-8000-000000000011",
+              projectId: "0199a000-0000-7000-8000-000000000010",
+              name: "prod",
+              createdAt: "2026-09-01T09:00:00+00:00",
+              deletedAt: null,
+            },
+          ],
+        },
+      ],
+    });
+
+    renderUnderShell("/settings/profile", <Shell />);
+
+    expect(calls.some((call) => call.url.endsWith("/api/v1/projects"))).toBe(false);
+
+    await userEvent.click(screen.getByRole("button", { name: /Search or jump/ }));
+    await userEvent.type(screen.getByRole("combobox"), "prod");
+
+    const options = await screen.findAllByRole("option");
+    expect(options.map((option) => option.textContent)).toContain("landing-page/prodEnvironment");
   });
 });
