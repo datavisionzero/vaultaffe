@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Vaultaffe.Api/Vaultaffe.Api.csproj" />
+    <Project Path="src/Vaultaffe.Application/Vaultaffe.Application.csproj" />
+    <Project Path="src/Vaultaffe.Domain/Vaultaffe.Domain.csproj" />
+    <Project Path="src/Vaultaffe.Infrastructure/Vaultaffe.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Vaultaffe.IntegrationTests/Vaultaffe.IntegrationTests.csproj" />
+    <Project Path="tests/Vaultaffe.UnitTests/Vaultaffe.UnitTests.csproj" />
+  </Folder>
+</Solution>

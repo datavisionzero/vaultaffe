@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # So that a run can be started without inventing a commit to carry it.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# This workflow is the whole gate. `main` is the only long-lived branch and
+# maintainers commit straight to it (ADR 0001), so there is no review step
+# between a commit and the trunk — what is here is what stands between a mistake
+# and `main`. It therefore runs on every push to `main`, on every pull request
+# including one from a fork, and on demand; and it has to stay fast enough that
+# nobody is tempted to push past it, which is why the toolchains run beside each
+# other rather than in one job.
+#
+# What is deliberately not here yet: the web build, the contract check and the
+# image. Their subjects do not exist, and each of them would have to settle a
+# question another ticket owns — whether the OpenAPI document is checked in and
+# compared against a running instance is the API contract's decision, not this
+# file's. Each job arrives in the commit that creates its subject.
+
+# One run at a time, and nothing is cancelled. With a single maintainer pushing
+# there is nothing to gain from two racing, and a pull request waiting a few
+# minutes behind the trunk costs less than jobs interleaving over one registry
+# or one cache.
+concurrency:
+  group: ci
+  cancel-in-progress: false
+
+jobs:
+  # Whitespace, using directives and the naming rules of .editorconfig, checked
+  # rather than asked for. It is its own job because it is the fastest of them:
+  # a formatting slip should be red before the test jobs have finished pulling
+  # a Postgres image.
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - run: dotnet restore Vaultaffe.slnx
+      - run: dotnet format Vaultaffe.slnx --verify-no-changes
+
+  # Seconds, and nothing installed: the rules of Domain and the use cases of
+  # Application against substituted ports, plus the layering test that reads the
+  # four project files and fails a reference pointing outward (ADR 0002).
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - run: dotnet restore Vaultaffe.slnx
+      - run: dotnet build Vaultaffe.slnx -c Release --no-restore
+      - run: dotnet test tests/Vaultaffe.UnitTests -c Release --no-build
+
+  # The parts no substitute can vouch for: that the migrations apply, that a
+  # value survives a round trip through the envelope encryption, that the
+  # organization filter cannot be stepped around. Testcontainers brings up the
+  # Postgres, so this job needs the Docker the runner already has and nothing
+  # else declared here.
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - run: dotnet restore Vaultaffe.slnx
+      - run: dotnet build Vaultaffe.slnx -c Release --no-restore
+      - run: dotnet test tests/Vaultaffe.IntegrationTests -c Release --no-build
+
+  # `vaultaffe` is a client of the public API and references nothing in `src/`
+  # (Specification §9), so it is a plain Go module built by a plain Go job. The
+  # toolchain version comes from its own `go.mod` rather than from a number
+  # pinned here, which is the only way the two cannot disagree.
+  cli:
+    name: CLI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/cli
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: src/cli/go.mod
+          # The module has no dependencies yet and therefore no `go.sum`, which
+          # is what the cache keys on — asking for it would fail the job over a
+          # file that is correctly absent. Turned on in the commit that adds the
+          # first dependency.
+          cache: false
+
+      # gofmt has no --check, and it reports by printing names: a non-empty
+      # listing is the failure. This is the Go half of the `format` job above.
+      - name: Format
+        run: |
+          set -euo pipefail
+          unformatted="$(gofmt -l .)"
+          test -z "$unformatted" || {
+            echo "gofmt would change these files:"
+            echo "$unformatted"
+            exit 1
+          }
+
+      - run: go vet ./...
+      - run: go test ./...
+      # Compilation of every package, not the release binaries. Those are cut
+      # per platform from a tag, and a trunk build has no tag to be named after.
+      - run: go build ./...

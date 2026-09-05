@@ -3,11 +3,13 @@
 A self-hostable, open-source secrets manager for solo developers and small teams
 that work daily with CLI-based AI agents and operate their own infrastructure.
 
-> **Status: pre-MVP. Product vision and specification only; no code yet.**
-> Nothing here installs or runs. Read [`Vision.md`](Vision.md) for the product
-> direction and [`Specification.md`](Specification.md) for detailed behavior and
-> architecture. If you need a working self-hosted secrets manager
-> today, use [Infisical](https://infisical.com).
+> **Status: pre-MVP. Vision, specification, and an empty skeleton.**
+> Nothing here installs or runs — what exists is the project layout and the CI
+> that guards it. Read [`Vision.md`](Vision.md) for the product direction,
+> [`Specification.md`](Specification.md) for detailed behavior and architecture,
+> and [`docs/codebase.md`](docs/codebase.md) for the layout. If you need a
+> working self-hosted secrets manager today, use
+> [Infisical](https://infisical.com).
 
 ## What it will be
 

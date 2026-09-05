@@ -7,3 +7,35 @@ CLAUDE.local.md
 
 # The project file: points this repository at the private planaffe backlog.
 /.planaffe
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+artifacts/
+
+# The SPA is built into the image, never committed
+src/Vaultaffe.Api/wwwroot/
+
+# Go
+/dist/
+# The CLI binary, wherever a `go build` in the module root drops it
+/src/cli/vaultaffe
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+npm-debug.log*
+
+# Instance configuration and the host volume of a development installation.
+# `.env` is the one file in this product that is expected to hold the master
+# encryption key — it never reaches the remote.
+.env
+deploy/.env
+volume/
+
+# macOS
+.DS_Store

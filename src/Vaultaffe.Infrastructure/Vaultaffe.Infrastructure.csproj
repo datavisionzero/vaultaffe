@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="../Vaultaffe.Application/Vaultaffe.Application.csproj" />
+  </ItemGroup>
+
+  <!-- Postgres, the envelope encryption and the schema live here, and each
+       brings its packages with the code that uses them. -->
+
+</Project>

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <UserSecretsId>vaultaffe-api</UserSecretsId>
+    <!-- No AssemblyName override: `vaultaffe` is the CLI's name (Specification
+         §6.2) and belongs to the Go binary a developer has on their PATH. This
+         one runs as the container's entry point, where nobody types it. -->
+    <RootNamespace>Vaultaffe.Api</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Vaultaffe.Application/Vaultaffe.Application.csproj" />
+    <ProjectReference Include="../Vaultaffe.Infrastructure/Vaultaffe.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>
