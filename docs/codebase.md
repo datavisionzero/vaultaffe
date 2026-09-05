@@ -197,6 +197,14 @@ argument vector and the environment that would have been handed to `exec()`
 instead of the process ceasing to exist, which is how the protected list, the
 stripped `VAULTAFFE_` variables and the two lookup exit codes are held.
 
+The secrets surface is where the CLI's own half of value-blindness lives, and it
+is mostly a set of decisions about what a command does **not** do: `set` reads a
+value from stdin and refuses `KEY=value` with the reason, no confirmation echoes
+what was written, the listing and the version history carry names and moments,
+and `get` is the one command whose purpose is to put a value where somebody can
+see it — which is why it takes one key and no pattern. Its tests are the same
+list from the other side.
+
 It ships as its own release artifact,
 one binary per platform, and is versioned with the server it was cut from: the
 tag sets `-ldflags -X …/internal/version.Value` here and `-p:Version=` on the

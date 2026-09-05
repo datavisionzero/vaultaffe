@@ -11,8 +11,8 @@ command, where a token and a binding come from, and what an exit code means.
 
 **Most of it does not exist yet.** What has landed is the skeleton and the two
 commands that come before all the others — `login`, `setup`, and the first run —
-and `run` itself. The secrets surface and the catalogue have their own tickets,
-and this file is kept accurate as each lands.
+`run` itself, and the secrets surface. The catalogue and token creation have
+their own tickets, and this file is kept accurate as each lands.
 
 ## The two rules that hold everywhere
 
@@ -39,6 +39,18 @@ vaultaffe status                 which instance, as whom, and what this director
 vaultaffe instance               whether this instance has been started
 vaultaffe instance start         the first run: the organization, the first person, a session
 vaultaffe run -- <command>       start a process with this environment's secrets in it
+
+vaultaffe secrets                names and status — never values
+vaultaffe secrets get            print exactly one value, explicitly asked for
+vaultaffe secrets set            write one, from stdin and nowhere else
+vaultaffe secrets delete         delete one, recoverably
+vaultaffe secrets restore        bring a deleted one back
+vaultaffe secrets import         read a .env from stdin
+vaultaffe secrets export         write one out — a person only
+vaultaffe secrets versions       when a key was written, never what it held
+vaultaffe secrets rollback       put an earlier value back without reading it
+
+vaultaffe changes                what was changed, by whom, and by what kind of thing
 ```
 
 Data goes to **stdout**, everything a person reads goes to **stderr**, and the
@@ -172,6 +184,64 @@ Two exit codes are the shell's rather than this table's, because `exec()` takes 
 path and `run` resolves it: **127** for a command that is not on the `PATH`, and
 **126** for one that is there and not executable. Everything after the call is
 the process's own, `128+N` included.
+
+## The secrets surface
+
+```sh
+vaultaffe secrets                                  # names and status — never values
+vaultaffe secrets get DB_URL                       # exactly one value, explicitly
+cmd | vaultaffe secrets set STRIPE_KEY             # the value arrives on stdin
+cmd | vaultaffe secrets set STRIPE_KEY --replace   # overwriting is explicit
+vaultaffe secrets set SMTP_PASSWORD --empty        # a placeholder for a person
+vaultaffe secrets delete STRIPE_KEY
+vaultaffe secrets import < .env
+vaultaffe secrets export --format env              # session tokens only
+```
+
+**Names and values are two commands, because they are two endpoints and two
+scopes.** The bare listing answers a name and a status — `set` or `empty` — and
+needs `names`; reading a value is a second request for one key that was named and
+needs `read`. That split is what lets an agent hold a token that sees which keys
+exist and which a person still has to fill, and cannot read one.
+
+**Setting a secret without seeing it.** The value arrives **exclusively on
+stdin** — never as an argument, where the shell history and `ps` would keep it,
+and never as a file. `vaultaffe secrets set KEY=value` is refused with the reason
+rather than quietly making a key of that name. The confirmation does not give the
+value back, so an agent can pipe a vendor's command straight through:
+
+```sh
+gcloud secrets versions access latest --secret=stripe | vaultaffe secrets set STRIPE_KEY
+```
+
+**Exactly one trailing newline is removed**, because practically every command
+ends its output with one and a key carrying an invisible `\n` is the bug that
+costs an afternoon. `--raw` keeps the bytes as they came. A multi-line value —
+a PEM key — passes through as it is. `get` is the mirror image: it adds exactly
+one newline, and `--raw` prints the stored bytes.
+
+**Overwriting is explicit.** `set` over a key that already holds a value is
+refused unless `--replace`; filling a placeholder needs no flag. Overwriting is as
+destructive as deleting, and the flag is also what makes a rotation legible in the
+change log.
+
+**Import reads stdin, export is for a person.** `import` applies all of a `.env`
+or none of it and answers with keys — created, filled, replaced, unchanged,
+skipped with a reason, unreadable with a line number — and never values, so an
+agent can migrate a file it never displays. `export` writes every value in
+plaintext and is therefore `human-only`: a session token, or a refusal that names
+`vaultaffe secrets export` as the command a person runs.
+
+**The value history says when and never what.** `secrets versions` lists ids and
+moments; `secrets rollback` puts one back and is an ordinary write available to an
+agent — an agent that wrecked a value overnight is exactly who needs an undo
+button — and nothing is opened to do it.
+
+**`vaultaffe changes` is the log**, which holds no value at all. An entry is a
+moment, an action, the names it happened to, and the acting identity **with its
+type**: `human-session`, `service-token` or `agent-token`. Reads are not in it. By
+default it asks about this directory's binding; `--everywhere` asks about the
+whole organization and needs a token that reaches it.
 
 ## The version exchange
 

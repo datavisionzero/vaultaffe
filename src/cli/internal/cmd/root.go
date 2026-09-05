@@ -94,7 +94,9 @@ func report(root *cobra.Command, stderr io.Writer, err error) int {
 // `administer-organization` is deliberately absent: administering the
 // organization and its users is a screen and not a command, and inventing one
 // here would be exactly the failure the ADR is about.
-var humanCommands = map[string]string{}
+var humanCommands = map[string]string{
+	"export": "secrets export",
+}
 
 func advice(root *cobra.Command, action string) string {
 	if path, known := humanCommands[action]; known {
@@ -140,7 +142,7 @@ func newRoot(env Env) *cobra.Command {
 		return &config.UsageError{Message: err.Error()}
 	})
 
-	root.AddCommand(newLogin(g), newLogout(g), newSetup(g), newStatus(g), newInstance(g), newRun(g))
+	root.AddCommand(newLogin(g), newLogout(g), newSetup(g), newStatus(g), newInstance(g), newRun(g), newSecrets(g), newChanges(g))
 	g.root = root
 	return root
 }
