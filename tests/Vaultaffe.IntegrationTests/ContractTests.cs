@@ -58,7 +58,8 @@ public sealed class ContractTests(PostgresFixture postgres)
                 "/api/v1/instance",
                 "/api/v1/invitations", "/api/v1/invitations/acceptance",
                 "/api/v1/invitations/offer", "/api/v1/invitations/{id}",
-                "/api/v1/me",
+                "/api/v1/me", "/api/v1/me/password",
+                "/api/v1/organization",
                 "/api/v1/projects", "/api/v1/projects/{project}",
                 "/api/v1/projects/{project}/environments",
                 "/api/v1/projects/{project}/environments/{environment}",
@@ -94,6 +95,7 @@ public sealed class ContractTests(PostgresFixture postgres)
         Assert.Contains("Me", schemas);
         Assert.Contains("User", schemas);
         Assert.Contains("Invitation", schemas);
+        Assert.Contains("Organization", schemas);
         Assert.Contains("Project", schemas);
         Assert.Contains("Environment", schemas);
         Assert.Contains("Secret", schemas);

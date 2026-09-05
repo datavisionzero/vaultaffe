@@ -30,6 +30,12 @@ public interface IIdentityStore
     Task<Organization?> FindTheOrganizationAsync(CancellationToken cancellationToken);
 
     /// <summary>
+    /// The organization the caller is in — the same row as above, asked from
+    /// inside it, so the filter answers rather than being stepped past.
+    /// </summary>
+    Task<Organization?> FindOrganizationAsync(CancellationToken cancellationToken);
+
+    /// <summary>
     /// A user by the address they sign in with, already normalized. Reaches past
     /// the filter, for the same reason.
     /// </summary>

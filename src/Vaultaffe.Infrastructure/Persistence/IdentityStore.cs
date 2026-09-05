@@ -33,6 +33,13 @@ public sealed class IdentityStore(VaultaffeDbContext context) : IIdentityStore
             .FirstOrDefaultAsync(cancellationToken);
 
     /// <summary>
+    /// The caller's own organization. Inside the filter, which for this table is
+    /// its own key — a caller reading the name of the organization they are in.
+    /// </summary>
+    public Task<Organization?> FindOrganizationAsync(CancellationToken cancellationToken) =>
+        context.Organizations.FirstOrDefaultAsync(cancellationToken);
+
+    /// <summary>
     /// A user by the address they sign in with. Past the filter: a sign-in has
     /// only an address to go on, and the organization is what it produces.
     /// </summary>

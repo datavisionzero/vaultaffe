@@ -34,6 +34,7 @@ deployment have their own tickets, and this file is kept accurate as each lands.
 /api/v1/tokens                   creating, listing and revoking tokens
 /api/v1/users                    the people of the organization
 /api/v1/invitations              the links that invite them, and accepting one
+/api/v1/organization             what this organization is called
 /api/v1/projects                 the catalogue, by name
 /api/v1/projects/…/secrets       names and status; one value at a time
 /api/v1/changes                  what was changed, by whom, and of what kind
@@ -132,7 +133,27 @@ row stays — revoked rather than deleted, so that everything it ever signed in 
 change log keeps an author.
 
 `GET /api/v1/me` answers who the caller is: the organization, the person, the
-token and its scopes.
+token and its scopes. `PATCH /api/v1/me` changes that person's **own name**, and
+`POST /api/v1/me/password` their own password — the current one, and the new one.
+
+Both are refused for anything but a session, and refused inside the act rather
+than declared on the endpoint: changing your own name is not one of the short
+list of §6.4, it is nobody's administration but your own. What is refused is a
+service or agent token acting for the person accountable for it, exactly as
+signing out is.
+
+**Changing your own password ends every other session of yours** and keeps the
+one that asked. Somebody changing a password because they think it is known
+elsewhere expects exactly that, and somebody who has just proved they know the
+current one is not who it is protecting them from. Their service and agent tokens
+are untouched. The current password is asked for so that a session left open on a
+borrowed machine is not enough to lock its owner out; the wrong one is
+`unauthenticated` and says nothing else.
+
+`GET /api/v1/organization` answers what this organization is called, to any
+caller — a token knows which organization it is in the moment it authenticates,
+and a screen needs the name for its header. `PATCH /api/v1/organization` renames
+it, and that is an administrator's.
 
 ### The device-code login
 

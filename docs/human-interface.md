@@ -234,8 +234,9 @@ The API this document draws on exists for everything above the settings area.
 `/api/v1/users` and `/api/v1/invitations` ([`api.md`](./api.md)) — built to the
 invitation-is-a-link and reset-by-an-administrator shape, because this instance
 sends no email and that is the price of having no external dependency to operate
-([§4](../Specification.md#4-guiding-principles)). **The organization's name does
-not have an endpoint yet** and arrives the same way, with its own screen.
+([§4](../Specification.md#4-guiding-principles)). The organization's name arrived
+the same way — `/api/v1/organization`, read by anybody and renamed by an
+administrator — together with the two things a person changes about themselves.
 
 The **missing-key notice** — a key present in one environment and absent from a
 neighbouring one — is explicitly post-MVP and is a display with a dismissal, not
