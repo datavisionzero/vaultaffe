@@ -9,7 +9,7 @@ namespace Vaultaffe.UnitTests;
 public sealed class IdentityRuleTests
 {
     [Theory]
-    [InlineData("alex@example.test")]
+    [InlineData("maintainer@example.test")]
     [InlineData("a@b")]
     [InlineData("first.last+tag@example.co.uk")]
     public void An_address_is_deliberately_almost_anything_with_an_at_in_it(string address) =>
@@ -20,7 +20,7 @@ public sealed class IdentityRuleTests
     [InlineData("nobody")]
     [InlineData("two@at@signs")]
     [InlineData("with space@example.test")]
-    [InlineData("alex@exa\nmple.test")]
+    [InlineData("maint\nainer@example.test")]
     public void And_still_refuses_what_an_index_could_not_hold(string address) =>
         Assert.False(EmailAddress.IsValid(address));
 
@@ -33,10 +33,13 @@ public sealed class IdentityRuleTests
     [Fact]
     public void An_address_has_one_spelling()
     {
-        Assert.Equal("alex@example.test", EmailAddress.Normalize("  Alex@Example.TEST\n"));
         Assert.Equal(
-            EmailAddress.Require("ALEX@example.test", "email"),
-            EmailAddress.Require("alex@example.test", "email"));
+            "maintainer@example.test",
+            EmailAddress.Normalize("  Maintainer@Example.TEST\n"));
+
+        Assert.Equal(
+            EmailAddress.Require("MAINTAINER@example.test", "email"),
+            EmailAddress.Require("maintainer@example.test", "email"));
     }
 
     /// <summary>

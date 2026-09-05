@@ -11,9 +11,9 @@ namespace Vaultaffe.Domain.Identities;
 /// <remarks>
 /// What is enforced is what a unique index needs: one <c>@</c>, something on
 /// either side of it, no whitespace, and a single lower-case spelling. Case is
-/// folded because <c>Alex@example.com</c> and <c>alex@example.com</c> are the
-/// same person to everyone except a database index, and a login that depends on
-/// how somebody's keyboard felt that morning is not a login.
+/// folded because <c>Maintainer@example.com</c> and <c>maintainer@example.com</c>
+/// are the same person to everyone except a database index, and a login that
+/// depends on how somebody's keyboard felt that morning is not a login.
 /// </remarks>
 public static partial class EmailAddress
 {
