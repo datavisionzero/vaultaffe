@@ -11,6 +11,7 @@ import { Refusal } from "@/shared/Form";
 import { around, when } from "@/shared/moments";
 import { PageHeader } from "@/shared/PageHeader";
 import { environmentPath, projectPath } from "@/shell/views";
+import { History } from "./History";
 import { WriteDialog } from "./WriteDialog";
 
 /**
@@ -115,7 +116,12 @@ export function Secret() {
                 secret={secret}
                 onFilled={again}
               />
-              <Later />
+              <History
+                project={project}
+                environment={environment}
+                secret={secret}
+                onChanged={again}
+              />
             </>
           ))}
       </div>
@@ -265,23 +271,6 @@ function Value({
           <Copyable value={revealed} label="value" hidden />
         )}
       </div>
-    </section>
-  );
-}
-
-/**
- * What this screen is still missing, said plainly rather than left as a gap the
- * reader has to notice: the bounded version history and this key's own change
- * log are the history screen's, and they arrive with it.
- */
-function Later() {
-  return (
-    <section className="grid max-w-lg gap-1">
-      <h2 className="text-sm font-medium">History</h2>
-      <p className="text-sm text-muted-foreground">
-        What this key used to hold — five versions or 72 hours, whichever comes first — and its own
-        change log are not built yet. Rolling back to a version arrives with them.
-      </p>
     </section>
   );
 }

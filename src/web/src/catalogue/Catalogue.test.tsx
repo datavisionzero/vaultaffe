@@ -50,6 +50,15 @@ const keys = [
 const secrets = "GET /api/v1/projects/landing-page/environments/prod/secrets";
 const oneSecret = "GET /api/v1/projects/landing-page/environments/prod/secrets/DATABASE_URL";
 
+// The second half of a key's screen. It has its own tests in `History.test.tsx`;
+// here it is answered so that the value block is looked at on a whole screen
+// rather than beside two refusals.
+const history = {
+  "GET /api/v1/projects/landing-page/environments/prod/secrets/DATABASE_URL/versions": [],
+  "GET /api/v1/projects/landing-page/environments/prod/secrets/SMTP_PASSWORD/versions": [],
+  "GET /api/v1/changes": { entries: [], total: 0 },
+};
+
 describe("the projects", () => {
   it("shows every project with its environments, each addressed by name", async () => {
     installInstance({ "GET /api/v1/projects": [landingPage] });
@@ -212,7 +221,7 @@ describe("the environment screen", () => {
 
 describe("one key", () => {
   it("holds no value until a person asks for one", async () => {
-    const { calls } = installInstance({ [secrets]: keys });
+    const { calls } = installInstance({ [secrets]: keys, ...history });
 
     renderUnderShell("/projects/landing-page/prod/DATABASE_URL", <Shell />);
 
@@ -224,6 +233,7 @@ describe("one key", () => {
     installInstance({
       [secrets]: keys,
       [oneSecret]: { secret: keys[0], value: "postgres://the-real-thing" },
+      ...history,
     });
 
     renderUnderShell("/projects/landing-page/prod/DATABASE_URL", <Shell />);
@@ -240,7 +250,7 @@ describe("one key", () => {
 
   // `docs/human-interface.md`: copying is revealing, and the control says so.
   it("says that copying is reading", async () => {
-    installInstance({ [secrets]: keys });
+    installInstance({ [secrets]: keys, ...history });
 
     renderUnderShell("/projects/landing-page/prod/DATABASE_URL", <Shell />);
 
@@ -250,7 +260,7 @@ describe("one key", () => {
   });
 
   it("says what an empty key means rather than showing an error", async () => {
-    installInstance({ [secrets]: keys });
+    installInstance({ [secrets]: keys, ...history });
 
     renderUnderShell("/projects/landing-page/prod/SMTP_PASSWORD", <Shell />);
 

@@ -25,7 +25,9 @@ means at the end: purge, and the sweep that enforces the deadline. Beside it the
 CLI's own skeleton — the command tree, the client generated from that contract,
 the device-code login, and the prefix table that says what a directory means
 ([`cli.md`](./cli.md)) — and the web application: the frame, the way in, the
-people of the organization, and the catalogue screens the product is used on
+people of the organization, the catalogue screens the product is used on, and
+what makes a change legible and reversible — the log, the value history with its
+rollback, and the purge only a person may ask for
 ([`human-interface.md`](./human-interface.md)) — and the workflow that builds
 and tests all three. This
 document is kept accurate from here on: a file that lands somewhere it does not
@@ -282,15 +284,33 @@ The screens sit beside the frame, one directory per part of the matrix.
 `src/entry/` is what a tab that is nobody can reach — signing in, and accepting
 an invitation — and neither is inside the shell, because there is no session
 behind them yet. `src/catalogue/` is the product itself: the projects, one
-project, the environment screen and one key. `src/settings/` is the area list
+project, the environment screen and one key, with that key's own history beside
+its value. `src/changes/` is the change log: the screen, and the entries it
+shares with the key that is read on its own. `src/settings/` is the area list
 beside the area: the tokens, the people, the organization's one word, and the
 two things a person changes about themselves. `src/shared/` holds what more than one of them needs — the
 page header, the two confirmation dialogs, a labelled field that knows where a
-refusal goes, and the two spellings of a moment.
+refusal goes, the two spellings of a moment, and the confirmation a purge gets.
 
-**What is not built yet** is the change log, and the value history with its
-rollback and the purge beside it; those routes exist and lead to a screen that
-says so, and each is replaced whole by the screen it names.
+**Every route of the matrix now leads to the screen it names**, so the scaffold
+that said "not built yet" is gone and `shell/Nowhere.tsx` is what is left: the
+answer to an address this application has no screen for.
+
+The change log and the value history are two files rather than one because they
+are two different things
+([Specification §6.5](../Specification.md#65-logging-and-history)). `changes/`
+reads a log that holds **no value at all** and puts the acting identity's *type*
+on every row, because with writing agents that is the interesting half of "who";
+its filter lives in the address, and a narrower field stays closed until the
+wider one is named, so the combination the instance refuses is unreachable from
+here. `catalogue/History.tsx` reads a listing of moments — id, written,
+replaced, expires and never a value — and offers the rollback, which is a write
+like any other and is therefore an agent's too.
+
+`shared/Purge.tsx` is the one confirmation four different acts share, and it is
+its own file because of what it says rather than what it does: a purge destroys
+the undo button, **and it does not reach last night's backup**. Both sentences
+are in the dialog. The second is the one no product we looked at says out loud.
 
 The masking rule is visible in the code rather than described by it: the
 environment screen renders a listing that **has no values in it** — the endpoint

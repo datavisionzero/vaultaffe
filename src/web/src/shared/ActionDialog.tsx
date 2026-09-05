@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent, type ReactElement } from "react";
+import { useId, useState, type FormEvent, type ReactElement, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,7 +22,8 @@ type ActionDialogProps = {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   title: string;
-  description: string;
+  /** A node rather than a sentence: a purge says three things, one under the other. */
+  description: ReactNode;
   confirmLabel: string;
   /** Destructive by default; `default` for a consequential move that removes nothing. */
   confirmVariant?: "destructive" | "default";
@@ -63,7 +64,7 @@ export function ActionDialog({ trigger, open: controlled, onOpenChange, title, d
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
+          <DialogDescription render={<div />}>{description}</DialogDescription>
         </DialogHeader>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <DialogFooter>

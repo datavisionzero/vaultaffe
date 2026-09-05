@@ -4,6 +4,7 @@ import { Navigate, Route, Routes, useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { Changes } from "@/changes/Changes";
 import { Environment } from "@/catalogue/Environment";
 import { Project } from "@/catalogue/Project";
 import { Projects } from "@/catalogue/Projects";
@@ -18,7 +19,7 @@ import { AppSidebar } from "./AppSidebar";
 import { Palette } from "./Palette";
 import { Keys, ShortcutsDialog } from "./ShortcutsDialog";
 import { is, overlaid, typing } from "./shortcuts";
-import { Nowhere, Unbuilt } from "./Unbuilt";
+import { Nowhere } from "./Nowhere";
 import { settingsPath, views } from "./views";
 
 /**
@@ -108,9 +109,8 @@ export function Shell() {
           <AccountMenu onShortcuts={() => setShortcutsOpen(true)} />
         </header>
 
-        {/* The matrix of `docs/human-interface.md`, route for route. Each
-            element is replaced by the screen it names; the table itself is what
-            this ticket leaves behind. */}
+        {/* The matrix of `docs/human-interface.md`, route for route — every
+            one of them now the screen it names. */}
         <Routes>
           <Route path="/" element={<Navigate to={views[0].path} replace />} />
 
@@ -118,15 +118,7 @@ export function Shell() {
           <Route path="/projects/:project" element={<Project />} />
           <Route path="/projects/:project/:environment" element={<Environment />} />
           <Route path="/projects/:project/:environment/:name" element={<Secret />} />
-          <Route
-            path="/changes"
-            element={
-              <Unbuilt
-                screen="Change log"
-                what="What was changed, by whom and by what kind of thing — and never what it was changed to."
-              />
-            }
-          />
+          <Route path="/changes" element={<Changes />} />
 
           {/* The settings area, screen by screen rather than by looping over
               the list: each of these was replaced whole by the one it names. */}

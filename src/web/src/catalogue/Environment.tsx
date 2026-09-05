@@ -8,6 +8,7 @@ import { ActionDialog } from "@/shared/ActionDialog";
 import { Refusal } from "@/shared/Form";
 import { around, when } from "@/shared/moments";
 import { PageHeader } from "@/shared/PageHeader";
+import { PurgeDialog } from "@/shared/Purge";
 import { Rows } from "@/shared/Rows";
 import { projectPath, secretPath } from "@/shell/views";
 import { Deleted } from "./Deleted";
@@ -161,20 +162,41 @@ function Row({
       </div>
 
       {gone ? (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            void answered(
-              api.POST(
-                "/api/v1/projects/{project}/environments/{environment}/secrets/{name}/restore",
-                { params: { path: { project, environment, name: secret.name } } },
-              ),
-            ).then(onChanged);
-          }}
-        >
-          Restore
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void answered(
+                api.POST(
+                  "/api/v1/projects/{project}/environments/{environment}/secrets/{name}/restore",
+                  { params: { path: { project, environment, name: secret.name } } },
+                ),
+              ).then(onChanged);
+            }}
+          >
+            Restore
+          </Button>
+          <PurgeDialog
+            trigger={
+              <Button variant="ghost" size="sm">
+                Purge
+              </Button>
+            }
+            title={`Purge ${secret.name}?`}
+            what="It removes this deleted key from the instance now, together with the value it held and everything it used to hold, and frees the name inside this environment."
+            onConfirm={async () => {
+              await answered(
+                api.POST(
+                  "/api/v1/projects/{project}/environments/{environment}/secrets/{name}/purge",
+                  { params: { path: { project, environment, name: secret.name } } },
+                ),
+              );
+
+              onChanged();
+            }}
+          />
+        </div>
       ) : (
         <ActionDialog
           trigger={

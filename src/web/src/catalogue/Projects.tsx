@@ -16,6 +16,7 @@ import { ActionDialog, TextActionDialog } from "@/shared/ActionDialog";
 import { Field, Refusal } from "@/shared/Form";
 import { around, when } from "@/shared/moments";
 import { PageHeader } from "@/shared/PageHeader";
+import { PurgeDialog } from "@/shared/Purge";
 import { Rows } from "@/shared/Rows";
 import { environmentPath, projectPath } from "@/shell/views";
 import { Deleted } from "./Deleted";
@@ -91,19 +92,39 @@ function ProjectCard({ project, onChanged }: { project: Project; onChanged: () =
         )}
         <div className="ml-auto flex items-center gap-2">
           {gone ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                void answered(
-                  api.POST("/api/v1/projects/{project}/restore", {
-                    params: { path: { project: project.name } },
-                  }),
-                ).then(onChanged);
-              }}
-            >
-              Restore
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  void answered(
+                    api.POST("/api/v1/projects/{project}/restore", {
+                      params: { path: { project: project.name } },
+                    }),
+                  ).then(onChanged);
+                }}
+              >
+                Restore
+              </Button>
+              <PurgeDialog
+                trigger={
+                  <Button variant="ghost" size="sm">
+                    Purge
+                  </Button>
+                }
+                title={`Purge ${project.name}?`}
+                what="It removes this deleted project from the instance now, together with the environments, keys and values kept under it, and frees the name for something else. The change log keeps what happened here — it records names rather than ids so that it can."
+                onConfirm={async () => {
+                  await answered(
+                    api.POST("/api/v1/projects/{project}/purge", {
+                      params: { path: { project: project.name } },
+                    }),
+                  );
+
+                  onChanged();
+                }}
+              />
+            </>
           ) : (
             <>
               <TextActionDialog

@@ -7,6 +7,7 @@ import { ActionDialog, TextActionDialog } from "@/shared/ActionDialog";
 import { Refusal } from "@/shared/Form";
 import { around, when } from "@/shared/moments";
 import { PageHeader } from "@/shared/PageHeader";
+import { PurgeDialog } from "@/shared/Purge";
 import { Rows } from "@/shared/Rows";
 import { environmentPath, projectPath } from "@/shell/views";
 import { useState } from "react";
@@ -152,19 +153,39 @@ function EnvironmentRow({
 
       <div className="flex items-center gap-2">
         {gone ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              void answered(
-                api.POST("/api/v1/projects/{project}/environments/{environment}/restore", {
-                  params: { path: { project, environment: environment.name } },
-                }),
-              ).then(onChanged);
-            }}
-          >
-            Restore
-          </Button>
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                void answered(
+                  api.POST("/api/v1/projects/{project}/environments/{environment}/restore", {
+                    params: { path: { project, environment: environment.name } },
+                  }),
+                ).then(onChanged);
+              }}
+            >
+              Restore
+            </Button>
+            <PurgeDialog
+              trigger={
+                <Button variant="ghost" size="sm">
+                  Purge
+                </Button>
+              }
+              title={`Purge ${environment.name}?`}
+              what="It removes this deleted environment from the instance now, together with its keys and every value they hold, and frees the name inside this project."
+              onConfirm={async () => {
+                await answered(
+                  api.POST("/api/v1/projects/{project}/environments/{environment}/purge", {
+                    params: { path: { project, environment: environment.name } },
+                  }),
+                );
+
+                onChanged();
+              }}
+            />
+          </>
         ) : (
           <>
             <TextActionDialog
