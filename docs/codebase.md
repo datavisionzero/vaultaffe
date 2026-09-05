@@ -45,6 +45,7 @@ vaultaffe/
 │  ├─ api.md                   the HTTP surface: versions, headers, the shape of a refusal
 │  ├─ api/openapi.json         the contract, captured from a running instance and checked in
 │  ├─ cli.md                   the CLI surface: the token, the binding, the exit codes
+│  ├─ human-interface.md       the screens, their actions, and who may do what
 │  └─ storage.md               the data model: tables, constraints, what is enforced where
 ├─ src/
 │  ├─ Vaultaffe.Domain/         the rules
@@ -66,8 +67,10 @@ invent something more descriptive.
 Documents that describe a surface — the data model, the HTTP API, the CLI, the
 screens, running an instance — get their own file under `docs/` as that surface
 arrives. Writing the empty files now would only invite them to drift. Two are
-here so far: [`storage.md`](./storage.md), [`api.md`](./api.md) and
-[`cli.md`](./cli.md).
+here so far: [`storage.md`](./storage.md), [`api.md`](./api.md),
+[`cli.md`](./cli.md) and [`human-interface.md`](./human-interface.md) — the last
+of them written *before* its surface exists, which is deliberate: the screens are
+held together by that document rather than by their components.
 
 ## The four layers
 
