@@ -18,9 +18,8 @@ permissions:
 # nobody is tempted to push past it, which is why the toolchains run beside each
 # other rather than in one job.
 #
-# What is deliberately not here yet: the image. Its subject does not exist, and
-# it arrives in the commit that creates it — as the contract and web jobs below
-# did.
+# The last job is the odd one out: it does not check a language. It starts the
+# product the way an operator does and asks whether it answers.
 
 # One run at a time, and nothing is cancelled. With a single maintainer pushing
 # there is nothing to gain from two racing, and a pull request waiting a few
@@ -210,3 +209,93 @@ jobs:
       # Compilation of every package, not the release binaries. Those are cut
       # per platform from a tag, and a trunk build has no tag to be named after.
       - run: go build ./...
+
+  # The whole thing, started the way an operator starts it: one image carrying
+  # the API and the built SPA (ADR 0016), Caddy in front of it, Postgres behind
+  # it. Everything above this asks whether a part compiles; this asks whether
+  # the parts run together, which is the success criterion of `git clone` to a
+  # running instance (Specification §11) and the one thing no test inside any of
+  # the three toolchains can answer.
+  #
+  # It pushes nothing. Publishing an image is a release, it happens from a tag,
+  # and this workflow runs on every commit.
+  image:
+    name: Image and stack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          # Loaded into the runner's daemon for the steps below rather than
+          # pushed, which is also why there is no attestation: a manifest list
+          # carrying one is not a thing `docker compose` can run.
+          load: true
+          provenance: false
+          tags: vaultaffe:ci
+          build-args: |
+            REVISION=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # The two values an operator fills in, generated here and thrown away with
+      # the runner. They protect nothing — this installation holds one account
+      # for the length of a job — but an instance without a usable master key
+      # does not start, which is the behaviour everything below relies on.
+      #
+      # Written and never echoed: a workflow that printed a master key would be
+      # the product rule of `AGENTS.md` broken by this project's own CI.
+      - name: An instance configuration
+        run: |
+          set -euo pipefail
+          umask 077
+          {
+            echo "POSTGRES_PASSWORD=$(openssl rand -base64 24)"
+            echo "VAULTAFFE_MASTER_KEY=$(openssl rand -base64 32)"
+          } > deploy/.env
+
+      - name: Bring the stack up
+        run: docker compose -f deploy/docker-compose.yml up -d --wait
+        env:
+          VAULTAFFE_IMAGE: vaultaffe:ci
+          # Not 80 and 443: nothing here asks for a certificate, and moving them
+          # is the same override an operator behind another proxy uses.
+          VAULTAFFE_HTTP_PORT: "8080"
+          VAULTAFFE_HTTPS_PORT: "8443"
+
+      # Through Caddy, which is the only way in: the instance publishes no port
+      # of its own and is not meant to.
+      - name: It answers, and it is the product rather than only the API
+        run: |
+          set -euo pipefail
+          curl --fail --silent http://localhost:8080/api/handshake | grep -q '"apiVersions"'
+          curl --fail --silent http://localhost:8080/ | grep -q 'id="root"'
+
+      # An installation that has not been started says so, and starting it is
+      # the first run: the one request that needs no credential, and the one
+      # that refuses the second time (ADR 0007).
+      - name: The first run happens, and happens once
+        run: |
+          set -euo pipefail
+          curl --fail --silent http://localhost:8080/api/v1/instance | grep -q '"started":false'
+          curl --fail --silent -X POST http://localhost:8080/api/v1/instance \
+            -H 'content-type: application/json' \
+            -d '{"email":"maintainer@example.test","name":"Maintainer","password":"a-password-of-real-length"}' \
+            -o /dev/null
+          again="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            -X POST http://localhost:8080/api/v1/instance \
+            -H 'content-type: application/json' \
+            -d '{"email":"somebody@example.test","name":"Somebody Else","password":"a-password-of-real-length"}')"
+          test "$again" = "409" || { echo "the second first run answered $again"; exit 1; }
+
+      - name: What the stack said, if any of that failed
+        if: failure()
+        run: docker compose -f deploy/docker-compose.yml logs --no-color
+
+      - name: Take it down
+        if: always()
+        run: docker compose -f deploy/docker-compose.yml down -v

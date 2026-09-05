@@ -3,8 +3,11 @@
 A self-hostable, open-source secrets manager for solo developers and small teams
 that work daily with CLI-based AI agents and operate their own infrastructure.
 
-> **Status: pre-MVP. Vision, specification, and the data model.**
-> Nothing here installs or runs yet — there is a schema and no way in. Read
+> **Status: pre-MVP, but it runs.** `docker compose -f deploy/docker-compose.yml
+> up -d` brings up an instance you can start and use — there is no release to
+> pull yet, so the first `up` builds the image from the checkout. What is still
+> missing before the MVP: a documented backup and restore path, released
+> binaries and images, and the documentation. Read
 > [`Vision.md`](Vision.md) for the product direction,
 > [`Specification.md`](Specification.md) for detailed behavior and architecture,
 > [`docs/codebase.md`](docs/codebase.md) for the layout and

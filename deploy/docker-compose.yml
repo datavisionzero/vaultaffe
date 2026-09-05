@@ -1,0 +1,117 @@
+# The way an instance is run. From `git clone` to a running installation with
+# HTTPS and the first secret in under ten minutes (Specification §11):
+#
+#   cp deploy/.env.example deploy/.env    # and make the two values it asks for
+#   docker compose -f deploy/docker-compose.yml up -d
+#   open http://localhost                 # or the domain in VAULTAFFE_SITE_ADDRESS
+#
+# That last address is the first run: the first person becomes the administrator
+# of the default organization, and it happens exactly once (ADR 0007). Do it now
+# rather than tomorrow — until somebody has, whoever reaches the instance first
+# is the one it happens for.
+#
+# The first `up` builds the image from this checkout, because no release has
+# been published yet; it is a few minutes once. Afterwards, upgrading is
+# `docker compose pull` followed by `docker compose up -d`: migrations apply
+# themselves on startup, only ever forward, so take a dump first — and keep the
+# master key with it, because a dump without the key is worthless
+# (Specification §6.3).
+
+name: vaultaffe
+
+services:
+  # The TLS terminator, and the only service with a published port. Caddy
+  # obtains and renews a certificate on its own for a domain, which is what
+  # makes HTTPS part of "in minutes" rather than a step somebody postpones —
+  # and a token over plain HTTP is a token in a network log (§6.3).
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      # Waited for rather than raced, so that `up -d` returns when the instance
+      # answers rather than when a port is open. On a first start that is the
+      # migrations, and they are worth the half minute.
+      vaultaffe:
+        condition: service_healthy
+    environment:
+      # What this instance answers as, and the whole of the TLS decision.
+      # A domain — `vault.example.org` — makes Caddy fetch a certificate for it
+      # and redirect from port 80. The default `:80` is plain HTTP for whatever
+      # host asked, which is the trial on a laptop and nothing more: the CLI
+      # refuses plain HTTP off loopback unless it is told to (docs/cli.md), so
+      # `localhost` works out of the box and nothing else quietly does.
+      VAULTAFFE_SITE_ADDRESS: "${VAULTAFFE_SITE_ADDRESS:-:80}"
+    ports:
+      # The left half is the whole published port, so an address in front of it
+      # binds there and nowhere else. Certificates are the reason to leave both
+      # alone: the ACME challenge reaches this instance on 80 and 443 from the
+      # public internet, and a domain behind a moved port does not get one.
+      - "${VAULTAFFE_HTTP_PORT:-80}:80"
+      - "${VAULTAFFE_HTTPS_PORT:-443}:443"
+      - "${VAULTAFFE_HTTPS_PORT:-443}:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # The certificates and the account key. Without this volume a restart is a
+      # new certificate, and a few restarts are a rate limit.
+      - caddy-data:/data
+      - caddy-config:/config
+
+  # The API and the web application it serves, which are one image (ADR 0016).
+  # It speaks plain HTTP and only on this network: there is no published port
+  # here, and there is not meant to be one.
+  vaultaffe:
+    image: ${VAULTAFFE_IMAGE:-ghcr.io/datavisionzero/vaultaffe:latest}
+    # Built from the checkout when that image is not on this machine, which is
+    # what makes `git clone` to a running instance one command (§11) — and, until
+    # the first release is published, the only way there is. An installation that
+    # names a released tag in VAULTAFFE_IMAGE pulls it and never builds.
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__Postgres: >-
+        Host=db;Port=5432;Database=vaultaffe;Username=vaultaffe;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+      # The one key an operator holds: 256 bits in base64, under which every
+      # secret's data key is wrapped (Specification §6.3). The instance does not
+      # start without a usable one — the alternative is an instance that accepts
+      # values and cannot open them after the next restart — and it belongs in
+      # the backup beside the dump.
+      Vaultaffe__MasterKey: "${VAULTAFFE_MASTER_KEY:?set VAULTAFFE_MASTER_KEY in deploy/.env}"
+    healthcheck:
+      # The handshake: what this instance is and which versions of the contract
+      # it serves. It is outside the versioned prefix and needs no credential,
+      # and it answers once the migrations have run, because hosted services
+      # start before the server accepts a request.
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:8080/api/handshake"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 30s
+
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: vaultaffe
+      POSTGRES_USER: vaultaffe
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    volumes:
+      # Every value this product holds, sealed. Half of a backup is here and the
+      # other half is VAULTAFFE_MASTER_KEY in deploy/.env; neither half is worth
+      # anything on its own.
+      - vaultaffe-db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vaultaffe -d vaultaffe"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+volumes:
+  vaultaffe-db:
+  caddy-data:
+  caddy-config:

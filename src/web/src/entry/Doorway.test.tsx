@@ -76,23 +76,92 @@ describe("signing in", () => {
     );
   });
 
-  // A reader in front of a fresh installation should read that, rather than
-  // conclude that they typed their password wrongly.
-  it("says when there is no instance to sign in to yet", async () => {
-    installInstance({ "GET /api/v1/instance": { started: false, organizationName: null } });
-
-    renderAt("/login", <Doorway onSignedIn={() => undefined} />);
-
-    expect(await screen.findByText(/has not been started yet/)).toBeInTheDocument();
-    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
-  });
-
   it("says who performs a reset, because nothing here sends an email", async () => {
     installInstance({ "GET /api/v1/instance": started });
 
     renderAt("/login", <Doorway onSignedIn={() => undefined} />);
 
     expect(await screen.findByText(/reset is done by an administrator/)).toBeInTheDocument();
+  });
+});
+
+describe("the first run", () => {
+  const unstarted = { started: false, organizationName: null };
+
+  // A reader in front of a fresh installation gets the one screen it has,
+  // rather than a sign-in form that would read as a password gone wrong.
+  it("is the only screen an unstarted instance has, at whatever address was asked for", async () => {
+    installInstance({ "GET /api/v1/instance": unstarted });
+
+    renderAt("/projects/landing-page/prod", <Doorway onSignedIn={() => undefined} />);
+
+    expect(await screen.findByRole("heading", { name: "Start this instance" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sign in" })).not.toBeInTheDocument();
+  });
+
+  it("lands the first administrator inside, rather than at a sign-in", async () => {
+    const { calls } = installInstance({
+      "GET /api/v1/instance": unstarted,
+      "POST /api/v1/instance": {
+        organizationId: "0199a000-0000-7000-8000-000000000001",
+        organizationName: "Default",
+        session,
+      },
+    });
+
+    const held: string[] = [];
+    renderAt("/start", <Doorway onSignedIn={(token) => held.push(token)} />);
+
+    await userEvent.type(await screen.findByLabelText("Your name"), "Maintainer");
+    await userEvent.type(screen.getByLabelText("Email"), "maintainer@example.test");
+    await userEvent.type(screen.getByLabelText("Password"), "a-password-of-real-length");
+    await userEvent.click(screen.getByRole("button", { name: "Start the instance" }));
+
+    expect(held).toEqual(["vaultaffe_session_thenewone"]);
+
+    const firstRun = calls.find(
+      (call) => call.method === "POST" && new URL(call.url).pathname === "/api/v1/instance",
+    )!;
+    expect(await firstRun.clone().json()).toEqual({
+      email: "maintainer@example.test",
+      name: "Maintainer",
+      password: "a-password-of-real-length",
+    });
+  });
+
+  // The window between `docker compose up` and this form is real and belongs to
+  // the operator, so the screen names it instead of leaving it to a manual.
+  it("says that whoever gets here first is the one it happens for", async () => {
+    installInstance({ "GET /api/v1/instance": unstarted });
+
+    renderAt("/start", <Doorway onSignedIn={() => undefined} />);
+
+    expect(await screen.findByText(/anybody who reaches this instance before you do/)).toBeInTheDocument();
+  });
+
+  it("shows the instance's own sentence when the second one is refused", async () => {
+    installInstance({
+      "GET /api/v1/instance": unstarted,
+      "POST /api/v1/instance": {
+        status: 409,
+        body: {
+          type: "/problems/already-started",
+          title: "already-started",
+          status: 409,
+          code: "already-started",
+          detail: "This instance has already been started. Sign in, or ask an administrator to add you.",
+        },
+      },
+    });
+
+    renderAt("/start", <Doorway onSignedIn={() => undefined} />);
+
+    await userEvent.type(await screen.findByLabelText("Your name"), "Somebody Else");
+    await userEvent.type(screen.getByLabelText("Email"), "somebody@example.test");
+    await userEvent.type(screen.getByLabelText("Password"), "a-password-of-real-length");
+    await userEvent.click(screen.getByRole("button", { name: "Start the instance" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("has already been started");
   });
 });
 

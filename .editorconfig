@@ -24,6 +24,11 @@ indent_size = 2
 indent_style = tab
 indent_size = 4
 
+# And `caddy fmt` decides tabs too, for the one file it owns.
+[Caddyfile]
+indent_style = tab
+indent_size = 4
+
 [*.cs]
 # Namespaces, usings, and the shape of a file
 csharp_style_namespace_declarations = file_scoped:warning

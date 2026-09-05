@@ -54,7 +54,7 @@ more would be a promise the product does not keep.
 
 | route | screen | primary content | narrow-screen behaviour |
 |---|---|---|---|
-| `/start` | First run | organization name, the first person, their password | centred single column; the only screen reachable before an instance is started |
+| `/start` | First run | the first person: their name, address and password | centred single column; the **only** screen an unstarted instance has, and every other address leads to it |
 | `/login` | Sign in | email and password, and the sentence that a reset is done by an administrator | centred single column; it also stands at **any** address a signed-out reader asks for, so signing in lands where they were going |
 | `/invite` | Join | what the link is for, the address it was written to, a name and a password — or the sentence saying it was used, withdrawn or ran out | centred single column; the code is in the fragment and never in a request line |
 | `/device` | Confirm a login | the eight-consonant code, the password, confirm or deny | centred single column; the code field is the first focus |
@@ -83,6 +83,18 @@ organization sees and changes everything in it
 ([§6.4](../Specification.md#64-permissions-in-the-mvp)) — the only line is the
 short list of administrative acts, and hiding a control is never the
 authorization check.
+
+**`/start` is where an unstarted instance sends everybody**, rather than an
+offer made on the sign-in screen. There is nobody to sign in as and nothing to
+come back to, so a form asking for a password would only read as a password that
+went wrong. It takes no organization name: the MVP's one organization is called
+Default and is renamed in Settings
+([§6.1](../Specification.md#61-web-ui)), so the first run asks for the person
+and nothing else — which is also the shape `vaultaffe instance start` has, and
+one fewer thing for the two of them to disagree about. The screen also says
+that whoever reaches the instance first is the one it happens for
+([ADR 0007](./adr/0007-the-first-run-is-unauthenticated-and-happens-once.md)) —
+that window is the operator's to close, and only by doing it now.
 
 **`/login` and `/invite` are not inside the shell either**, and for the same
 reason: there is no session behind them yet. `/invite` is its own address because

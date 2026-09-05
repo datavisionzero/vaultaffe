@@ -289,9 +289,11 @@ Properties that matter to us:
 
 ### 6.3 Operations
 
-- One `docker-compose.yml`: backend, frontend, Postgres, and **Caddy** as the TLS
-  terminator. One `.env` for instance configuration (including the master
-  encryption key).
+- One `docker-compose.yml`: the instance, Postgres, and **Caddy** as the TLS
+  terminator. The frontend is not a service of its own — it is built into the
+  instance's image and served by it, so the browser reaches the API at its own
+  origin ([ADR 0016](docs/adr/0016-one-image-and-caddy-in-front-of-it.md)). One
+  `.env` for instance configuration (including the master encryption key).
 - **TLS is part of "in minutes".** A token over plain HTTP is a token in the
   network log. Caddy obtains certificates automatically for a domain; the backend
   itself speaks only HTTP on the compose-internal network. The CLI refuses plain

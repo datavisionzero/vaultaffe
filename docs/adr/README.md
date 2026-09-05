@@ -46,3 +46,4 @@ material value to understanding the decision.
 - [0013 – The web application is the sister project's frame](./0013-the-web-application-is-the-sister-projects-frame.md)
 - [0014 – The browser holds its session for as long as the tab](./0014-the-browser-holds-its-session-for-as-long-as-the-tab.md)
 - [0015 – An invitation is a credential in a link](./0015-an-invitation-is-a-credential-in-a-link.md)
+- [0016 – One image, and Caddy in front of it](./0016-one-image-and-caddy-in-front-of-it.md)

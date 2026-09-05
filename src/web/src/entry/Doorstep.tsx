@@ -8,13 +8,18 @@ import type { ReactNode } from "react";
  * They have no sidebar and no account menu because there is no session behind
  * them yet — that is the whole difference between these screens and every other
  * one, and it is a frame rather than a flag.
+ *
+ * The title is optional for the one screen that has nothing to put in it yet:
+ * while the door is still asking the instance which of its screens applies,
+ * what stands here is the wordmark and a sentence, and naming it would mean
+ * naming a screen that may turn out to be the other one.
  */
 export function Doorstep({
   title,
   meta,
   children,
 }: {
-  title: string;
+  title?: string;
   meta?: string;
   children: ReactNode;
 }) {
@@ -25,7 +30,7 @@ export function Doorstep({
           <span aria-hidden className="size-4.5 rounded-sm bg-brand" />
           vaultaffe
         </div>
-        <h1 className="text-lg font-semibold">{title}</h1>
+        {title !== undefined && <h1 className="text-lg font-semibold">{title}</h1>}
         {meta !== undefined && <p className="mb-5 text-sm text-muted-foreground">{meta}</p>}
         <div className={meta === undefined ? "mt-5" : undefined}>{children}</div>
       </div>

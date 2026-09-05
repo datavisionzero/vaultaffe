@@ -1,0 +1,18 @@
+# What stands in front of the instance, and the whole of the TLS decision.
+#
+# The site address is one variable (`VAULTAFFE_SITE_ADDRESS` in deploy/.env):
+# a domain makes Caddy obtain and renew a certificate for it on its own and
+# redirect port 80 to it, and the default `:80` is plain HTTP for a trial on
+# loopback. There is no third case and no certificate to install by hand —
+# that is why Caddy is here rather than a proxy that would need one.
+
+{$VAULTAFFE_SITE_ADDRESS} {
+	# The instance speaks plain HTTP and only on the compose network
+	# (Specification §6.3). This is the one hop that is not encrypted, and it
+	# does not leave the host.
+	reverse_proxy vaultaffe:8080
+
+	# The API answers JSON and the application is a handful of static files;
+	# both compress well and neither is large enough for it to matter much.
+	encode zstd gzip
+}

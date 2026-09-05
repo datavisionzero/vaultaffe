@@ -28,8 +28,10 @@ the device-code login, and the prefix table that says what a directory means
 people of the organization, the catalogue screens the product is used on, and
 what makes a change legible and reversible — the log, the value history with its
 rollback, and the purge only a person may ask for
-([`human-interface.md`](./human-interface.md)) — and the workflow that builds
-and tests all three. This
+([`human-interface.md`](./human-interface.md)) — and, under
+[`deploy/`](../deploy/), the way all of it is actually run: one image, Caddy in
+front of it, and the first run that turns an installation into an organization —
+and the workflow that builds, tests and then starts all three. This
 document is kept accurate from here on: a file that lands somewhere it does not
 describe means one of the two is wrong.
 
@@ -46,6 +48,11 @@ carries two of them.
 ```
 vaultaffe/
 ├─ .github/workflows/          ci on every push
+├─ deploy/                     how an instance is actually run
+│  ├─ Dockerfile               one image: the API and the SPA it serves
+│  ├─ docker-compose.yml       the instance, Postgres, and Caddy in front
+│  ├─ Caddyfile                the site address, and the whole TLS decision
+│  └─ .env.example             the two values an operator fills in
 ├─ docs/                       the decisions, and this
 │  ├─ adr/
 │  ├─ api.md                   the HTTP surface: versions, headers, the shape of a refusal
@@ -72,11 +79,17 @@ invent something more descriptive.
 
 Documents that describe a surface — the data model, the HTTP API, the CLI, the
 screens, running an instance — get their own file under `docs/` as that surface
-arrives. Writing the empty files now would only invite them to drift. Two are
+arrives. Writing the empty files now would only invite them to drift. Four are
 here so far: [`storage.md`](./storage.md), [`api.md`](./api.md),
 [`cli.md`](./cli.md) and [`human-interface.md`](./human-interface.md) — the last
 of them written *before* its surface exists, which is deliberate: the screens are
 held together by that document rather than by their components.
+
+The fifth is the one still missing: an operations guide, which needs backup and
+restore beside it to be worth reading and arrives with them. Until it does, what
+an operator has to decide is in the comments of the files they edit — one
+`docker-compose.yml` and one `.env.example`, which is where somebody setting an
+instance up is actually looking.
 
 ## The four layers
 
@@ -281,11 +294,13 @@ data and is not remounted by navigation, which is what makes a loading state a
 skeleton inside a frame rather than a blank page.
 
 The screens sit beside the frame, one directory per part of the matrix.
-`src/entry/` is what a tab that is nobody can reach — signing in, and accepting
-an invitation — and neither is inside the shell, because there is no session
-behind them yet. `src/catalogue/` is the product itself: the projects, one
-project, the environment screen and one key, with that key's own history beside
-its value. `src/changes/` is the change log: the screen, and the entries it
+`src/entry/` is what a tab that is nobody can reach — the first run, signing in,
+and accepting an invitation — and none of them is inside the shell, because there
+is no session behind them yet. `Doorway` is the one that asks which: an
+installation nobody has started has **only** `entry/FirstRun.tsx`, at `/start`,
+and every other address leads there. `src/catalogue/` is the product itself: the
+projects, one project, the environment screen and one key, with that key's own
+history beside its value. `src/changes/` is the change log: the screen, and the entries it
 shares with the key that is read on its own. `src/settings/` is the area list
 beside the area: the tokens, the people, the organization's one word, and the
 two things a person changes about themselves. `src/shared/` holds what more than one of them needs — the
@@ -338,6 +353,46 @@ static files with everything unclaimed falling back to `index.html`. One
 its own origin; in development Vite serves the SPA and forwards `/api`,
 `/openapi`, `/problems` and `/device` to the instance so that stays true there
 too.
+
+## The stack is three services, and one of them is the product
+
+`deploy/` is how an instance is run, and the shape of it is
+[ADR 0016](./adr/0016-one-image-and-caddy-in-front-of-it.md): **one image
+carrying the API and the built SPA**, Postgres behind it, and Caddy in front as
+the TLS terminator. There is no frontend service. The application is served from
+the `wwwroot` the Vite build lands in, so the browser reaches the API at its own
+origin and there is no address to configure, no origin to allow, and no way for
+the two halves of a release to be different builds.
+
+`Dockerfile` is three stages and the two toolchains meet in it and nowhere else:
+Node builds the SPA — generating its API layer from the checked-in contract
+first, exactly as a contributor's `npm run build` does (ADR 0006) — the .NET SDK
+publishes the API, and the runtime image carries neither of them. It runs as the
+non-root user the base image provides and writes nothing: the master key is held
+in memory, and everything durable is Postgres's volume.
+
+`docker-compose.yml` is the whole installation. Two values are the operator's —
+the database password and the master key — and both live in `deploy/.env`, which
+is ignored by git and is the one file in this product that is *expected* to hold
+key material. The instance publishes no port: Caddy is the only way in, which is
+what makes "the backend speaks only HTTP on the internal network"
+([§6.3](../Specification.md#63-operations)) a property of the file rather than a
+sentence in a guide.
+
+`Caddyfile` holds one variable and therefore one decision. A domain in
+`VAULTAFFE_SITE_ADDRESS` and Caddy obtains and renews a certificate for it; left
+at `:80` it is plain HTTP for a trial on a laptop, which is safe because the CLI
+refuses plain HTTP off loopback unless it is told otherwise
+([`cli.md`](./cli.md)) — so `localhost` works out of the box and nothing else
+quietly does.
+
+What an operator does after `up -d` is the **first run**, and it is a screen
+rather than a variable: no bootstrap administrator in the environment, because
+the first user is created by the one unauthenticated request there is and the
+second such request is refused
+([ADR 0007](./adr/0007-the-first-run-is-unauthenticated-and-happens-once.md)).
+The window between the two is real, and `entry/FirstRun.tsx` says so on the
+screen where it can still be closed.
 
 ## Tests are split by what they need
 
@@ -433,8 +488,15 @@ checked in
 `ContractTests` makes the same comparison from the other side, which is
 deliberate — the capture and the test check each other.
 
-The image is not in it yet. It would have to settle a question another ticket
-owns, and it arrives in the commit that creates its subject.
+The last job is not a toolchain at all. It builds the image and brings
+`deploy/docker-compose.yml` up — Caddy, the instance, Postgres — and then asks
+the running stack the three questions no test inside any of the three languages
+can answer: that the handshake replies through the proxy, that what is served at
+`/` is the application rather than only the API, and that the first run happens
+once and the second is refused. That is the success criterion of `git clone` to a
+running instance ([§11](../Specification.md#11-success-criteria-for-the-mvp)),
+checked on every commit rather than remembered before a release. It pushes nothing:
+publishing an image is a release and happens from a tag.
 
 ## What is deliberately not here
 
