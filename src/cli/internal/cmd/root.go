@@ -95,7 +95,9 @@ func report(root *cobra.Command, stderr io.Writer, err error) int {
 // organization and its users is a screen and not a command, and inventing one
 // here would be exactly the failure the ADR is about.
 var humanCommands = map[string]string{
-	"export": "secrets export",
+	"export":       "secrets export",
+	"create-token": "tokens create",
+	"revoke-token": "tokens revoke",
 }
 
 func advice(root *cobra.Command, action string) string {
@@ -142,7 +144,7 @@ func newRoot(env Env) *cobra.Command {
 		return &config.UsageError{Message: err.Error()}
 	})
 
-	root.AddCommand(newLogin(g), newLogout(g), newSetup(g), newStatus(g), newInstance(g), newRun(g), newSecrets(g), newChanges(g))
+	root.AddCommand(newLogin(g), newLogout(g), newSetup(g), newStatus(g), newInstance(g), newRun(g), newSecrets(g), newChanges(g), newProjects(g), newEnvironments(g), newTokens(g))
 	g.root = root
 	return root
 }
@@ -257,6 +259,34 @@ func (g *globals) bound() (config.Resolved, *client.Client, error) {
 
 	c, err := client.New(resolved.Address, resolved.Token, g.httpClient())
 	return resolved, c, err
+}
+
+// inProject is what a command about a project starts with: the address, the
+// token, and which project — and no environment, because it does not need one.
+func (g *globals) inProject() (config.Resolved, *client.Client, error) {
+	in, err := g.input()
+	if err != nil {
+		return config.Resolved{}, nil, err
+	}
+
+	address, err := in.ResolveAddress()
+	if err != nil {
+		return config.Resolved{}, nil, err
+	}
+	token, from, err := in.ResolveToken(address)
+	if err != nil {
+		return config.Resolved{}, nil, err
+	}
+	project, projectFrom, err := in.ResolveProject()
+	if err != nil {
+		return config.Resolved{}, nil, err
+	}
+
+	c, err := client.New(address, token, g.httpClient())
+	return config.Resolved{
+		Address: address, Token: token, TokenFrom: from,
+		Project: project, ProjectFrom: projectFrom,
+	}, c, err
 }
 
 // anonymous is what `login` and the first run start with: an address and no

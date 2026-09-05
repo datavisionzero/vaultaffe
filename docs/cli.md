@@ -11,8 +11,12 @@ command, where a token and a binding come from, and what an exit code means.
 
 **Most of it does not exist yet.** What has landed is the skeleton and the two
 commands that come before all the others — `login`, `setup`, and the first run —
-`run` itself, and the secrets surface. The catalogue and token creation have
-their own tickets, and this file is kept accurate as each lands.
+`run` itself, the secrets surface, and as much of the catalogue as it takes to
+bring an instance up from the console. Complete CLI parity for human
+administration is explicitly **not** a goal of the MVP
+([§6.6](../Specification.md#66-build-order), [§12](../Specification.md#12-afterwards-outlook-not-mvp)):
+what is missing here is missing on purpose, and no refusal ever offers it as a
+command that does not exist.
 
 ## The two rules that hold everywhere
 
@@ -49,6 +53,10 @@ vaultaffe secrets import         read a .env from stdin
 vaultaffe secrets export         write one out — a person only
 vaultaffe secrets versions       when a key was written, never what it held
 vaultaffe secrets rollback       put an earlier value back without reading it
+
+vaultaffe projects               the catalogue: list, create, delete, restore
+vaultaffe environments           the environments of a project: the same four
+vaultaffe tokens                 list; create and revoke, which are a person's alone
 
 vaultaffe changes                what was changed, by whom, and by what kind of thing
 ```
@@ -242,6 +250,46 @@ moment, an action, the names it happened to, and the acting identity **with its
 type**: `human-session`, `service-token` or `agent-token`. Reads are not in it. By
 default it asks about this directory's binding; `--everywhere` asks about the
 whole organization and needs a token that reaches it.
+
+## The catalogue, and getting an agent its token
+
+```sh
+vaultaffe projects create billing                    # dev, staging and prod come with it
+vaultaffe projects create billing --no-environments  # the explicit empty list
+vaultaffe environments create review --project billing
+vaultaffe projects delete billing                    # recoverable, with its subtree
+vaultaffe projects restore billing
+```
+
+Creating a project needs a token that reaches the whole organization, and none
+of it is human-only: creating projects and environments is something an agent
+may do. Deleting is recoverable and nothing cascades — the subtree is retained
+and comes back as it was, not as it would have been — and the name stays
+reserved for the whole window, which is the answer to "I deleted it, why can I
+not recreate it".
+
+```sh
+vaultaffe tokens                                       # id, kind, name, scopes, standing
+vaultaffe tokens create "the deploy agent" --kind agent
+vaultaffe tokens create "ci" --kind service --project billing --environment prod --scopes names,read
+vaultaffe tokens revoke <id>
+```
+
+**This is how an agent gets a token at all**: a person creates one under their
+own session and hands it over in `VAULTAFFE_TOKEN`. Creating and revoking are
+human-only, because a token is itself a secret and one created under an agent's
+own token would be printed straight into that agent's context. Listing is not:
+a revocation list an agent cannot read is not one.
+
+**The value is printed exactly once**, by the command that created it, and the
+sentence beside it says so. Scopes omitted mean the default of the kind —
+everything for an agent token, because the point is attribution and not
+restriction, and `names` plus `read` for a service token.
+
+`--project` and `--environment` narrow the binding and have to be passed here
+**explicitly**. The directory you happen to be standing in does not silently
+narrow a token, and the names are turned into ids by a lookup, so a mistyped
+environment is answered against the ones that exist.
 
 ## The version exchange
 

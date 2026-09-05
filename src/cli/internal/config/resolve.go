@@ -215,3 +215,22 @@ func bindingValue(bound bool, value string) string {
 	}
 	return value
 }
+
+// ResolveProject answers the project alone, for the commands that are about a
+// project rather than about something inside an environment. The environment
+// half of the binding is not required and not complained about.
+func (in Input) ResolveProject() (string, string, error) {
+	binding, bound := in.File.BindingFor(in.Dir)
+
+	project, from := first(
+		source{strings.TrimSpace(in.Project), "--project"},
+		source{strings.TrimSpace(in.getenv(EnvProject)), EnvProject},
+		source{bindingValue(bound, binding.Project), "the binding for " + binding.Directory},
+	)
+	if project == "" {
+		return "", "", &UsageError{fmt.Sprintf(
+			"no project: pass --project <name>, bind %s with `vaultaffe setup`, or set %s.",
+			in.Dir, EnvProject)}
+	}
+	return project, from, nil
+}

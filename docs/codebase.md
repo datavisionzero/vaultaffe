@@ -205,6 +205,13 @@ and `get` is the one command whose purpose is to put a value where somebody can
 see it — which is why it takes one key and no pattern. Its tests are the same
 list from the other side.
 
+Beside it is as much of the catalogue as bringing an instance up from the console
+takes, and the one command that turns names into ids: a token binding is by id
+and everything else in this CLI is by name, so `tokens create` looks the project
+up rather than asking anybody for a UUID. What it deliberately does **not** do is
+read the directory's own binding — a token narrowed by where somebody happened to
+be standing would be a surprise nobody could see in the command they typed.
+
 It ships as its own release artifact,
 one binary per platform, and is versioned with the server it was cut from: the
 tag sets `-ldflags -X …/internal/version.Value` here and `-p:Version=` on the
