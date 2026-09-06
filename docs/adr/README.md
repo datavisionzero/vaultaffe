@@ -48,3 +48,4 @@ material value to understanding the decision.
 - [0015 – An invitation is a credential in a link](./0015-an-invitation-is-a-credential-in-a-link.md)
 - [0016 – One image, and Caddy in front of it](./0016-one-image-and-caddy-in-front-of-it.md)
 - [0017 – A backup is one file, and it holds the key](./0017-a-backup-is-one-file-and-it-holds-the-key.md)
+- [0018 – There is no offline cache](./0018-there-is-no-offline-cache.md)

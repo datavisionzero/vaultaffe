@@ -188,6 +188,14 @@ read for a process that is not going to start.
 **`--` separates the two command lines.** Flags stop at the command, so
 `run -- npm run dev --json` passes `--json` to npm.
 
+**There is no offline mode, and no cached copy of anything.** Every `run` asks
+the instance, and an instance that cannot be reached is exit code `10` naming
+the address. That is a decision rather than an omission
+([ADR 0018](./adr/0018-there-is-no-offline-cache.md)): the reading costs about
+half a second for fifty keys across a slow link, and a cache would put a
+plaintext file back on the disk this product exists to clear. When a file is
+genuinely what is wanted, `secrets export` makes one on purpose.
+
 Two exit codes are the shell's rather than this table's, because `exec()` takes a
 path and `run` resolves it: **127** for a command that is not on the `PATH`, and
 **126** for one that is there and not executable. Everything after the call is

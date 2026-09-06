@@ -649,13 +649,19 @@ and it should never be sold as one. Three points remain, and they hold:
   lookup with 126 and 127, and the environment it hands over.
 - Doppler's API reference was consistently blocked by Cloudflare; the HTTP field
   names are evidenced only from the Go structs in the CLI.
-- A fallback cache for offline operation: whether we want one in the MVP at all.
-  Doppler's caching apparatus is explained retroactively by its API limits —
-  secret reads are rate-limited separately (120–480/min) and every `run` is a read.
-  As self-hosters we simply do not have that problem; for us it would purely be
-  about working offline. If we do build it, then deliberately unlike Doppler:
-  its file derives the key from `token:project:config`, has no expiry, and a
-  revoked token does not lock the machine out.
+- ~~A fallback cache for offline operation: whether we want one in the MVP at
+  all.~~ **Answered — no.**
+  [ADR 0018](docs/adr/0018-there-is-no-offline-cache.md). Doppler's caching
+  apparatus is explained retroactively by its API limits — secret reads are
+  rate-limited separately (120–480/min) and every `run` is a read. As
+  self-hosters we do not have that problem, and the measurement says so: a `run`
+  over 50 keys costs 0.45 s across a 40 ms link and 0.06 s on the same machine.
+  What is left is offline work alone, against a plaintext file on every
+  developer's disk — the file §11 asks a team to delete. Of the three things the
+  reference implementation gets wrong, the third has no client-side answer at
+  all: a cache a revoked token can still open is a credential that outlives its
+  revocation. Being unreachable stays what it is today, a named refusal with
+  exit code 10.
 - Whether shared team secrets alone cover the initial audience's needs (§5).
   Frequent `dev-<firstname>` environments can indicate demand for individual
   values. Environment inheritance alone would not provide privacy; any later
