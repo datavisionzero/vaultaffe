@@ -9,14 +9,17 @@ and inside an agent's container.
 This file says what the command help cannot: which rules hold across every
 command, where a token and a binding come from, and what an exit code means.
 
-**Most of it does not exist yet.** What has landed is the skeleton and the two
-commands that come before all the others — `login`, `setup`, and the first run —
-`run` itself, the secrets surface, and as much of the catalogue as it takes to
-bring an instance up from the console. Complete CLI parity for human
-administration is explicitly **not** a goal of the MVP
-([§6.6](../Specification.md#66-build-order), [§12](../Specification.md#12-afterwards-outlook-not-mvp)):
-what is missing here is missing on purpose, and no refusal ever offers it as a
-command that does not exist.
+**All of it is here.** The two commands that come before all the others —
+`login`, `setup`, and the first run — `run` itself, the secrets surface, the
+catalogue, and, since the stage after the MVP, the administration that used to be
+the browser's alone: the people of the organization, its name, and purge at each
+of the levels ([§6.6](../Specification.md#66-build-order) stage 3). Parity was
+explicitly **not** an MVP gate, and while it was missing the rule was that no
+refusal ever offers a command that does not exist. That rule did not change when
+the commands arrived: the table mapping a refused action to a command is still
+checked against the real command tree, so an entry outliving its command says
+"this CLI has no command for it" rather than naming something that is gone
+([ADR 0010](./adr/0010-a-refusal-names-the-action-and-the-client-names-the-command.md)).
 
 ## The two rules that hold everywhere
 
@@ -53,10 +56,22 @@ vaultaffe secrets import         read a .env from stdin
 vaultaffe secrets export         write one out — a person only
 vaultaffe secrets versions       when a key was written, never what it held
 vaultaffe secrets rollback       put an earlier value back without reading it
+vaultaffe secrets access         who has read a key, first and last — never what
+vaultaffe secrets missing        keys the sibling environments have and this one has not
+vaultaffe secrets missing dismiss  say "not here", and --undo takes it back
+vaultaffe secrets purge          remove a deleted key for good — a person only
+vaultaffe secrets purge-history  remove what a key used to hold — a person only
 
-vaultaffe projects               the catalogue: list, create, delete, restore
-vaultaffe environments           the environments of a project: the same four
+vaultaffe projects               the catalogue: list, create, delete, restore, purge
+vaultaffe environments           the environments of a project: the same five
 vaultaffe tokens                 list; create and revoke, which are a person's alone
+
+vaultaffe users                  the people of the organization — an administrator only
+vaultaffe users invite           write an invitation and print its link, once
+vaultaffe users password         set somebody's password, from stdin
+vaultaffe users deactivate       take somebody out; reactivate puts them back
+vaultaffe invitations            the ones written, and withdraw
+vaultaffe organization           what this organization is called; rename it
 
 vaultaffe changes                what was changed, by whom, and by what kind of thing
 ```
@@ -253,6 +268,20 @@ moments; `secrets rollback` puts one back and is an ordinary write available to 
 agent — an agent that wrecked a value overnight is exactly who needs an undo
 button — and nothing is opened to do it.
 
+**`vaultaffe secrets missing`** is the notice: keys **more than half** of this
+project's other environments hold and this one has not, with the environments
+that have them on the line so the reason is visible rather than taken. It
+displays and does not act — no command here creates a key. `secrets missing
+dismiss KEY` says "not here" and it stays said, per key and per environment;
+`--undo` takes it back, and `--dismissed` lists what was silenced. The comparison
+runs only over environments this token reaches, so a token bound to one gets
+nothing here rather than a filtered answer.
+
+**`vaultaffe secrets access KEY`** is who has read it: an identity with its kind,
+and the first and last time it did. Two moments and **no count** — a value read
+does not prove that anything started with it, and a number here would read as
+though it did.
+
 **`vaultaffe changes` is the log**, which holds no value at all. An entry is a
 moment, an action, the names it happened to, and the acting identity **with its
 type**: `human-session`, `service-token` or `agent-token`. Reads are not in it. By
@@ -298,6 +327,67 @@ restriction, and `names` plus `read` for a service token.
 **explicitly**. The directory you happen to be standing in does not silently
 narrow a token, and the names are turned into ids by a lookup, so a mistyped
 environment is answered against the ones that exist.
+
+## The people of the organization, and its name
+
+```sh
+vaultaffe users                                        # address, name, role, standing
+vaultaffe users invite somebody@example.test --name "Somebody"
+vaultaffe users password somebody@example.test < /dev/stdin
+vaultaffe users deactivate somebody@example.test       # reactivate puts them back
+vaultaffe invitations                                  # and `invitations withdraw <id>`
+vaultaffe organization rename "Datavision Zero"
+```
+
+Everything here needs a **session** and an administrator behind it: who may be in
+this organization is a decision about people
+([§6.4](../Specification.md#64-permissions-in-the-mvp)), and an agent that could
+invite one could invite itself a second identity. An agent token is refused with
+`human-only`, and the sentence it gets names `vaultaffe users`.
+
+**A person is named by their address**, not by an id. Everything a person types
+in this CLI is a name — a project, an environment, a key — and an address is what
+somebody here is known by; the id the API takes is looked up, the way a token's
+binding looks up a project. An address nobody here has is a usage error that
+names the ones there are, because the listing that would have answered it has
+already been read.
+
+**The instance sends no email**, which is the price of having no external
+dependency to operate. So an invitation is a link to hand over: it is printed
+**once**, alone on stdout because it is a credential, with the code in the
+fragment so that a working invitation never reaches an access log. An invitation
+that was lost is withdrawn and written again. A password reset is an
+administrator setting one, and the password comes off **stdin** for the reason
+every value in this CLI does:
+
+```sh
+pwgen -s 24 1 | vaultaffe users password somebody@example.test
+```
+
+## Purge
+
+```sh
+vaultaffe secrets purge-history STRIPE_KEY   # the key stays; what it used to hold goes
+vaultaffe secrets purge STRIPE_KEY           # a deleted key, and everything it held
+vaultaffe environments purge review
+vaultaffe projects purge billing
+```
+
+The one deletion this product cannot undo, and a person's alone
+([§6.5](../Specification.md#65-logging-and-history)): in an agent's hands it
+would be anti-forensics. The first line is the headline case — after a suspected
+compromise a key's history genuinely disappears, while the key and the value it
+holds now stay.
+
+The other three end a recovery window early rather than deleting anything: the
+object has to be deleted already. **Nothing prompts.** A prompt in an agent's
+terminal is a command that hangs, and this CLI is never interactive; what makes a
+purge deliberate here is that it was typed, and what makes it safe is that only a
+session can do it.
+
+Each of them says how many retained values are gone — the number somebody wants
+after a compromise — and then the sentence no product we looked at says out loud:
+**last night's backup still has what this removed.**
 
 ## The version exchange
 

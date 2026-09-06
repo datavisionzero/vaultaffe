@@ -250,12 +250,21 @@ and `get` is the one command whose purpose is to put a value where somebody can
 see it — which is why it takes one key and no pattern. Its tests are the same
 list from the other side.
 
-Beside it is as much of the catalogue as bringing an instance up from the console
-takes, and the one command that turns names into ids: a token binding is by id
-and everything else in this CLI is by name, so `tokens create` looks the project
-up rather than asking anybody for a UUID. What it deliberately does **not** do is
-read the directory's own binding — a token narrowed by where somebody happened to
-be standing would be a surprise nobody could see in the command they typed.
+Beside it is the catalogue, and the one command that turns names into ids: a
+token binding is by id and everything else in this CLI is by name, so
+`tokens create` looks the project up rather than asking anybody for a UUID. What
+it deliberately does **not** do is read the directory's own binding — a token
+narrowed by where somebody happened to be standing would be a surprise nobody
+could see in the command they typed.
+
+`people.go`, `purge.go` and `notice.go` are the stage after the MVP: the people
+of the organization and its name, purge at each of the three levels and once more
+for a key's history, and the two things a key's screen says that the console had
+no word for. They turn the same lookup trick on people — a person is named by
+their address here, and the id the API takes is looked up — and they are what
+finally let `administer-organization` and `purge` into the `humanCommands` table,
+which had been deliberately without them for as long as there was nothing to
+name.
 
 It ships as its own release artifact,
 one binary per platform, and is versioned with the server it was cut from: the

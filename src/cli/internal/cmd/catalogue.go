@@ -14,11 +14,13 @@ import (
 	"github.com/datavisionzero/vaultaffe/src/cli/internal/render"
 )
 
-// The catalogue commands are as much administration as Stage 1 needs to bring an
-// instance up from the console: create, list, delete and restore. Complete CLI
-// parity for human administration is explicitly not a goal of this stage and not
-// an MVP gate (Specification §6.6, §12) — what is missing here is missing on
-// purpose, and no refusal offers it as a command that does not exist.
+// The catalogue commands: create, list, delete, restore — and, since the stage
+// after the MVP, purge. They were as much administration as Stage 1 needed to
+// bring an instance up from the console, and complete CLI parity for human
+// administration was explicitly not an MVP gate (Specification §6.6, §12); it is
+// what §6.6 stage 3 asked for and what `people.go`, `purge.go` and `notice.go`
+// finish. The rule that held while it was missing holds anyway: no refusal ever
+// offers a command that does not exist.
 
 func newProjects(g *globals) *cobra.Command {
 	var deleted bool
@@ -33,7 +35,7 @@ func newProjects(g *globals) *cobra.Command {
 		},
 	}
 	command.Flags().BoolVar(&deleted, "deleted", false, "what is deleted and still recoverable, instead")
-	command.AddCommand(newProjectsCreate(g), newProjectsDelete(g), newProjectsRestore(g))
+	command.AddCommand(newProjectsCreate(g), newProjectsDelete(g), newProjectsRestore(g), newProjectsPurge(g))
 	return command
 }
 
@@ -210,7 +212,7 @@ func newEnvironments(g *globals) *cobra.Command {
 		},
 	}
 	command.Flags().BoolVar(&deleted, "deleted", false, "what is deleted and still recoverable, instead")
-	command.AddCommand(newEnvironmentsCreate(g), newEnvironmentsDelete(g), newEnvironmentsRestore(g))
+	command.AddCommand(newEnvironmentsCreate(g), newEnvironmentsDelete(g), newEnvironmentsRestore(g), newEnvironmentsPurge(g))
 	return command
 }
 

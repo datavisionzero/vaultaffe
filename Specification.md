@@ -212,9 +212,12 @@ vaultaffe secrets export --format env # human sessions only — see below
 That is the secrets surface, not the whole CLI. The MVP also supports projects
 and environments (create, list, delete, restore), secret restore and rollback,
 and token creation for initial setup under a human session. Complete CLI coverage
-of human administration and the missing-key notice follow after MVP (§12).
-All implemented human-only commands require a session token, with a clear error
-otherwise; an unavailable CLI command must not be suggested as a recovery step.
+of human administration — the people of the organization, its name, and purge at
+each level — and the missing-key notice followed after MVP, as §6.6 stage 3 said.
+All human-only commands require a session token, with a clear error otherwise; an
+unavailable CLI command must not be suggested as a recovery step, and the mapping
+from a refused action to a command is checked against the command tree so that it
+cannot become one.
 
 Properties that matter to us:
 
@@ -435,7 +438,9 @@ by an optional post-MVP stage:
    and documented backup/restore. The MVP ships when this core journey and §11
    work; complete administrative CLI parity is not required.
 3. **After MVP.** Missing-key notices with dismissal, first/last access summaries,
-   and full CLI parity for human administration. These do not gate release.
+   and full CLI parity for human administration. These do not gate release. The
+   offline cache was the fourth item and was a spike: the answer is no
+   ([ADR 0018](docs/adr/0018-there-is-no-offline-cache.md)).
 
 ## 7. Explicitly not in the MVP
 
@@ -701,9 +706,11 @@ and it should never be sold as one. Three points remain, and they hold:
 
 ## 12. Afterwards (outlook, not MVP)
 
-First complete the deferred convenience features from §6.6: missing-key notices
-with dismissal, first/last access summaries, and administrative CLI parity.
-Then, roughly in this order:
+The deferred convenience features from §6.6 are **done**: missing-key notices
+with dismissal, first/last access summaries, and administrative CLI parity. So
+was the fourth item of that stage, and its answer was no — there is no offline
+cache ([ADR 0018](docs/adr/0018-there-is-no-offline-cache.md)). What is left is
+outlook, roughly in this order:
 
 1. Multiple organizations in the UI, and switching between them.
 2. An MCP server as the official agent interface alongside the CLI — value-blind

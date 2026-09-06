@@ -211,6 +211,8 @@ the same rules draw the screens and refuse the requests.
 | Create a project or an environment | yes | with `write`, reaching the organization | with `write`, reaching the organization |
 | Roll back to an earlier version | yes | with `write` | with `write` |
 | Read the change log | yes | yes, narrowed by its binding | yes, narrowed by its binding |
+| Read who has read a key | yes | with `names` | with `names` |
+| See the missing-key notice, and dismiss a line | yes | `names` to see, `write` to dismiss, over its binding | the same |
 | **Purge** a history or a deleted object | yes | **no** | **no** |
 | **Create or revoke** a token | yes | **no** | **no** |
 | **Export** an environment | yes | **no** | **no** |
@@ -220,7 +222,8 @@ The four rows in bold are the short list, and **being human-only is not a
 permission a token can be given**: an agent carrying every scope there is is
 still refused. The refusal names the action and never a command; this
 application turns it into the screen it has, exactly as the CLI turns it into the
-command it has
+command it has — and since the stage after the MVP the CLI has a command for
+every row in bold
 ([ADR 0010](./adr/0010-a-refusal-names-the-action-and-the-client-names-the-command.md)).
 Where an action is one a person may do and this reader may not — administering
 the organization without being an administrator — the control is disabled with

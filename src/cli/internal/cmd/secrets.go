@@ -43,6 +43,10 @@ func newSecrets(g *globals) *cobra.Command {
 		newSecretsExport(g),
 		newSecretsVersions(g),
 		newSecretsRollback(g),
+		newSecretsAccess(g),
+		newSecretsMissing(g),
+		newSecretsPurge(g),
+		newSecretsPurgeHistory(g),
 	)
 	return command
 }

@@ -91,13 +91,21 @@ func report(root *cobra.Command, stderr io.Writer, err error) int {
 // suggestion to run something that does not exist
 // ([ADR 0010](../../../../docs/adr/0010-a-refusal-names-the-action-and-the-client-names-the-command.md)).
 //
-// `administer-organization` is deliberately absent: administering the
-// organization and its users is a screen and not a command, and inventing one
-// here would be exactly the failure the ADR is about.
+// `administer-organization` was deliberately absent while there was no command
+// for it, because inventing one would have been exactly the failure the ADR is
+// about. It is here now, and `advice` still asks the tree rather than trusting
+// this table.
+//
+// `purge` maps to one of four commands, and the table names the one an agent is
+// most likely to have been refused: purging a key's history is the case §6.5 is
+// written for. `advice` says "a person does this with …" rather than "the only
+// way is …", so naming one of a family is a signpost and not a claim.
 var humanCommands = map[string]string{
-	"export":       "secrets export",
-	"create-token": "tokens create",
-	"revoke-token": "tokens revoke",
+	"export":                  "secrets export",
+	"create-token":            "tokens create",
+	"revoke-token":            "tokens revoke",
+	"purge":                   "secrets purge-history",
+	"administer-organization": "users",
 }
 
 func advice(root *cobra.Command, action string) string {
@@ -144,7 +152,7 @@ func newRoot(env Env) *cobra.Command {
 		return &config.UsageError{Message: err.Error()}
 	})
 
-	root.AddCommand(newLogin(g), newLogout(g), newSetup(g), newStatus(g), newInstance(g), newRun(g), newSecrets(g), newChanges(g), newProjects(g), newEnvironments(g), newTokens(g))
+	root.AddCommand(newLogin(g), newLogout(g), newSetup(g), newStatus(g), newInstance(g), newRun(g), newSecrets(g), newChanges(g), newProjects(g), newEnvironments(g), newTokens(g), newUsers(g), newInvitations(g), newOrganization(g))
 	g.root = root
 	return root
 }
