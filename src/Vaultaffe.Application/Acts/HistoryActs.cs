@@ -10,6 +10,11 @@ namespace Vaultaffe.Application.Acts;
 /// <remarks>
 /// <b>There is no value on this type, and there is no column behind it.</b> Not
 /// the new value, not the old one, not a diff (Specification §6.5).
+/// <para>
+/// <c>AboutName</c> is who or what an administrative entry was done to — an
+/// address, a token's name — where the three place names are null (ADR 0020). It
+/// is an identifier and never a credential.
+/// </para>
 /// </remarks>
 public sealed record ChangeRow(
     Guid Id,
@@ -20,7 +25,8 @@ public sealed record ChangeRow(
     string IdentityName,
     string? ProjectName,
     string? EnvironmentName,
-    string? SecretName);
+    string? SecretName,
+    string? AboutName);
 
 /// <summary>A page of the log, and how many entries the filter matched.</summary>
 public sealed record ChangePage(IReadOnlyList<ChangeRow> Entries, int Total);
@@ -65,6 +71,15 @@ public sealed record AccessRow(
 /// organization therefore needs a token that reaches the whole organization; a
 /// bound token names its project, and a token bound to one environment names that
 /// too.
+/// <para>
+/// <b>That is also what decides who reads the administrative entries.</b> They
+/// carry no project, so they are in the unfiltered answer and in no other — which
+/// means a bound service token never sees "X reset Y's password", without a rule
+/// having to be written for it. For people §6.4 is unchanged: everybody in an
+/// organization sees everything in it, this included, because a small team in
+/// which only administrators can see what administrators did is a team nobody
+/// audits (ADR 0020).
+/// </para>
 /// <para>
 /// Paging is a limit and an offset over a total order of moment and then id — one
 /// act writes several entries at the same instant, and a page boundary in the
@@ -164,7 +179,8 @@ public sealed class ReadChangeLog(
             entry.IdentityName,
             entry.ProjectName,
             entry.EnvironmentName,
-            entry.SecretName);
+            entry.SecretName,
+            entry.AboutName);
 }
 
 /// <summary>

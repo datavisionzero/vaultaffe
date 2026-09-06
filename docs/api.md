@@ -585,8 +585,35 @@ thing acted is the interesting question, and it is why an agent gets a token of
 its own on day one. Doppler puts the old and new value in the log and had to bolt
 on a redaction that does not truly delete; we follow AWS.
 
-Actions are words: `created`, `renamed`, `value-set`, `value-rolled-back`,
-`placeholder-created`, `deleted`, `restored`, `purged`.
+Actions are words. What was done to the **vault** carries a place — a project, an
+environment, a secret:
+
+`created`, `renamed`, `value-set`, `value-rolled-back`, `placeholder-created`,
+`deleted`, `restored`, `purged`.
+
+What was done to **people and to credentials** carries no place at all, and names
+its subject in `about` instead
+([ADR 0020](./adr/0020-one-change-log-and-not-two.md)):
+
+`joined`, `invited`, `invitation-withdrawn`, `password-set`, `email-changed`,
+`deactivated`, `reactivated`, `person-renamed`, `organization-renamed`,
+`token-created`, `token-revoked`.
+
+**`about` is an identifier and never a credential.** An address, a token's name,
+the organization's new name — never a password, never a token value, never the
+code in an invitation. One field and not two per kind, because `action` already
+says which kind of thing the name is.
+
+**A change of identifier records the new one**, the way a rename does: that is
+the name everything after the entry is about, and the old one is in the entry
+before it. `joined` is what guarantees there is one — the first run and an
+accepted invitation each write it, so an address never appears out of nowhere.
+
+**Who reads them.** For people, [§6.4](../Specification.md#64-permissions-in-the-mvp)
+is unchanged: everybody in an organization sees everything in it. For tokens it
+falls out stricter without a rule — these entries carry no project, so they are
+only in the unfiltered answer, and that needs a token reaching the whole
+organization. A bound service token never sees them.
 
 **Reads are not in it.** `run` reads values, but a successful read does not prove
 an application started, and the log records mutations rather than every

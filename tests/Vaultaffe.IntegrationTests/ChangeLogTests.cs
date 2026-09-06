@@ -30,6 +30,11 @@ public sealed class ChangeLogTests(PostgresFixture postgres)
 
         Assert.Equal(
             [
+                // Who or what an administrative entry was done to (ADR 0020).
+                // An identifier — an address, a token's name — and never a
+                // credential: not a password, not a token value, not the code in
+                // an invitation.
+                "about_name",
                 "action",
                 "environment_name",
                 "id",

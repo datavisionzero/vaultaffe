@@ -20,16 +20,25 @@ namespace Vaultaffe.Infrastructure.Persistence.Configurations;
 /// that could hold a value ever appears.
 /// </para>
 /// <para>
-/// The subject is recorded by name and there is no foreign key to a project,
-/// environment or secret. Neither a purge nor an expiry removes change-log
-/// entries, so this table outlives the rows it talks about, and a key pointing
-/// at one that is gone would take the entry with it.
+/// Everything is recorded by name and there is no foreign key out of this table
+/// at all — not to a project, environment or secret, and not to a person or a
+/// token. Neither a purge nor an expiry removes change-log entries, so this
+/// table outlives the rows it talks about, and a key pointing at one that is
+/// gone would take the entry with it. A deactivated person and a revoked token
+/// stay in the log for the same reason, reading as a name rather than as a
+/// bare id.
 /// </para>
 /// </remarks>
 public sealed class ChangeLogEntryConfiguration : IEntityTypeConfiguration<ChangeLogEntry>
 {
     /// <summary>The longest an identity's recorded name may be.</summary>
     public const int IdentityNameLimit = 200;
+
+    /// <summary>
+    /// The longest the subject of an administrative entry may be. An email
+    /// address is the longest thing that goes in it.
+    /// </summary>
+    public const int AboutNameLimit = 320;
 
     public void Configure(EntityTypeBuilder<ChangeLogEntry> builder)
     {
@@ -69,6 +78,13 @@ public sealed class ChangeLogEntryConfiguration : IEntityTypeConfiguration<Chang
         builder.Property(e => e.SecretName)
             .HasColumnName("secret_name")
             .HasMaxLength(SecretName.Limit);
+
+        // Who or what an entry was about where that is not a place in the vault:
+        // an address, a token's name, an organization's new name (ADR 0020).
+        // Long enough for the longest of those, which is an email address.
+        builder.Property(e => e.AboutName)
+            .HasColumnName("about_name")
+            .HasMaxLength(AboutNameLimit);
 
         // What a reader of the log asks for: one organization, newest first.
         builder.HasIndex(e => new { e.OrganizationId, e.OccurredAt })

@@ -1,4 +1,5 @@
 using Vaultaffe.Application.Ports;
+using Vaultaffe.Domain.History;
 using Vaultaffe.Domain.Identities;
 using Vaultaffe.Domain.Refusals;
 using Vaultaffe.Domain.Tokens;
@@ -39,7 +40,7 @@ public sealed record InvitationOffer(
 /// </para>
 /// </remarks>
 public sealed class InviteUser(
-    IIdentityStore identities, ICallerIdentity caller, TimeProvider clock)
+    IIdentityStore identities, ICallerIdentity caller, ChangeLog log, TimeProvider clock)
 {
     public async Task<InvitationWritten> ExecuteAsync(
         string email,
@@ -94,6 +95,10 @@ public sealed class InviteUser(
             acting.UserId,
             now);
 
+        // The address invited, and never the code in the link: that is a
+        // credential, and this log holds none (ADR 0015, ADR 0020).
+        log.Record(ChangeAction.Invited, about: invitation.Email);
+
         await identities.AddInvitationAsync(invitation, cancellationToken);
 
         return new InvitationWritten(Row(invitation, now), code);
@@ -136,7 +141,7 @@ public sealed class ListInvitations(
 
 /// <summary>Taking one back before anybody used it.</summary>
 public sealed class WithdrawInvitation(
-    IIdentityStore identities, ICallerIdentity caller, TimeProvider clock)
+    IIdentityStore identities, ICallerIdentity caller, ChangeLog log, TimeProvider clock)
 {
     public async Task<InvitationRow> ExecuteAsync(Guid id, CancellationToken cancellationToken)
     {
@@ -153,6 +158,8 @@ public sealed class WithdrawInvitation(
                 "That invitation is not open any more. One that was used, withdrawn or left "
                 + "too long cannot be taken back — there is nothing left to take.");
         }
+
+        log.Record(ChangeAction.InvitationWithdrawn, about: invitation.Email);
 
         await identities.SaveAsync(cancellationToken);
 
@@ -218,7 +225,7 @@ public sealed class ReadInvitationOffer(IIdentityStore identities, TimeProvider 
 /// </para>
 /// </remarks>
 public sealed class AcceptInvitation(
-    IIdentityStore identities, IPasswordHasher passwords, TimeProvider clock)
+    IIdentityStore identities, IPasswordHasher passwords, ChangeLog log, TimeProvider clock)
 {
     public async Task<SignedIn> ExecuteAsync(
         string? code, string? name, string password, CancellationToken cancellationToken)
@@ -280,6 +287,13 @@ public sealed class AcceptInvitation(
             expiresAt);
 
         invitation.AcceptBy(user.Id, now);
+
+        // Recorded under the identity this act just made, because there is no
+        // caller: nobody was authenticated on the way in, and the person who
+        // joined is who acted. It is also the entry every later one about this
+        // person leans on — an address change records the new address because
+        // the old one is in the entry before it (ADR 0020).
+        log.RecordBy(Caller.Of(user, token), ChangeAction.Joined, about: user.Email);
 
         await identities.AcceptInvitationAsync(user, token, cancellationToken);
 

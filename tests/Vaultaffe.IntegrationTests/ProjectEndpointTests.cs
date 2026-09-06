@@ -299,7 +299,7 @@ public sealed class ProjectEndpointTests(PostgresFixture postgres)
 
         restored.EnsureSuccessStatusCode();
 
-        var entries = await LogAsync(instance, human);
+        var entries = await VaultLogAsync(instance, human);
 
         Assert.Equal(
             [
@@ -311,6 +311,15 @@ public sealed class ProjectEndpointTests(PostgresFixture postgres)
         Assert.All(entries, entry => Assert.Equal("webshop-api", entry.ProjectName));
         Assert.All(entries, entry => Assert.Equal(IdentityType.HumanSession, entry.IdentityType));
         Assert.All(entries, entry => Assert.Equal("Maintainer", entry.IdentityName));
+
+        // And the entry the instance opened with, in the same log rather than in
+        // a second one (ADR 0020): the first run made a person, and every later
+        // entry about that person leans on this one being here.
+        var everything = await LogAsync(instance, human);
+
+        Assert.Equal(ChangeAction.Joined, everything[0].Action);
+        Assert.Equal(AnInstance.Administrator, everything[0].AboutName);
+        Assert.Null(everything[0].ProjectName);
     }
 
     /// <summary>
@@ -338,7 +347,7 @@ public sealed class ProjectEndpointTests(PostgresFixture postgres)
 
         await CreateAsync(agent, "webshop-api");
 
-        var entries = await LogAsync(instance, human);
+        var entries = await VaultLogAsync(instance, human);
 
         Assert.All(entries, entry => Assert.Equal(IdentityType.AgentToken, entry.IdentityType));
         Assert.All(entries, entry => Assert.Equal("quiet-otter-42", entry.IdentityName));
@@ -366,7 +375,7 @@ public sealed class ProjectEndpointTests(PostgresFixture postgres)
 
         // Four from the one project that was created, and nothing from the one
         // that was not.
-        Assert.Equal(4, (await LogAsync(instance, human)).Count);
+        Assert.Equal(4, (await VaultLogAsync(instance, human)).Count);
     }
 
     /// <summary>
@@ -583,7 +592,7 @@ public sealed class ProjectEndpointTests(PostgresFixture postgres)
 
         // Four entries from the creation, and no fifth: nothing happened, so
         // nothing is in the log.
-        Assert.Equal(4, (await LogAsync(instance, human)).Count);
+        Assert.Equal(4, (await VaultLogAsync(instance, human)).Count);
     }
 
     [Fact]
@@ -649,4 +658,15 @@ public sealed class ProjectEndpointTests(PostgresFixture postgres)
             .ThenBy(entry => entry.Action)
             .ToListAsync(TestContext.Current.CancellationToken);
     }
+
+    /// <summary>
+    /// The entries about the vault, which is what these tests are about. Since
+    /// ADR 0020 the same log also holds what was done to people and to tokens,
+    /// and every instance opens with one of those: the first run records the
+    /// person it made. Filtering by place rather than by counting past it, so
+    /// that a later administrative entry cannot quietly shift an expectation.
+    /// </summary>
+    private static async Task<IReadOnlyList<ChangeLogEntry>> VaultLogAsync(
+        AnInstance instance, HttpClient client) =>
+        [.. (await LogAsync(instance, client)).Where(entry => entry.ProjectName is not null)];
 }

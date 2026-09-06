@@ -309,9 +309,18 @@ though it did.
 
 **`vaultaffe changes` is the log**, which holds no value at all. An entry is a
 moment, an action, the names it happened to, and the acting identity **with its
-type**: `human-session`, `service-token` or `agent-token`. Reads are not in it. By
-default it asks about this directory's binding; `--everywhere` asks about the
-whole organization and needs a token that reaches it.
+type**: `human-session`, `service-token` or `agent-token`. Reads are not in it,
+and neither are sign-ins. By default it asks about this directory's binding;
+`--everywhere` asks about the whole organization and needs a token that reaches
+it.
+
+**Administration is in the same log** — an invitation, a password set, an address
+changed, somebody deactivated, a token issued or revoked
+([ADR 0020](./adr/0020-one-change-log-and-not-two.md)). Those entries carry no
+project and name the person, token or organization where a
+`project/environment/KEY` would be, so `--everywhere` is what shows them. Never a
+credential: an address and a name go in, a password, a token value and an
+invitation code do not.
 
 ## The catalogue, and getting an agent its token
 

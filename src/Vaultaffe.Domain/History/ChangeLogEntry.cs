@@ -32,7 +32,8 @@ public sealed class ChangeLogEntry : IBelongToAnOrganization
         ChangeAction action,
         string? projectName = null,
         string? environmentName = null,
-        string? secretName = null)
+        string? secretName = null,
+        string? aboutName = null)
     {
         Id = id;
         OrganizationId = organizationId;
@@ -44,6 +45,7 @@ public sealed class ChangeLogEntry : IBelongToAnOrganization
         ProjectName = projectName;
         EnvironmentName = environmentName;
         SecretName = secretName;
+        AboutName = aboutName;
     }
 
     public Guid Id { get; private set; }
@@ -71,4 +73,25 @@ public sealed class ChangeLogEntry : IBelongToAnOrganization
     public string? EnvironmentName { get; private set; }
 
     public string? SecretName { get; private set; }
+
+    /// <summary>
+    /// Who or what it was done to, where that is not a place in the vault: the
+    /// address of the person whose password was set, the name of the token that
+    /// was revoked, the organization's new name
+    /// (<see href="../../../docs/adr/0020-one-change-log-and-not-two.md">ADR 0020</see>).
+    /// </summary>
+    /// <remarks>
+    /// One column and not two, because <see cref="Action"/> already says which
+    /// kind of thing it is: nothing reads this without knowing whether it is
+    /// looking at a person or a token. It holds an <b>identifier</b> — an
+    /// address, a name — and never a credential: not a password, not a token
+    /// value, not the code in an invitation.
+    /// <para>
+    /// A change of identifier records the <b>new</b> one, the way a rename
+    /// already does: that is the name everything after this entry is about, and
+    /// the old one is in the entry before it. Which is why <c>Joined</c> exists —
+    /// it is what makes there always be an entry before it.
+    /// </para>
+    /// </remarks>
+    public string? AboutName { get; private set; }
 }

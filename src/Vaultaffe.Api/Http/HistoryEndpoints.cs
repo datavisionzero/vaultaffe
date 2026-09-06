@@ -8,6 +8,11 @@ namespace Vaultaffe.Api.Http;
 public sealed record RollBackRequest(Guid? VersionId = null);
 
 /// <summary>One entry of the change log. There is no value on it, and no column behind one.</summary>
+/// <remarks>
+/// <c>About</c> is who or what an administrative entry was done to — an address,
+/// a token's name — where <c>Project</c>, <c>Environment</c> and <c>Secret</c>
+/// are all null (ADR 0020). An identifier, never a credential.
+/// </remarks>
 public sealed record ChangeShape(
     Guid Id,
     DateTimeOffset OccurredAt,
@@ -15,7 +20,8 @@ public sealed record ChangeShape(
     IdentityShape Identity,
     string? Project,
     string? Environment,
-    string? Secret);
+    string? Secret,
+    string? About);
 
 /// <summary>Who acted, and what kind of thing they were.</summary>
 public sealed record IdentityShape(Guid Id, string Type, string Name);
@@ -147,6 +153,17 @@ public static class Recorded
         ChangeAction.Deleted => "deleted",
         ChangeAction.Restored => "restored",
         ChangeAction.Purged => "purged",
+        ChangeAction.Invited => "invited",
+        ChangeAction.InvitationWithdrawn => "invitation-withdrawn",
+        ChangeAction.Joined => "joined",
+        ChangeAction.PasswordSet => "password-set",
+        ChangeAction.EmailChanged => "email-changed",
+        ChangeAction.Deactivated => "deactivated",
+        ChangeAction.Reactivated => "reactivated",
+        ChangeAction.PersonRenamed => "person-renamed",
+        ChangeAction.OrganizationRenamed => "organization-renamed",
+        ChangeAction.TokenCreated => "token-created",
+        ChangeAction.TokenRevoked => "token-revoked",
         _ => throw new ArgumentOutOfRangeException(nameof(action), action, "An action with no name."),
     };
 
@@ -171,7 +188,8 @@ public static class Recorded
             new IdentityShape(row.IdentityId, TypeOf(row.IdentityType), row.IdentityName),
             row.ProjectName,
             row.EnvironmentName,
-            row.SecretName);
+            row.SecretName,
+            row.AboutName);
 
     public static ChangePageShape Page(ChangePage page) =>
         new([.. page.Entries.Select(Change)], page.Total);

@@ -60,7 +60,7 @@ instance_claim              (no organization: there is none yet)
 | `token` | A credential: kind, scope set, and the hash of a value shown once. |
 | `token_binding` | What a token may touch. No rows means the whole organization. |
 | `device_authorization` | One `vaultaffe login` in progress: two codes, and what has happened to it. |
-| `change_log_entry` | What was done, by whom, and of what type — never a value. |
+| `change_log_entry` | What was done, by whom, and of what type — never a value. Administration is in it too, with no place and an `about_name`. |
 | `instance_claim` | The claim secret an unstarted instance is claimed with. At most one row, and none once the first run has consumed it. |
 
 The one row that holds a preference rather than a fact about the vault is
@@ -260,6 +260,21 @@ change-log entries, so this table outlives the project, environment and secret i
 talks about, and a foreign key pointing at a row that is gone would take the
 entry with it. `identity_name` is kept for the same reason: a revoked token's
 entries should still read as something other than a bare id.
+
+**`about_name` is the fourth name, and it is what makes this one log rather than
+two** ([ADR 0020](./adr/0020-one-change-log-and-not-two.md)). An entry with no
+`project_name` was done to a person, a token or the organization, and this is
+who or what: an address, a token's name, the organization's new name. One column
+and not one per kind, because `action` already says which kind of thing the name
+is — nothing reads an entry without knowing that.
+
+It holds an **identifier and never a credential**: no password, no token value,
+no invitation code. That is the same rule as the missing value column, pointed at
+people, and the column list above is what enforces it.
+
+There is no foreign key to `app_user` or to `token` either. The reason is the one
+above and one more: a deactivated person and a revoked token both keep their rows
+today, but the log must not depend on that — it outlives everything it names.
 
 **What deserves honest documentation** (Specification §6.5): a purge in the
 database does not reach into last night's backup, and this product promises

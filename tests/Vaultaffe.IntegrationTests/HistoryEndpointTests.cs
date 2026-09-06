@@ -124,9 +124,11 @@ public sealed class HistoryEndpointTests(PostgresFixture postgres)
         Assert.Equal(5, first["entries"]!.AsArray().Count);
         Assert.Equal(first["total"]!.GetValue<int>(), second["total"]!.GetValue<int>());
 
-        // Twelve for the secrets — created and value-set apiece — and four for
-        // the project and its three environments.
-        Assert.Equal(16, first["total"]!.GetValue<int>());
+        // Twelve for the secrets — created and value-set apiece — four for the
+        // project and its three environments, and one for the person the first
+        // run made: the same log holds what was done to people (ADR 0020), and
+        // an unfiltered read is the only place those appear.
+        Assert.Equal(17, first["total"]!.GetValue<int>());
 
         // No entry appears in both pages: one act writes several entries at the
         // same instant, and a boundary in the middle of them has to fall in the

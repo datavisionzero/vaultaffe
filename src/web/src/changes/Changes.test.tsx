@@ -38,13 +38,44 @@ const entries = [
     environment: null,
     secret: null,
   },
+  // An administrative entry: no place at all, and what it was about instead
+  // (ADR 0020).
+  {
+    id: "0199a000-0000-7000-8000-000000000034",
+    occurredAt: "2026-09-02T09:00:00+00:00",
+    action: "email-changed",
+    identity: {
+      id: "0199a000-0000-7000-8000-000000000033",
+      type: "human-session",
+      name: "maintainer",
+    },
+    project: null,
+    environment: null,
+    secret: null,
+    about: "moved@example.test",
+  },
 ];
 
 const changes = "GET /api/v1/changes";
 
 describe("the change log", () => {
+  // An entry with no project, environment or secret happened to a person, a
+  // token or the organization, and what it happened to is in the same column a
+  // place would be — a reader scanning the list is asking what was touched
+  // (ADR 0020).
+  it("puts what an administrative entry was about where a place would be", async () => {
+    installInstance({ [changes]: { entries, total: 3 } });
+
+    renderUnderShell("/changes", <Shell />);
+
+    const changed = (await screen.findByText("email-changed")).closest("li")!;
+
+    expect(within(changed).getByText("moved@example.test")).toBeInTheDocument();
+    expect(within(changed).queryByText("the organization")).not.toBeInTheDocument();
+  });
+
   it("says what kind of thing acted, not only who", async () => {
-    installInstance({ [changes]: { entries, total: 2 } });
+    installInstance({ [changes]: { entries, total: 3 } });
 
     renderUnderShell("/changes", <Shell />);
 
@@ -71,7 +102,7 @@ describe("the change log", () => {
   });
 
   it("asks the instance to narrow the log, and puts the filter in the address", async () => {
-    const { calls } = installInstance({ [changes]: { entries, total: 2 } });
+    const { calls } = installInstance({ [changes]: { entries, total: 3 } });
 
     renderUnderShell("/changes", <Shell />);
 
@@ -90,7 +121,7 @@ describe("the change log", () => {
   });
 
   it("keeps the narrower filter closed until the wider one is named", async () => {
-    installInstance({ [changes]: { entries, total: 2 } });
+    installInstance({ [changes]: { entries, total: 3 } });
 
     renderUnderShell("/changes", <Shell />);
 
@@ -112,7 +143,7 @@ describe("the change log", () => {
 
     renderUnderShell("/changes", <Shell />);
 
-    expect(await screen.findByText("1–2 of 120, newest first")).toBeInTheDocument();
+    expect(await screen.findByText("1–3 of 120, newest first")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Newer" })).toBeDisabled();
 
     await userEvent.click(screen.getByRole("button", { name: "Older" }));
@@ -123,7 +154,7 @@ describe("the change log", () => {
   });
 
   it("reads the filter out of the address rather than trusting it", async () => {
-    const { calls } = installInstance({ [changes]: { entries, total: 2 } });
+    const { calls } = installInstance({ [changes]: { entries, total: 3 } });
 
     renderUnderShell("/changes?project=landing-page&offset=-7", <Shell />);
 
@@ -139,7 +170,7 @@ describe("the change log", () => {
   });
 
   it("makes no request that could answer with a value", async () => {
-    const { calls } = installInstance({ [changes]: { entries, total: 2 } });
+    const { calls } = installInstance({ [changes]: { entries, total: 3 } });
 
     renderUnderShell("/changes", <Shell />);
 

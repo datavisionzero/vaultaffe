@@ -1,4 +1,5 @@
 using Vaultaffe.Application.Ports;
+using Vaultaffe.Domain.History;
 using Vaultaffe.Domain.Identities;
 using Vaultaffe.Domain.Organizations;
 using Vaultaffe.Domain.Refusals;
@@ -41,6 +42,7 @@ public sealed record InstanceStarted(
 public sealed class StartTheInstance(
     IIdentityStore identities,
     IPasswordHasher passwords,
+    ChangeLog log,
     TimeProvider clock)
 {
     /// <summary>The name the MVP's one organization gets (Specification §6.1).</summary>
@@ -109,6 +111,13 @@ public sealed class StartTheInstance(
             Scopes.Everything,
             now,
             expiresAt);
+
+        // The first entry this instance will ever have, recorded under the
+        // identity this act just made: there is no caller, and the person who
+        // claimed the instance is who acted. Every later entry about them leans
+        // on it — an address change records the new address because the old one
+        // is in the entry before it (ADR 0020).
+        log.RecordBy(Caller.Of(user, token), ChangeAction.Joined, about: user.Email);
 
         await identities.StartTheInstanceAsync(organization, user, token, claim, cancellationToken);
 

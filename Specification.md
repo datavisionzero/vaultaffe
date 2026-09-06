@@ -86,6 +86,11 @@ Deliberately close to Doppler, because the model has proven itself:
   rest. Names follow `^[A-Z_][A-Z0-9_]*$` — the same rule Doppler uses, because
   secrets end up as environment variables and we would rather not have the
   special-character discussion.
+- **Person** — a human of an organization: the address they sign in with, a
+  name, and whether they administer it. Everybody in an organization sees
+  everything in it (§6.4), so there is no role model beyond that line. The word
+  the change log uses for what an administrative entry was **about** is this
+  one — a person, a token, or the organization itself.
 - **Token** — an access key for CLI and automation. There are **three kinds**,
   each with a **recognizable prefix**, so that secret scanners find them in repos
   and logs and so that the server always knows which kind it is talking to: the
@@ -376,6 +381,23 @@ because with writing agents that is the interesting question. No value, not even
 as a diff. We follow AWS here, not
 Doppler: Doppler puts the old and new value into the log and consequently had to
 bolt on a redaction feature, which doesn't even truly delete the value.
+
+**One log, and administration is in it.** What is done to people and to
+credentials — an invitation, a password set, an address changed, somebody
+deactivated, a token issued or revoked, the organization renamed — is recorded
+in the same log, with no project and the person, token or organization it was
+about beside it
+([ADR 0020](docs/adr/0020-one-change-log-and-not-two.md)). Whoever entrusts a
+team with secrets has to be able to read back who moved the doors, and a changed
+sign-in address is the sharpest form of that: afterwards somebody else signs in
+under the same name. **The subject is an identifier and never a credential** —
+an address and a name may go in, a password, a token value and an invitation
+code may not. Who may read these entries is §6.4 unchanged for people:
+everybody in an organization sees everything in it. A bound token cannot,
+because these entries carry no project and only an unfiltered read reaches them.
+**Sign-ins are not in it** — a sign-in changes nothing — and nothing is
+reconstructed backwards: the log knows about administration from the release
+that added it onwards.
 
 **The one value that reaches a log is the claim secret, and it is an exception
 by name.** An unclaimed instance prints it at every start, because the first run

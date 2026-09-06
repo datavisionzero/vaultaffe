@@ -25,8 +25,13 @@ func newChanges(g *globals) *cobra.Command {
 			"human-session, service-token or agent-token. That last field is what the log\n" +
 			"exists for, because with writing agents the interesting question is what\n" +
 			"kind of thing acted.\n\n" +
-			"Reads are not in it. A successful read does not prove an application\n" +
-			"started, and an export is a read too.\n\n" +
+			"**Administration is in the same log**: an invitation, a password set, an\n" +
+			"address changed, somebody deactivated, a token issued or revoked. Those\n" +
+			"entries carry no project and name the person, token or organization instead,\n" +
+			"so --everywhere is what shows them — and that needs a token reaching the\n" +
+			"whole organization.\n\n" +
+			"Reads are not in it, and neither are sign-ins. A successful read does not\n" +
+			"prove an application started, and an export is a read too.\n\n" +
 			"By default this asks about the project and environment this directory is\n" +
 			"bound to; --everywhere asks about the whole organization, which needs a\n" +
 			"token that reaches it.",
@@ -82,8 +87,13 @@ func newChanges(g *globals) *cobra.Command {
 	return command
 }
 
-// where names what an entry happened to. The log records names and not ids, so
-// that it can still say what happened to something that no longer exists.
+// where names what an entry happened to: a place in the vault, or — for an entry
+// with no place — the person, token or organization it was about (ADR 0020). The
+// log records names and not ids, so that it can still say what happened to
+// something that no longer exists.
+//
+// One column for both, because the action beside it already says which kind of
+// thing the name is.
 func where(change api.Change) string {
 	parts := make([]string, 0, 3)
 	for _, name := range []*string{change.Project, change.Environment, change.Secret} {
@@ -91,8 +101,11 @@ func where(change api.Change) string {
 			parts = append(parts, *name)
 		}
 	}
-	if len(parts) == 0 {
-		return "the organization"
+	if len(parts) > 0 {
+		return strings.Join(parts, "/")
 	}
-	return strings.Join(parts, "/")
+	if change.About != nil && *change.About != "" {
+		return *change.About
+	}
+	return "the organization"
 }

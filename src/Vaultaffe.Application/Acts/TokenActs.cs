@@ -1,4 +1,5 @@
 using Vaultaffe.Application.Ports;
+using Vaultaffe.Domain.History;
 using Vaultaffe.Domain.Refusals;
 using Vaultaffe.Domain.Tokens;
 
@@ -38,7 +39,7 @@ public sealed record TokenIssued(TokenRow Token, string Value);
 /// </para>
 /// </remarks>
 public sealed class CreateToken(
-    IIdentityStore identities, ICallerIdentity caller, TimeProvider clock)
+    IIdentityStore identities, ICallerIdentity caller, ChangeLog log, TimeProvider clock)
 {
     /// <summary>The longest a token name may be.</summary>
     public const int NameLimit = 100;
@@ -100,6 +101,12 @@ public sealed class CreateToken(
             token.BindTo(Guid.NewGuid(), binding.ProjectId, binding.EnvironmentId);
         }
 
+        // The name a person chose, and never the value: the value exists once, in
+        // the answer to this request, and a log line carrying it would be the
+        // one leak this product spends every other decision avoiding
+        // (§6.5, ADR 0020).
+        log.Record(ChangeAction.TokenCreated, about: token.Name);
+
         await identities.AddTokenAsync(token, cancellationToken);
 
         return new TokenIssued(Row(token), value.Reveal());
@@ -153,7 +160,7 @@ public sealed class ListTokens(IIdentityStore identities, ICallerIdentity caller
 /// in the change log keeps an author (§6.5).
 /// </summary>
 public sealed class RevokeToken(
-    IIdentityStore identities, ICallerIdentity caller, TimeProvider clock)
+    IIdentityStore identities, ICallerIdentity caller, ChangeLog log, TimeProvider clock)
 {
     public async Task<TokenRow> ExecuteAsync(Guid id, CancellationToken cancellationToken)
     {
@@ -164,8 +171,32 @@ public sealed class RevokeToken(
 
         token.RevokeAt(clock.GetUtcNow());
 
+        // A session has no name, because nobody gives one to a login. What is
+        // revoked is then said by its kind rather than left blank: a row reading
+        // "token-revoked, about nothing" would be the entry a person most wants
+        // to understand and least can.
+        log.Record(
+            ChangeAction.TokenRevoked,
+            about: token.Name ?? $"a {Words.For(token.Kind)}");
+
         await identities.SaveAsync(cancellationToken);
 
         return CreateToken.Row(token);
     }
+}
+
+/// <summary>
+/// The word for a token kind, where a sentence needs one. The wire spelling is
+/// the API's business (<c>docs/api.md</c>); this is what goes into a change-log
+/// entry a person reads.
+/// </summary>
+internal static class Words
+{
+    public static string For(TokenKind kind) => kind switch
+    {
+        TokenKind.Session => "signed-in session",
+        TokenKind.Service => "service token",
+        TokenKind.Agent => "agent token",
+        _ => "token",
+    };
 }

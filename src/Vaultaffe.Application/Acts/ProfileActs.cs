@@ -1,4 +1,5 @@
 using Vaultaffe.Application.Ports;
+using Vaultaffe.Domain.History;
 using Vaultaffe.Domain.Identities;
 using Vaultaffe.Domain.Refusals;
 
@@ -17,7 +18,8 @@ namespace Vaultaffe.Application.Acts;
 /// because it is not one of the short list of §6.4: changing your own name is
 /// nobody's administration but your own.
 /// </remarks>
-public sealed class RenameMyself(IIdentityStore identities, ICallerIdentity caller)
+public sealed class RenameMyself(
+    IIdentityStore identities, ICallerIdentity caller, ChangeLog log)
 {
     public async Task<UserRow> ExecuteAsync(string name, CancellationToken cancellationToken)
     {
@@ -34,7 +36,12 @@ public sealed class RenameMyself(IIdentityStore identities, ICallerIdentity call
         var user = await identities.FindUserAsync(acting.UserId, cancellationToken)
             ?? throw Refusal.NotFound("Nobody here by that id.");
 
+        // What this log calls somebody is itself a fact about the log, so the
+        // change to it belongs in it. Recorded by their address rather than by
+        // either name: the address is what does not change here (ADR 0020).
         user.RenameTo(trimmed);
+
+        log.Record(ChangeAction.PersonRenamed, about: user.Email);
 
         await identities.SaveAsync(cancellationToken);
 
@@ -75,6 +82,7 @@ public sealed class ChangeMyPassword(
     IIdentityStore identities,
     IPasswordHasher passwords,
     ICallerIdentity caller,
+    ChangeLog log,
     TimeProvider clock)
 {
     public async Task ExecuteAsync(
@@ -113,6 +121,11 @@ public sealed class ChangeMyPassword(
             }
         }
 
+        // The same action an administrator's reset writes. Who did it is already
+        // on the row, and here it is the person themselves — which is the useful
+        // distinction and the one the entry already makes.
+        log.Record(ChangeAction.PasswordSet, about: user.Email);
+
         await identities.SaveAsync(cancellationToken);
     }
 }
@@ -140,7 +153,10 @@ public sealed class ChangeMyPassword(
 /// </para>
 /// </remarks>
 public sealed class ChangeMyEmail(
-    IIdentityStore identities, IPasswordHasher passwords, ICallerIdentity caller)
+    IIdentityStore identities,
+    IPasswordHasher passwords,
+    ICallerIdentity caller,
+    ChangeLog log)
 {
     public async Task<UserRow> ExecuteAsync(
         string email, string currentPassword, CancellationToken cancellationToken)
@@ -159,6 +175,8 @@ public sealed class ChangeMyEmail(
         }
 
         await ChangeEmail.ApplyAsync(identities, user, email, cancellationToken);
+
+        log.Record(ChangeAction.EmailChanged, about: user.Email);
 
         await identities.SaveAsync(cancellationToken);
 

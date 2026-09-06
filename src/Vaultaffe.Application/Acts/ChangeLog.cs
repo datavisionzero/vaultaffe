@@ -22,6 +22,12 @@ namespace Vaultaffe.Application.Acts;
 /// own token is recorded as an agent rather than as the person whose terminal it
 /// sits in — which is the whole reason agent tokens exist (§6.4).
 /// </para>
+/// <para>
+/// <b>One log and not two.</b> What is done to people and to tokens goes in here
+/// beside what is done to the vault, with no place and an <c>about</c> instead
+/// (ADR 0020). The question a person asks is "what happened in this instance and
+/// who did it", and they should not have to ask it twice.
+/// </para>
 /// </remarks>
 public sealed class ChangeLog(
     IChangeLogStore entries, ICallerIdentity caller, TimeProvider clock)
@@ -30,9 +36,30 @@ public sealed class ChangeLog(
         ChangeAction action,
         string? project = null,
         string? environment = null,
-        string? secret = null)
+        string? secret = null,
+        string? about = null) =>
+        RecordBy(caller.Required, action, project, environment, secret, about);
+
+    /// <summary>
+    /// The same entry, for the two acts that have no caller to read: the first
+    /// run and an accepted invitation.
+    /// </summary>
+    /// <remarks>
+    /// Both make the identity they are recorded under, in the same transaction —
+    /// so the alternative to this overload is a first person whose arrival is
+    /// the one thing the log does not know about. That would break the rule
+    /// <see cref="ChangeLogEntry.AboutName"/> relies on: a change of address
+    /// records the new one because the old one is in the entry before it, and
+    /// there has to <b>be</b> an entry before it.
+    /// </remarks>
+    public void RecordBy(
+        Caller acting,
+        ChangeAction action,
+        string? project = null,
+        string? environment = null,
+        string? secret = null,
+        string? about = null)
     {
-        var acting = caller.Required;
         var (id, type, name) = acting.Identity;
 
         entries.Add(new ChangeLogEntry(
@@ -45,6 +72,7 @@ public sealed class ChangeLog(
             action,
             project,
             environment,
-            secret));
+            secret,
+            about));
     }
 }

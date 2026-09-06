@@ -1,4 +1,5 @@
 using Vaultaffe.Application.Ports;
+using Vaultaffe.Domain.History;
 using Vaultaffe.Domain.Organizations;
 using Vaultaffe.Domain.Refusals;
 
@@ -34,7 +35,8 @@ public sealed class ReadOrganization(IIdentityStore identities, ICallerIdentity 
 }
 
 /// <summary>Renaming it. The name is editable, and that is the whole of it (§6.1).</summary>
-public sealed class RenameOrganization(IIdentityStore identities, ICallerIdentity caller)
+public sealed class RenameOrganization(
+    IIdentityStore identities, ICallerIdentity caller, ChangeLog log)
 {
     public async Task<OrganizationRow> ExecuteAsync(string name, CancellationToken cancellationToken)
     {
@@ -53,6 +55,8 @@ public sealed class RenameOrganization(IIdentityStore identities, ICallerIdentit
             ?? throw Refusal.NotFound("This instance has not been started.");
 
         organization.RenameTo(trimmed);
+
+        log.Record(ChangeAction.OrganizationRenamed, about: organization.Name);
 
         await identities.SaveAsync(cancellationToken);
 

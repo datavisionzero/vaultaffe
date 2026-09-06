@@ -1,4 +1,5 @@
 using Vaultaffe.Application.Ports;
+using Vaultaffe.Domain.History;
 using Vaultaffe.Domain.Identities;
 using Vaultaffe.Domain.Refusals;
 
@@ -56,6 +57,7 @@ public sealed class ResetPassword(
     IIdentityStore identities,
     IPasswordHasher passwords,
     ICallerIdentity caller,
+    ChangeLog log,
     TimeProvider clock)
 {
     public async Task<UserRow> ExecuteAsync(
@@ -82,6 +84,10 @@ public sealed class ResetPassword(
         {
             session.RevokeAt(now);
         }
+
+        // The person it was done to, by their address — never the password, and
+        // there is nowhere in the entry to put one (ADR 0020).
+        log.Record(ChangeAction.PasswordSet, about: user.Email);
 
         await identities.SaveAsync(cancellationToken);
 
@@ -111,7 +117,8 @@ public sealed class ResetPassword(
 /// token names its person by id, so none of them notices.
 /// </para>
 /// </remarks>
-public sealed class ChangeEmail(IIdentityStore identities, ICallerIdentity caller)
+public sealed class ChangeEmail(
+    IIdentityStore identities, ICallerIdentity caller, ChangeLog log)
 {
     public async Task<UserRow> ExecuteAsync(
         Guid userId, string email, CancellationToken cancellationToken)
@@ -122,6 +129,11 @@ public sealed class ChangeEmail(IIdentityStore identities, ICallerIdentity calle
             ?? throw Refusal.NotFound("Nobody here by that id.");
 
         await ApplyAsync(identities, user, email, cancellationToken);
+
+        // The new address, because that is the name everything after this entry
+        // is about; the old one is in the entry before it, and `Joined` is what
+        // guarantees there is one (ADR 0020).
+        log.Record(ChangeAction.EmailChanged, about: user.Email);
 
         await identities.SaveAsync(cancellationToken);
 
@@ -178,7 +190,7 @@ public sealed class ChangeEmail(IIdentityStore identities, ICallerIdentity calle
 /// </para>
 /// </remarks>
 public sealed class DeactivateUser(
-    IIdentityStore identities, ICallerIdentity caller, TimeProvider clock)
+    IIdentityStore identities, ICallerIdentity caller, ChangeLog log, TimeProvider clock)
 {
     public async Task<UserRow> ExecuteAsync(Guid userId, CancellationToken cancellationToken)
     {
@@ -196,6 +208,8 @@ public sealed class DeactivateUser(
 
         user.DeactivateAt(clock.GetUtcNow());
 
+        log.Record(ChangeAction.Deactivated, about: user.Email);
+
         await identities.SaveAsync(cancellationToken);
 
         return ListUsers.Row(user);
@@ -203,7 +217,8 @@ public sealed class DeactivateUser(
 }
 
 /// <summary>Putting somebody back. The undo of a decision about a person.</summary>
-public sealed class ReactivateUser(IIdentityStore identities, ICallerIdentity caller)
+public sealed class ReactivateUser(
+    IIdentityStore identities, ICallerIdentity caller, ChangeLog log)
 {
     public async Task<UserRow> ExecuteAsync(Guid userId, CancellationToken cancellationToken)
     {
@@ -213,6 +228,8 @@ public sealed class ReactivateUser(IIdentityStore identities, ICallerIdentity ca
             ?? throw Refusal.NotFound("Nobody here by that id.");
 
         user.Reactivate();
+
+        log.Record(ChangeAction.Reactivated, about: user.Email);
 
         await identities.SaveAsync(cancellationToken);
 

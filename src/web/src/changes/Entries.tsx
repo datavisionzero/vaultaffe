@@ -17,6 +17,13 @@ import { around, when } from "@/shared/moments";
  * precisely so that it can still say what happened to something that no longer
  * exists ([`api.md`](../../../../docs/api.md)), and a link is a promise that
  * something is still there.
+ *
+ * **An entry with no place is an administrative one** — a password set, an
+ * address changed, a token issued — and what it happened to is in `about`
+ * ([ADR 0020](../../../../docs/adr/0020-one-change-log-and-not-two.md)). It is
+ * shown in the same column as a place, because a reader scanning this list is
+ * asking "what was touched", and whether the answer is a key or a person is
+ * already said by the action beside it.
  */
 export function Entries({ entries, place = true }: { entries: Change[]; place?: boolean }) {
   return (
@@ -42,14 +49,22 @@ export function Entries({ entries, place = true }: { entries: Change[]; place?: 
 }
 
 /**
- * What an entry happened to, in the same `project/environment/KEY` spelling the
- * CLI prints and an address uses. An entry that names none of the three is the
- * organization's own — a token created, a person invited.
+ * What an entry happened to: a place in the vault, in the same
+ * `project/environment/KEY` spelling the CLI prints and an address uses, or the
+ * person, token or organization an administrative entry was about.
+ *
+ * An entry with neither is the organization's own and says so. That is rare and
+ * deliberately not blank: a row a reader cannot place is worse than one that
+ * says it has no place.
  */
 function where(change: Change): string {
   const parts = [change.project, change.environment, change.secret].filter(
     (name): name is string => name != null && name !== "",
   );
 
-  return parts.length === 0 ? "the organization" : parts.join("/");
+  if (parts.length > 0) {
+    return parts.join("/");
+  }
+
+  return change.about != null && change.about !== "" ? change.about : "the organization";
 }
