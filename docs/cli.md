@@ -373,7 +373,10 @@ moves is the sign-in and nothing else: their password is the one they had, and
 every session and token of theirs goes on working, because a token names its
 person by id. It is an administrator's for the reason a reset is one — a mistyped
 address cannot correct itself, since the correction needs the sign-in it just took
-away.
+away, and somebody has to be able to repair that. Changing **your own** is the web
+application's, next to your own name and your own password, and it asks for the
+password you already have; this CLI administers people and does not keep a profile
+screen of its own.
 
 ## Purge
 

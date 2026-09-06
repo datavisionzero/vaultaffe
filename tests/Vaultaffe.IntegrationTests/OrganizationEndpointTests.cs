@@ -5,7 +5,7 @@ using System.Text.Json.Nodes;
 namespace Vaultaffe.IntegrationTests;
 
 /// <summary>
-/// The organization's name, and the two things a person changes about
+/// The organization's name, and the three things a person changes about
 /// themselves (Specification §6.1).
 /// </summary>
 [Collection(nameof(PostgresCollection))]
@@ -87,6 +87,94 @@ public sealed class OrganizationEndpointTests(PostgresFixture postgres)
         using var refused = await agent.PatchAsJsonAsync(
             "/api/v1/me",
             new { name = "Not their name" },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.Equal("forbidden", await IdentityTests.CodeOf(refused));
+    }
+
+    /// <summary>
+    /// The second way to the address: an administrator can do it for anybody, and
+    /// this is the way that needs nobody. It asks for the password for the reason
+    /// a password change does — a session left open somewhere should not be enough
+    /// to take somebody's own sign-in away.
+    /// </summary>
+    [Fact]
+    public async Task You_change_the_address_you_sign_in_with_yourself()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+
+        var mine = await instance.StartAsync();
+        using var human = instance.ClientWith(mine);
+
+        using var wrong = await human.PostAsJsonAsync(
+            "/api/v1/me/email",
+            new { email = "somewhere@example.test", currentPassword = "not-the-one-i-have" },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, wrong.StatusCode);
+
+        using var changed = await human.PostAsJsonAsync(
+            "/api/v1/me/email",
+            new
+            {
+                email = "Somewhere@Example.test",
+                currentPassword = AnInstance.AdministratorPassword,
+            },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
+
+        // The session that asked is still the session that asked: an address is
+        // not a credential, and every token names its person by id.
+        var me = await human.GetFromJsonAsync<JsonNode>(
+            "/api/v1/me", TestContext.Current.CancellationToken);
+
+        Assert.Equal("somewhere@example.test", me!["email"]!.GetValue<string>());
+
+        using var stranger = instance.ClientWith(null);
+
+        using var signedIn = await stranger.PostAsJsonAsync(
+            "/api/v1/sessions",
+            new
+            {
+                email = "somewhere@example.test",
+                password = AnInstance.AdministratorPassword,
+            },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, signedIn.StatusCode);
+    }
+
+    [Fact]
+    public async Task An_address_somebody_else_here_has_is_refused_to_you_too()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        using var human = instance.ClientWith(await instance.StartAsync());
+
+        using var refused = await human.PostAsJsonAsync(
+            "/api/v1/me/email",
+            new { email = "not an address", currentPassword = AnInstance.AdministratorPassword },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+    }
+
+    /// <summary>
+    /// The same line that keeps a token from renaming the person it is
+    /// accountable to. Taking somebody's sign-in away from inside a process they
+    /// handed a credential to is not what the credential was for.
+    /// </summary>
+    [Fact]
+    public async Task A_token_does_not_change_the_address_of_the_person_it_belongs_to()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        using var human = instance.ClientWith(await instance.StartAsync());
+        using var agent = instance.ClientWith(await AgentAsync(human));
+
+        using var refused = await agent.PostAsJsonAsync(
+            "/api/v1/me/email",
+            new { email = "somewhere@example.test", currentPassword = AnInstance.AdministratorPassword },
             TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);

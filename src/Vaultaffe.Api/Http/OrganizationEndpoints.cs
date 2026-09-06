@@ -11,6 +11,9 @@ public sealed record NameRequest(string Name);
 /// <summary>Changing your own password: the one you have, and the one you want.</summary>
 public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 
+/// <summary>Changing your own address: the one you want, and the password you have.</summary>
+public sealed record ChangeMyEmailRequest(string Email, string CurrentPassword);
+
 /// <summary>
 /// The organization, and the caller's own profile (<c>docs/api.md</c>).
 /// </summary>
@@ -24,6 +27,12 @@ public sealed record ChangePasswordRequest(string CurrentPassword, string NewPas
 /// your own name is not one of the short list of §6.4 — it is nobody's
 /// administration but your own — and what is refused there is a service or agent
 /// token acting for the person accountable for it, exactly as signing out is.
+/// </para>
+/// <para>
+/// Two of them take the password the caller already has, and for one reason: a
+/// session left open on a borrowed machine should not be enough to lock its owner
+/// out. That is what changing a password can do, and what changing the address
+/// somebody signs in with does just as completely.
 /// </para>
 /// </remarks>
 public static class OrganizationEndpoints
@@ -64,6 +73,27 @@ public static class OrganizationEndpoints
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status403Forbidden);
+
+        // A POST beside `/me/password` rather than a field on `PATCH /me`: it takes
+        // a credential, and a partial update of a profile is not the shape of an
+        // act that asks for one.
+        api.MapPost("/me/email", async (
+                ChangeMyEmailRequest request,
+                ChangeMyEmail change,
+                CancellationToken cancellation) =>
+            {
+                var row = await change.ExecuteAsync(
+                    request.Email, request.CurrentPassword, cancellation);
+
+                return new UserShape(
+                    row.Id, row.Email, row.Name, row.IsAdministrator, row.CreatedAt, row.DeactivatedAt);
+            })
+            .WithName("ChangeMyEmail")
+            .WithSummary("Change the address you sign in with. Your sessions all stay.")
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status409Conflict);
 
         api.MapPost("/me/password", async (
                 ChangePasswordRequest request,

@@ -1163,6 +1163,77 @@
         }
       }
     },
+    "/api/v1/me/email": {
+      "post": {
+        "tags": [
+          "Organization"
+        ],
+        "summary": "Change the address you sign in with. Your sessions all stay.",
+        "operationId": "ChangeMyEmail",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeMyEmailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/me/password": {
       "post": {
         "tags": [
@@ -3771,6 +3842,21 @@
           }
         }
       },
+      "ChangeMyEmailRequest": {
+        "required": [
+          "email",
+          "currentPassword"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "currentPassword": {
+            "type": "string"
+          }
+        }
+      },
       "ChangePage": {
         "required": [
           "entries",
@@ -4207,6 +4293,7 @@
           "organizationId",
           "userId",
           "name",
+          "email",
           "isAdministrator",
           "tokenId",
           "tokenName",
@@ -4224,6 +4311,9 @@
             "format": "uuid"
           },
           "name": {
+            "type": "string"
+          },
+          "email": {
             "type": "string"
           },
           "isAdministrator": {

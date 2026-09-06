@@ -118,6 +118,25 @@ public sealed class ChangeEmail(IIdentityStore identities, ICallerIdentity calle
     {
         _ = caller.Required;
 
+        var user = await identities.FindUserAsync(userId, cancellationToken)
+            ?? throw Refusal.NotFound("Nobody here by that id.");
+
+        await ApplyAsync(identities, user, email, cancellationToken);
+
+        await identities.SaveAsync(cancellationToken);
+
+        return ListUsers.Row(user);
+    }
+
+    /// <summary>
+    /// What both ways of changing an address do, once whoever asked has been
+    /// allowed to: one spelling, nobody else's, and the column set. Shared so
+    /// that an administrator's way and a person's own cannot drift apart on the
+    /// rule itself — only on who may ask.
+    /// </summary>
+    internal static async Task ApplyAsync(
+        IIdentityStore identities, User user, string email, CancellationToken cancellationToken)
+    {
         if (!EmailAddress.IsValid(email))
         {
             throw Refusal.Validation(
@@ -127,9 +146,6 @@ public sealed class ChangeEmail(IIdentityStore identities, ICallerIdentity calle
         }
 
         var address = EmailAddress.Normalize(email);
-
-        var user = await identities.FindUserAsync(userId, cancellationToken)
-            ?? throw Refusal.NotFound("Nobody here by that id.");
 
         var held = await identities.FindUserByEmailAsync(address, cancellationToken);
 
@@ -143,10 +159,6 @@ public sealed class ChangeEmail(IIdentityStore identities, ICallerIdentity calle
         }
 
         user.ChangeEmailTo(address);
-
-        await identities.SaveAsync(cancellationToken);
-
-        return ListUsers.Row(user);
     }
 }
 

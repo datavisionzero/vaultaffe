@@ -87,6 +87,7 @@ export const aPerson: Me = {
   organizationId: "0199a000-0000-7000-8000-000000000001",
   userId: "0199a000-0000-7000-8000-000000000002",
   name: "maintainer",
+  email: "maintainer@example.test",
   isAdministrator: true,
   tokenId: "0199a000-0000-7000-8000-000000000003",
   tokenName: null,

@@ -166,9 +166,11 @@ an opt-in action the user triggers, it is a plausible next step (§12).
 
 - Login (email + password), user management within the organization. The
   instance sends **no email**: an invitation is a link the administrator copies
-  and hands over, a password reset is done by an administrator, and an address —
-  which is a login name here and not a delivery target — is changed by one, since
-  there is no message to confirm a new one with. That is the price of "no external
+  and hands over, and a password reset is done by an administrator. An address is
+  a login name here and not a delivery target, so there is no message to confirm a
+  new one with: a person changes their own with the password they already have,
+  and an administrator changes anybody's — which is what repairs the one that was
+  mistyped. That is the price of "no external
   dependencies to operate" (§4), and for teams of this size it is the right one.
 - Overview of projects and environments.
 - View, create, edit, delete secrets — values masked by default, revealable.

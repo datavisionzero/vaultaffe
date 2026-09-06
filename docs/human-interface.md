@@ -66,7 +66,7 @@ more would be a promise the product does not keep.
 | `/settings/tokens` | Settings · Tokens | **two lists**: the named tokens an agent or a service acts under — kind, scopes, binding, standing — and, below them, the sessions every sign-in leaves; creating a token; the value of a new one, once | area list folds above the area |
 | `/settings/users` | Settings · Users | the people of the organization, the invitation link to copy, an administrator's password reset and address change, and the invitations that are still open | area list folds above the area |
 | `/settings/organization` | Settings · Organization | the organization's name | area list folds above the area |
-| `/settings/profile` | Settings · Profile | own name, own password | area list folds above the area |
+| `/settings/profile` | Settings · Profile | own name, the address you sign in with, own password | area list folds above the area |
 
 `/` leads to `/projects`. A project and an environment are addressed **by name**,
 exactly as the API and the CLI's binding address them
@@ -198,7 +198,7 @@ and a row's acts live in that row's own menu.
 | Token | list with kind, name, scopes, binding and standing, tokens and sessions apart | create, revoke | revoke |
 | User | list the people of the organization, see who is deactivated | invite by link, withdraw an invitation, reset a password as administrator, change the address somebody signs in with, deactivate, put back | withdraw; reset a password; change an address; deactivate |
 | Organization | read the name | rename | — |
-| Profile | read own name and email | change own name, change own password | — |
+| Profile | read own name and email | change own name, change the address you sign in with, change own password | — |
 
 **Every purge asks, and says the two things nobody else says.** A purge destroys
 the undo button — it is the second half of a deletion, not a faster one — and it

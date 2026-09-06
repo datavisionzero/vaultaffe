@@ -48,6 +48,7 @@ builder.Services.AddScoped<ReadOrganization>();
 builder.Services.AddScoped<RenameOrganization>();
 builder.Services.AddScoped<RenameMyself>();
 builder.Services.AddScoped<ChangeMyPassword>();
+builder.Services.AddScoped<ChangeMyEmail>();
 builder.Services.AddScoped<ChangeLog>();
 builder.Services.AddScoped<CreateProject>();
 builder.Services.AddScoped<ListProjects>();

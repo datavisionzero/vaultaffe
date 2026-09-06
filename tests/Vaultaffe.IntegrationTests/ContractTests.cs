@@ -58,7 +58,7 @@ public sealed class ContractTests(PostgresFixture postgres)
                 "/api/v1/instance",
                 "/api/v1/invitations", "/api/v1/invitations/acceptance",
                 "/api/v1/invitations/offer", "/api/v1/invitations/{id}",
-                "/api/v1/me", "/api/v1/me/password",
+                "/api/v1/me", "/api/v1/me/email", "/api/v1/me/password",
                 "/api/v1/organization",
                 "/api/v1/projects", "/api/v1/projects/{project}",
                 "/api/v1/projects/{project}/environments",

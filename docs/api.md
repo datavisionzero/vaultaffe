@@ -134,15 +134,18 @@ same time.
 row stays — revoked rather than deleted, so that everything it ever signed in the
 change log keeps an author.
 
-`GET /api/v1/me` answers who the caller is: the organization, the person, the
-token and its scopes. `PATCH /api/v1/me` changes that person's **own name**, and
-`POST /api/v1/me/password` their own password — the current one, and the new one.
+`GET /api/v1/me` answers who the caller is: the organization, the person — their
+name and the address they sign in with — the token and its scopes. `PATCH
+/api/v1/me` changes that person's **own name**, `POST /api/v1/me/email` the
+**address they sign in with**, and `POST /api/v1/me/password` their own password;
+the last two take the password the caller already has.
 
-Both are refused for anything but a session, and refused inside the act rather
-than declared on the endpoint: changing your own name is not one of the short
-list of §6.4, it is nobody's administration but your own. What is refused is a
-service or agent token acting for the person accountable for it, exactly as
-signing out is.
+All three are refused for anything but a session, and refused inside the act
+rather than declared on the endpoint: changing your own name is not one of the
+short list of §6.4, it is nobody's administration but your own. What is refused is
+a service or agent token acting for the person accountable for it, exactly as
+signing out is — taking somebody's sign-in away from inside a process they handed
+a credential to is not what the credential was for.
 
 **Changing your own password ends every other session of yours** and keeps the
 one that asked. Somebody changing a password because they think it is known
@@ -329,13 +332,22 @@ and every token names its person by id, so **their sessions stay**. That is the
 one line between this and a reset, which ends them because a password somebody
 else may know is worth nothing while the sessions opened with it still work.
 
-It is an administrator's for the same reason a reset is: a mistyped address cannot
-correct itself, because the correction needs the sign-in that the mistyped address
-just took away, and there is no mail to send a way back through. The address is
-stored in **one spelling**, lower-case and trimmed, so a change to another
-spelling of what somebody already has is not a conflict. An address somebody here
-already signs in with is `name-taken`; an address that is not one is a validation
-failure naming `email`.
+There are **two ways to that column, and one rule behind them**. `POST
+/users/{id}/email` is an administrator's, and it is what repairs a lock-out —
+somebody has to be able to, because a mistyped address cannot correct itself: the
+correction needs the sign-in that the mistyped address just took away, and there
+is no mail to send a way back through. `POST /me/email` is the way that needs
+nobody, and it **takes the password the caller already has**, exactly as changing
+a password does and for the same reason: a session left open on a borrowed machine
+should not be enough to take its owner's sign-in away. A wrong one is
+`unauthenticated` and says nothing else.
+
+The address is stored in **one spelling**, lower-case and trimmed, so a change to
+another spelling of what somebody already has is not a conflict. An address
+somebody here already signs in with is `name-taken`; an address that is not one is
+a validation failure naming `email`. Both ways answer the person as every listing
+shows them, and `GET /me` carries the address too — a screen that offers to change
+it has to be able to show it.
 
 **Deactivating somebody takes every token of theirs with it**, their sessions and
 the agent tokens they are accountable for included — a person who is out of the

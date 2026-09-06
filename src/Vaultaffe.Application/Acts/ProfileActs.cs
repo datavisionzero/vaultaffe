@@ -5,7 +5,8 @@ using Vaultaffe.Domain.Refusals;
 namespace Vaultaffe.Application.Acts;
 
 /// <summary>
-/// What a person changes about themselves: their name, and their password.
+/// What a person changes about themselves: their name, their password, and the
+/// address they sign in with.
 /// </summary>
 /// <remarks>
 /// **Only a session may.** A service or an agent token names the person who is
@@ -113,5 +114,54 @@ public sealed class ChangeMyPassword(
         }
 
         await identities.SaveAsync(cancellationToken);
+    }
+}
+
+/// <summary>
+/// Changing the address you sign in with yourself: the new one, and the password
+/// you have (Specification §6.1).
+/// </summary>
+/// <remarks>
+/// The second way to the same column. An administrator can do this for anybody
+/// (<see cref="ChangeEmail"/>) because somebody has to be able to repair a
+/// lock-out; this is the way that does not need one, and it is where a person's
+/// own name and own password already live.
+/// <para>
+/// The current password is asked for, for the reason it is asked for when
+/// changing a password: a session left open on a borrowed machine should not be
+/// enough to lock its owner out of their own account — and taking the address
+/// away is exactly that, because the instance sends no mail and there is no link
+/// back. The wrong one is <c>unauthenticated</c> and says nothing else.
+/// </para>
+/// <para>
+/// <b>Every session stays</b>, this one and the others. An address is not a
+/// credential, nothing was compromised by changing it, and every token names its
+/// person by id.
+/// </para>
+/// </remarks>
+public sealed class ChangeMyEmail(
+    IIdentityStore identities, IPasswordHasher passwords, ICallerIdentity caller)
+{
+    public async Task<UserRow> ExecuteAsync(
+        string email, string currentPassword, CancellationToken cancellationToken)
+    {
+        var acting = RenameMyself.OnlyAPerson(caller);
+
+        var user = await identities.FindUserAsync(acting.UserId, cancellationToken)
+            ?? throw Refusal.NotFound("Nobody here by that id.");
+
+        var correct = await passwords.VerifyAsync(
+            user.PasswordHash, currentPassword ?? string.Empty, cancellationToken);
+
+        if (!correct)
+        {
+            throw Refusal.Unauthenticated("That is not your current password.");
+        }
+
+        await ChangeEmail.ApplyAsync(identities, user, email, cancellationToken);
+
+        await identities.SaveAsync(cancellationToken);
+
+        return ListUsers.Row(user);
     }
 }

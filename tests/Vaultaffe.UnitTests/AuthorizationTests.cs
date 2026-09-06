@@ -242,6 +242,7 @@ public sealed class AuthorizationTests
                 Guid.NewGuid(),
                 Guid.NewGuid(),
                 "Maintainer",
+                "maintainer@example.test",
                 IsAdministrator: true,
                 Guid.NewGuid(),
                 kind.ToString(),

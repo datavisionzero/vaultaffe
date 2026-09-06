@@ -259,14 +259,57 @@ describe("the profile", () => {
 
     renderUnderShell("/settings/profile", <Shell />);
 
-    const current = await screen.findByLabelText("Your current password");
+    // Two forms on this screen ask for the password somebody already has, so
+    // each act is reached through the block it belongs to.
+    const block = await screen.findByRole("region", { name: "Password" });
+
+    const current = within(block).getByLabelText("Your current password");
     await userEvent.type(current, "a-password-of-real-length");
-    await userEvent.type(screen.getByLabelText("Your new password"), "a-longer-new-password");
-    await userEvent.click(screen.getByRole("button", { name: "Change it" }));
+    await userEvent.type(within(block).getByLabelText("Your new password"), "a-longer-new-password");
+    await userEvent.click(within(block).getByRole("button", { name: "Change it" }));
 
     expect(await screen.findByText(/Your other sessions have ended/)).toBeInTheDocument();
     expect(current).toHaveValue("");
-    expect(screen.getByLabelText("Your new password")).toHaveValue("");
+    expect(within(block).getByLabelText("Your new password")).toHaveValue("");
+  });
+
+  // The second way to the address: the one that needs nobody else.
+  it("changes the address you sign in with, and keeps the sessions", async () => {
+    const { calls } = installInstance({
+      "POST /api/v1/me/email": {
+        id: aPerson.userId,
+        email: "maintainer@elsewhere.test",
+        name: aPerson.name,
+        isAdministrator: true,
+        createdAt: "2026-09-01T09:00:00+00:00",
+        deactivatedAt: null,
+      },
+    });
+
+    renderUnderShell("/settings/profile", <Shell />);
+
+    const block = await screen.findByRole("region", { name: "The address you sign in with" });
+
+    // It starts at the address they have, and changing nothing is not an act.
+    const field = within(block).getByLabelText("The address you will sign in with");
+    expect(field).toHaveValue("maintainer@example.test");
+    expect(within(block).getByRole("button", { name: "Change it" })).toBeDisabled();
+
+    await userEvent.clear(field);
+    await userEvent.type(field, "maintainer@elsewhere.test");
+    await userEvent.type(
+      within(block).getByLabelText("Your current password"),
+      "a-password-of-real-length",
+    );
+    await userEvent.click(within(block).getByRole("button", { name: "Change it" }));
+
+    expect(await screen.findByText(/your sessions all stay/)).toBeInTheDocument();
+
+    const sent = calls.find((call) => call.url.endsWith("/api/v1/me/email"));
+    expect(sent).toBeDefined();
+
+    // The password is not left in the field it was typed into.
+    expect(within(block).getByLabelText("Your current password")).toHaveValue("");
   });
 
   it("tells the frame the new name rather than leaving the old one in it", async () => {
