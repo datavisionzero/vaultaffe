@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -65,9 +66,13 @@ func (g *globals) login(ctx context.Context, tokenFile string) error {
 	}
 	login := *begun.JSON200
 
-	fmt.Fprintf(g.msg(), "Open %s and enter this code:\n\n    %s\n\n", login.VerificationUri, login.UserCode)
+	// Both addresses arrive relative to the instance — the server says so and
+	// says why: this CLI has the host already (`BeginDeviceLogin`). It is the one
+	// that has to join the two halves, because what it prints is read by a person
+	// who has to open it, and `/device` is not something anybody can open.
+	fmt.Fprintf(g.msg(), "Open %s and enter this code:\n\n    %s\n\n", at(address, login.VerificationUri), login.UserCode)
 	if login.VerificationUriComplete != "" {
-		fmt.Fprintf(g.msg(), "Or open the code's own address: %s\n\n", login.VerificationUriComplete)
+		fmt.Fprintf(g.msg(), "Or open the code's own address: %s\n\n", at(address, login.VerificationUriComplete))
 	}
 	fmt.Fprintf(g.msg(), "Waiting. The code is good for %s.\n", minutes(login.ExpiresInSeconds))
 
@@ -99,6 +104,22 @@ func (g *globals) login(ctx context.Context, tokenFile string) error {
 // poll collects the session once a person has confirmed. Which refusal comes
 // back is the whole protocol: `device-pending` means keep asking, and the other
 // three mean stop (docs/api.md).
+// at reads a reference the instance gave against the address this CLI is
+// talking to. A reference that is already absolute survives untouched, so an
+// instance that one day answers with a whole URL is not broken by this.
+func at(address, reference string) string {
+	base, err := url.Parse(address)
+	if err != nil {
+		return reference
+	}
+
+	ref, err := url.Parse(reference)
+	if err != nil {
+		return reference
+	}
+
+	return base.ResolveReference(ref).String()
+}
 func (g *globals) poll(ctx context.Context, c *client.Client, login api.DeviceLogin) (api.Session, error) {
 	interval := time.Duration(login.IntervalSeconds) * time.Second
 	if interval <= 0 {

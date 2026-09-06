@@ -15,12 +15,46 @@ import (
 
 const aSession = "vaultaffe_session_0123456789abcdef"
 
+// Relative, because that is what an instance actually answers: the two
+// addresses are given relative to it and the CLI has the host already
+// (`BeginDeviceLogin.VerificationPath`). This stub said `in.URL + "/device"`
+// once, which is why nothing here noticed that a person was being told to open
+// `/device`.
 func aDeviceLogin(in *instance) {
 	in.answer("POST /api/v1/device/authorizations", http.StatusOK, map[string]any{
 		"deviceCode": "d-1", "userCode": "BCDF-GHJK",
-		"verificationUri": in.URL + "/device", "verificationUriComplete": in.URL + "/device?code=BCDF-GHJK",
+		"verificationUri": "/device", "verificationUriComplete": "/device?code=BCDF-GHJK",
 		"expiresInSeconds": 600, "intervalSeconds": 1,
 	})
+}
+
+// What a person is told to open has to be openable. Both lines, because the
+// second one is the one somebody clicks.
+func TestALoginPrintsAnAddressAPersonCanOpen(t *testing.T) {
+	in := startInstanceStub(t)
+	aDeviceLogin(in)
+	in.answer("POST /api/v1/device/tokens", http.StatusOK, map[string]any{
+		"userId": "6f1f1a2e-0000-4000-8000-000000000001", "name": "A Maintainer",
+		"email": "maintainer@example.com", "isAdministrator": true,
+		"token": aSession, "expiresAt": "2026-12-31T00:00:00Z",
+	})
+
+	s := newSession(t, in)
+	got := s.run(t, "login")
+
+	if got.Code != exit.OK {
+		t.Fatalf("exit %d\n%s", got.Code, got.Stderr)
+	}
+	said := got.Stdout + got.Stderr
+	for _, want := range []string{in.URL + "/device", in.URL + "/device?code=BCDF-GHJK"} {
+		if !strings.Contains(said, want) {
+			t.Fatalf("it did not print %q:\n%s", want, said)
+		}
+	}
+	// And not the bare path on its own, which is what the bug looked like.
+	if strings.Contains(said, "Open /device") {
+		t.Fatalf("it told a person to open a path with no host:\n%s", said)
+	}
 }
 
 // The point of the whole flow: the session ends up in the keychain, and the

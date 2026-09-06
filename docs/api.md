@@ -166,6 +166,13 @@ session, a CI job, a container, an agent's sandbox
    `intervalSeconds`. The user code is eight consonants as `XXXX-XXXX`: no vowel,
    so it is never a word, and no digit, so none of `0/O`, `1/I`, `5/S` or `2/Z`
    has a second half to be confused with.
+
+   **`verificationUri` and `verificationUriComplete` are relative to the
+   instance** — `/device` and `/device?code=XXXX-XXXX`. A client resolves them
+   against the address it just called, which it has; the instance does not,
+   because it stands behind a proxy and would have to be told its own public
+   name to build one. A client that prints one of them to a person has to join
+   the two halves first: a path with no host is not something anybody can open.
 2. A human opens `/device` on any machine, types the code and their password, and
    confirms. That page asks for a password every time and holds no session
    ([ADR 0008](./adr/0008-a-session-is-a-token-and-the-only-page-asks-for-a-password.md)).

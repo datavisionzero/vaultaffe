@@ -6,7 +6,7 @@ namespace Vaultaffe.Api.Http;
 /// <param name="DeviceCode">The long code the CLI keeps and polls with. It is never shown to a person.</param>
 /// <param name="UserCode">The short code the CLI prints, spelled as a person reads it.</param>
 /// <param name="VerificationUri">Where a human goes to confirm, relative to this instance.</param>
-/// <param name="VerificationUriComplete">The same, with the code already in it.</param>
+/// <param name="VerificationUriComplete">The same, with the code already in it, and relative in the same way.</param>
 /// <param name="ExpiresInSeconds">How long the human has.</param>
 /// <param name="IntervalSeconds">How often the CLI should poll.</param>
 public sealed record DeviceLoginShape(

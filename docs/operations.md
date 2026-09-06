@@ -20,9 +20,9 @@ docker compose -f deploy/docker-compose.yml up -d
 open http://localhost                    # or the domain in VAULTAFFE_SITE_ADDRESS
 ```
 
-The first `up` builds the image from the checkout, because no release has been
-published to pull yet; naming a released tag in `VAULTAFFE_IMAGE` fetches it and
-never builds. `up -d` returns when the instance *answers* and not when a port
+The first `up` builds the image from the checkout, because `:latest` moves only
+on a stable release and there has not been one yet; naming a released tag in
+`VAULTAFFE_IMAGE` — a prerelease included — fetches it and never builds. `up -d` returns when the instance *answers* and not when a port
 opened — Caddy waits for the health check, which is the handshake, which is
 served after the migrations have run.
 
@@ -43,6 +43,49 @@ renews a certificate for it on its own, which is what keeps HTTPS inside the ten
 minutes rather than being the step everybody postpones
 ([Specification §11](../Specification.md#11-success-criteria-for-the-mvp)).
 
+## Behind a proxy that is already there
+
+Everything above assumes this instance owns ports 80 and 443, because that is
+what lets Caddy fetch a certificate and what makes HTTPS part of the ten minutes
+rather than the step after them. On a machine that already terminates TLS for
+something else — another Caddy, an nginx, a Traefik — it does not own them, and
+`up -d` fails on the ports rather than on anything interesting.
+
+The answer is the same override the ports were made movable for. Nothing is
+edited; three values in `deploy/.env` and a block in the proxy that is already
+there:
+
+```sh
+# deploy/.env — no VAULTAFFE_SITE_ADDRESS at all
+VAULTAFFE_HTTP_PORT=127.0.0.1:8081
+VAULTAFFE_HTTPS_PORT=127.0.0.1:8443
+```
+
+The left half of a published port is the whole of it, so `127.0.0.1:` binds
+these to loopback and nothing off the machine reaches them. With
+`VAULTAFFE_SITE_ADDRESS` unset the bundled Caddy serves plain HTTP, which is
+correct here: the hop it is on does not leave the host. The proxy in front does
+the certificate and passes on:
+
+```caddyfile
+vault.example.org {
+	reverse_proxy 127.0.0.1:8081
+}
+```
+
+**Two things follow, and both are worth saying out loud.**
+
+`VAULTAFFE_SITE_ADDRESS` stops being the TLS decision. In this shape it decides
+nothing; the certificate, its renewal and the redirect from port 80 belong to
+the proxy in front, and so does the answer when one of them goes wrong. The
+section above about a missing certificate is then about that proxy's log, not
+this stack's.
+
+And there are two Caddys in a row. That is the price of not editing the compose
+file, and it is a small one — the extra hop is a loopback connection on the same
+host. Running the instance without the bundled proxy would mean publishing its
+own port, and it deliberately publishes none.
+
 ## What is configured, and what is not
 
 Everything an operator sets is in `deploy/.env`, and the file's own comments say
@@ -54,7 +97,7 @@ stack refuses to start without.
 | `POSTGRES_PASSWORD` | The database password, shared by the two services. No default: `openssl rand -base64 24`. |
 | `VAULTAFFE_MASTER_KEY` | The key every value is sealed under. No default, and 32 random bytes in base64 exactly: `openssl rand -base64 32`. |
 | `VAULTAFFE_SITE_ADDRESS` | What the instance answers as, and whether there is a certificate. `:80` unset. |
-| `VAULTAFFE_HTTP_PORT`, `VAULTAFFE_HTTPS_PORT` | The published ports, `80` and `443` unset. The whole left half, so `127.0.0.1:8080` binds to loopback and nowhere else. |
+| `VAULTAFFE_HTTP_PORT`, `VAULTAFFE_HTTPS_PORT` | The published ports, `80` and `443` unset. The whole left half, so `127.0.0.1:8080` binds to loopback and nowhere else — which is how this instance runs behind a proxy that is already there (above). |
 | `VAULTAFFE_IMAGE` | Which build this installation runs. `:latest` is the newest stable release, `:main` follows the trunk, a version or a `sha-` tag pins it. |
 
 Inside the container the product reads two things and nothing else:
@@ -282,3 +325,15 @@ the artifact alone and reads the value back
 That checks the mechanism, not your copy of it. Restoring your own artifact onto
 a scratch machine once — before anything depends on it — is the only way to find
 out whether what you have been keeping is what you thought.
+
+**The certificate is the one thing CI cannot ask.** An ACME issuance needs a name
+that resolves from the public internet and ports 80 and 443 reachable on it, and
+a rate limit from a workflow that runs on every commit would be a red trunk for a
+reason that has nothing to do with the code. So it is checked by hand, and this
+is the last time it was: on 2026-09-06, on a host that owned ports 80 and 443
+with `VAULTAFFE_SITE_ADDRESS` set to a name resolving to it and nothing else
+changed, the bundled Caddy obtained a Let's Encrypt certificate **twelve
+seconds** after `up -d`, for that name and no other, with port 80 answering
+`308` to the `https://` of the same address. The certificate was in the
+stack's own `caddy-data` volume, which is what says it was this Caddy that
+fetched it. Worth repeating whenever the proxy or its configuration changes.

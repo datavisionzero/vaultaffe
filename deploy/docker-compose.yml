@@ -10,8 +10,10 @@
 # rather than tomorrow — until somebody has, whoever reaches the instance first
 # is the one it happens for.
 #
-# The first `up` builds the image from this checkout, because no release has
-# been published yet; it is a few minutes once. Afterwards, upgrading is
+# The first `up` builds the image from this checkout, because `:latest` moves
+# only on a stable release and there has not been one; it is a few minutes once.
+# Naming a released tag in `VAULTAFFE_IMAGE` — a prerelease included — fetches it
+# and never builds. Afterwards, upgrading is
 # `docker compose pull` followed by `docker compose up -d`: migrations apply
 # themselves on startup, only ever forward, so take a backup first:
 #
@@ -67,7 +69,7 @@ services:
     image: ${VAULTAFFE_IMAGE:-ghcr.io/datavisionzero/vaultaffe:latest}
     # Built from the checkout when that image is not on this machine, which is
     # what makes `git clone` to a running instance one command (§11) — and, until
-    # the first release is published, the only way there is. An installation that
+    # a stable release moves `:latest`, the only way there is by default. An installation that
     # names a released tag in VAULTAFFE_IMAGE pulls it and never builds.
     build:
       context: ..
