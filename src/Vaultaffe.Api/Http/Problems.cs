@@ -61,7 +61,12 @@ public static class Problems
             StatusCodes.Status409Conflict,
         RefusalCode.NotRecoverable => StatusCodes.Status410Gone,
         RefusalCode.ClientTooOld => StatusCodes.Status426UpgradeRequired,
-        RefusalCode.Internal => StatusCodes.Status500InternalServerError,
+        // Five hundred, and deliberately: nothing about the request was wrong, so
+        // no 4xx would be honest. What these two add over `internal` is a name and
+        // a sentence, because the person who has to act on them is an operator
+        // and the answer they need is not in this instance's log.
+        RefusalCode.Internal or RefusalCode.MasterKeyMismatch or RefusalCode.SealedValueDamaged =>
+            StatusCodes.Status500InternalServerError,
         _ => throw new ArgumentOutOfRangeException(nameof(code), code, "A refusal code without a status."),
     };
 
@@ -84,6 +89,8 @@ public static class Problems
         RefusalCode.UnsupportedApiVersion => "This instance does not serve that version of the API",
         RefusalCode.ClientTooOld => "This client is older than this instance accepts",
         RefusalCode.ClientVersionUnreadable => "The announced client version is not a version",
+        RefusalCode.MasterKeyMismatch => "This instance was started with a different master key",
+        RefusalCode.SealedValueDamaged => "This value does not open, and the key is not why",
         RefusalCode.Internal => "Something went wrong on the server",
         _ => throw new ArgumentOutOfRangeException(nameof(code), code, "A refusal code without a title."),
     };

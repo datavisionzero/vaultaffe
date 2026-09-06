@@ -240,19 +240,24 @@ Putting a database back under a different master key is the mistake this whole
 arrangement exists to prevent, so it is worth knowing what it looks like. The
 instance starts. The handshake answers. Signing in works, projects and
 environment names and the change log are all there — because none of that is
-sealed under the master key. Reading a value fails, and the instance's log says
-why in one line:
+sealed under the master key. Reading a value fails, and it says so where the
+person reading it is:
 
 ```
 This value was sealed under a different master key than the one this instance
-was started with. Restoring a backup restores the key with it.
+was started with. Restoring a backup restores the key with it. (master-key-mismatch)
 ```
 
-The caller sees a plain server error; the sentence above is in
-`docker compose logs vaultaffe`, and that is the first place to look when a
-restored instance behaves this way. **Nothing is damaged.** Put the matching key
-back in `.env`, `docker compose up -d`, and every value opens again — the data
-was never touched.
+That is what the CLI prints and what the web interface shows, not something to
+go and find in `docker compose logs vaultaffe` — the log has it too, and it is no
+longer the only place. **Nothing is damaged.** Put the matching key back in
+`.env`, `docker compose up -d`, and every value opens again: the data was never
+touched.
+
+A different sentence, `sealed-value-damaged`, means the opposite and wants the
+opposite: the key is the right one and the stored bytes are not what was written.
+That is a row changed underneath this instance, and the way back is the restore
+rather than a key.
 
 ## What a restore is not, and what a purge does not reach
 

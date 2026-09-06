@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Vaultaffe.Domain.Refusals;
 using Vaultaffe.Domain.Secrets;
 using Vaultaffe.Infrastructure.Encryption;
 
@@ -85,6 +86,11 @@ public sealed class EnvelopeTests
     /// not — but a value that changed underneath is a fault, and a fault should
     /// be loud.
     /// </summary>
+    /// <remarks>
+    /// Loud enough to reach the caller, which is the whole of VAULT-31: it is a
+    /// refusal with a name, so an operator reads a sentence instead of finding
+    /// "Something went wrong on the server" and going to look in a container log.
+    /// </remarks>
     [Theory]
     [InlineData("ciphertext")]
     [InlineData("nonce")]
@@ -94,7 +100,9 @@ public sealed class EnvelopeTests
         var sealedValue = _keyRing.Seal("not-a-real-key", null);
         var edited = Bent(sealedValue, part);
 
-        Assert.Throws<AuthenticationTagMismatchException>(() => _keyRing.Open(edited));
+        var refused = Assert.Throws<Refusal>(() => _keyRing.Open(edited));
+
+        Assert.Equal(RefusalCode.SealedValueDamaged, refused.Code);
     }
 
     /// <summary>
@@ -108,9 +116,15 @@ public sealed class EnvelopeTests
         var sealedValue = _keyRing.Seal("not-a-real-key", null);
         var elsewhere = new KeyRing(AMasterKey());
 
-        var refused = Assert.Throws<CryptographicException>(() => elsewhere.Open(sealedValue));
+        var refused = Assert.Throws<Refusal>(() => elsewhere.Open(sealedValue));
 
-        Assert.Contains("different master key", refused.Message, StringComparison.Ordinal);
+        // The code is what a client switches on and the sentence is what a person
+        // reads; the point of this refusal is that it carries both, so both are
+        // asserted. And it is *not* the damaged-row code: telling an operator
+        // their data is broken when their `.env` is wrong sends them to a restore
+        // they do not need.
+        Assert.Equal(RefusalCode.MasterKeyMismatch, refused.Code);
+        Assert.Contains("different master key", refused.Detail!, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -141,7 +155,9 @@ public sealed class EnvelopeTests
             sealedValue.Nonce,
             [(byte)(KeyRing.Format + 1), .. sealedValue.Ciphertext[1..]]);
 
-        Assert.Throws<CryptographicException>(() => _keyRing.Open(fromTheFuture));
+        var refused = Assert.Throws<Refusal>(() => _keyRing.Open(fromTheFuture));
+
+        Assert.Equal(RefusalCode.SealedValueDamaged, refused.Code);
     }
 
     /// <summary>

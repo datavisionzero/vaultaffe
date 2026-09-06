@@ -643,11 +643,20 @@ an untidiness. `detail` says what was refused, not what it was refused about.
 | `unsupported-api-version` | 404 | The path named a contract version this instance does not serve. Carries `apiVersions`. |
 | `client-too-old` | 426 | `Vaultaffe-Client` is below `minimumClient`. Carries `client` and `minimumClient`. |
 | `client-version-unreadable` | 400 | `Vaultaffe-Client` is not a version. |
+| `master-key-mismatch` | 500 | This instance was started with a different master key than the one the value was sealed under — a dump restored without the `.env` beside it. Nothing is damaged and no caller can do anything about it. |
+| `sealed-value-damaged` | 500 | The key is right and the stored bytes are not what was written: a row changed underneath the instance, or a layout this build does not know. |
 | `internal` | 500 | Something went wrong here. The reason is in this instance's log and deliberately not in the document. |
 
 Only what something already refuses is in that table, and the refusals of the
 secrets surface arrive with the endpoints that make them — a code nothing raises
-is a promise to a client that nothing keeps. The three authorization codes are in
+is a promise to a client that nothing keeps.
+
+The three five-hundreds are worth reading together. `internal` says nothing
+beyond its title on purpose: an exception message is a place a value could leak
+into (§6.5), so it goes to the log and not into the document. The other two carry
+a sentence because they are not exceptions about a request at all — they are the
+instance saying which half of an installation is wrong, and the person who has to
+act on that is an operator who is not reading the log yet. The three authorization codes are in
 it because the enforcement is: `human-only` is what token management answers an
 agent with today, and `insufficient-scope` and `out-of-reach` are raised by the
 one place that decides both, which every endpoint that names a project will ask.

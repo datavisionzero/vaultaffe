@@ -596,6 +596,66 @@ public sealed class SecretEndpointTests(PostgresFixture postgres)
     }
 
     /// <summary>An instance with one project, and the session that made it.</summary>
+    /// <summary>
+    /// The failure an operator hits after a restore that brought the dump and not
+    /// the key: the instance starts, signs people in and lists every name, and
+    /// then cannot open a single value (VAULT-31).
+    /// </summary>
+    /// <remarks>
+    /// What is asserted is that the refusal has a name and a sentence. Before
+    /// this, the exception reached the caller as <c>internal</c> — "Something went
+    /// wrong on the server" — and the one sentence that says what to do went to
+    /// the container log, where nobody looks first.
+    /// </remarks>
+    [Fact]
+    public async Task A_value_under_another_master_key_says_which_half_is_missing()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        using var human = await SetUpAsync(instance);
+        await SetAsync(human, "STRIPE_KEY", "not-a-key-do-not-echo-me");
+
+        // The same database, a different key: the dump restored without the
+        // `.env` beside it (ADR 0017).
+        await using var elsewhere = new AnInstance(instance.ConnectionString, AnotherMasterKey());
+        using var afterwards = elsewhere.ClientWith(await SignInAsync(elsewhere));
+
+        // Everything that is not under the master key still works, which is what
+        // makes this confusing enough to be worth a name.
+        using var names = await afterwards.GetAsync(Secrets, TestContext.Current.CancellationToken);
+        names.EnsureSuccessStatusCode();
+
+        using var response = await afterwards.GetAsync(
+            $"{Secrets}/STRIPE_KEY", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        var problem = JsonNode.Parse(body)!;
+
+        Assert.Equal("master-key-mismatch", problem["code"]!.GetValue<string>());
+        Assert.Contains("different master key", problem["detail"]!.GetValue<string>(), StringComparison.Ordinal);
+
+        // And the rule that holds for every refusal holds for this one too.
+        Assert.DoesNotContain("not-a-key-do-not-echo-me", body, StringComparison.Ordinal);
+    }
+
+    private static async Task<string> SignInAsync(AnInstance instance)
+    {
+        using var anonymous = instance.ClientWith(null);
+        using var response = await anonymous.PostAsJsonAsync(
+            "/api/v1/sessions",
+            new { email = AnInstance.Administrator, password = AnInstance.AdministratorPassword },
+            TestContext.Current.CancellationToken);
+
+        response.EnsureSuccessStatusCode();
+
+        return JsonNode.Parse(await response.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!["token"]!.GetValue<string>();
+    }
+
+    private static string AnotherMasterKey() =>
+        Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+
     private static async Task<HttpClient> SetUpAsync(AnInstance instance)
     {
         var human = instance.ClientWith(await instance.StartAsync());

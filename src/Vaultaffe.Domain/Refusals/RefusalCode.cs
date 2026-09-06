@@ -74,4 +74,17 @@ public enum RefusalCode
 
     /// <summary>That key already holds a value, and overwriting one is explicit.</summary>
     ReplaceRequired = 18,
+
+    /// <summary>
+    /// The value was sealed under a different master key than the one this
+    /// instance was started with. The instance is misconfigured, not the caller.
+    /// </summary>
+    MasterKeyMismatch = 19,
+
+    /// <summary>
+    /// The stored bytes do not open under the right key: a row edited or
+    /// truncated underneath this instance, or written in a layout it does not
+    /// know. Also not the caller's doing.
+    /// </summary>
+    SealedValueDamaged = 20,
 }

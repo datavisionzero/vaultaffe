@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Vaultaffe.Application.Ports;
+using Vaultaffe.Domain.Refusals;
 using Vaultaffe.Domain.Secrets;
 
 namespace Vaultaffe.Infrastructure.Encryption;
@@ -87,8 +88,7 @@ public sealed class KeyRing(MasterKey master) : IKeyRing
 
         if (value.Ciphertext.Length < 1 + TagLength || value.Ciphertext[0] != Format)
         {
-            throw new CryptographicException(
-                "This value was not sealed in a layout this version understands.");
+            throw Damaged("This value was not sealed in a layout this version understands.");
         }
 
         var dataKey = Unwrap(value.WrappedDataKey);
@@ -103,6 +103,16 @@ public sealed class KeyRing(MasterKey master) : IKeyRing
                 value.Nonce, body[..plaintext.Length], body[plaintext.Length..], plaintext);
 
             return Encoding.UTF8.GetString(plaintext);
+        }
+        catch (AuthenticationTagMismatchException)
+        {
+            // The key opened the data key, so the key is right; what did not
+            // verify is the value itself. Nothing of it is in the sentence — a
+            // ciphertext that failed to authenticate is still a ciphertext of
+            // something (§6.5).
+            throw Damaged(
+                "This value did not verify under its own data key. The row it is stored in "
+                + "has been changed since it was written.");
         }
         finally
         {
@@ -136,8 +146,7 @@ public sealed class KeyRing(MasterKey master) : IKeyRing
         if (wrapped.Length != WrappedHeaderLength + NonceLength + DataKeyLength + TagLength
             || wrapped[0] != Format)
         {
-            throw new CryptographicException(
-                "This data key was not wrapped in a layout this version understands.");
+            throw Damaged("This data key was not wrapped in a layout this version understands.");
         }
 
         // Named before it is tried, because the two failures want different
@@ -146,20 +155,43 @@ public sealed class KeyRing(MasterKey master) : IKeyRing
         if (!CryptographicOperations.FixedTimeEquals(
                 wrapped.AsSpan(1, MasterKey.IdLength), master.Id))
         {
-            throw new CryptographicException(
+            throw new Refusal(
+                RefusalCode.MasterKeyMismatch,
                 "This value was sealed under a different master key than the one this "
                 + "instance was started with. Restoring a backup restores the key with it.");
         }
 
         var dataKey = new byte[DataKeyLength];
 
-        using var aes = new AesGcm(master.Bytes, TagLength);
-        aes.Decrypt(
-            wrapped.AsSpan(WrappedHeaderLength, NonceLength),
-            wrapped.AsSpan(WrappedHeaderLength + NonceLength, DataKeyLength),
-            wrapped.AsSpan(WrappedHeaderLength + NonceLength + DataKeyLength),
-            dataKey);
+        try
+        {
+            using var aes = new AesGcm(master.Bytes, TagLength);
+            aes.Decrypt(
+                wrapped.AsSpan(WrappedHeaderLength, NonceLength),
+                wrapped.AsSpan(WrappedHeaderLength + NonceLength, DataKeyLength),
+                wrapped.AsSpan(WrappedHeaderLength + NonceLength + DataKeyLength),
+                dataKey);
+        }
+        catch (AuthenticationTagMismatchException)
+        {
+            // The key says it is the right one and still does not open this. Two
+            // keys sharing four bytes of identifier would land here, and so would
+            // a wrapped key somebody edited; neither is something a caller did.
+            throw Damaged(
+                "This data key names the master key this instance holds and still does not "
+                + "open under it. The row it is stored in has been changed since it was written.");
+        }
 
         return dataKey;
     }
+
+    /// <summary>
+    /// The stored bytes are wrong, and the key is not why. It is a refusal rather
+    /// than a <see cref="CryptographicException"/> so that the sentence reaches
+    /// the operator who has to act on it instead of only this instance's log
+    /// (VAULT-31): the answer to a damaged row is a restore, and nobody looks for
+    /// one behind "Something went wrong on the server".
+    /// </summary>
+    private static Refusal Damaged(string detail) =>
+        new(RefusalCode.SealedValueDamaged, detail);
 }
