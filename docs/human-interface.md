@@ -129,6 +129,19 @@ a value asks first, in those words — overwriting is as destructive as deleting
 and it is what makes a rotation legible in the change log. Filling an empty
 placeholder asks nothing.
 
+**The missing-key notice sits above the keys**, because it is about what is not
+in the list. It names keys most of this project's other environments have and
+this one has not, and beside each one the environments that do have it — so the
+reader can see the reason rather than take it. Two acts, and no third: **add it
+here**, which is the same write form as any other, and **not here**, which is a
+dismissal that stays dismissed. There is no button that creates a key by itself
+and none that creates all of them; a suggestion that writes on its own is the
+wrong convenience in a secrets manager
+([§6.1](../Specification.md#61-web-ui)). Dismissed keys are counted rather than
+listed, and the count is the way back to them. When there is nothing to say the
+notice is not on the screen at all — and neither is it when the instance refuses
+it, because it is an aside on a screen that works without it.
+
 **Import and export live on this screen** because they are per environment.
 Import takes a `.env` — pasted or dropped — and answers with names: created,
 filled, replaced, unchanged, skipped with a reason, unreadable with a line
@@ -250,9 +263,9 @@ sends no email and that is the price of having no external dependency to operate
 the same way — `/api/v1/organization`, read by anybody and renamed by an
 administrator — together with the two things a person changes about themselves.
 
-The **missing-key notice** — a key present in one environment and absent from a
-neighbouring one — is explicitly post-MVP and is a display with a dismissal, not
-automation ([§6.1](../Specification.md#61-web-ui),
-[§12](../Specification.md#12-afterwards-outlook-not-mvp)). It belongs on the
-environment screen when it comes, and it changes nothing in this document but a
-row.
+The **missing-key notice** arrived after the MVP, as §6.6 stage 3 said it would,
+and it changed nothing in this document but the environment screen it sits on. It
+is a display with a dismissal and not automation
+([§6.1](../Specification.md#61-web-ui)); what took the thinking was not the
+screen but the rule behind it, which is a majority of the project's other
+environments and is written down in [`api.md`](./api.md).

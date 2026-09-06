@@ -65,6 +65,8 @@ public sealed class ContractTests(PostgresFixture postgres)
                 "/api/v1/projects/{project}/environments/{environment}",
                 "/api/v1/projects/{project}/environments/{environment}/export",
                 "/api/v1/projects/{project}/environments/{environment}/import",
+                "/api/v1/projects/{project}/environments/{environment}/missing",
+                "/api/v1/projects/{project}/environments/{environment}/missing/{name}/dismissal",
                 "/api/v1/projects/{project}/environments/{environment}/purge",
                 "/api/v1/projects/{project}/environments/{environment}/restore",
                 "/api/v1/projects/{project}/environments/{environment}/secrets",
@@ -99,6 +101,7 @@ public sealed class ContractTests(PostgresFixture postgres)
         Assert.Contains("Project", schemas);
         Assert.Contains("Environment", schemas);
         Assert.Contains("Secret", schemas);
+        Assert.Contains("MissingKey", schemas);
         Assert.Contains("Change", schemas);
         Assert.Contains("Version", schemas);
         Assert.Contains("ProblemDetails", schemas);

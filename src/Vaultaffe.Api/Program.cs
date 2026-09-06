@@ -65,6 +65,9 @@ builder.Services.AddScoped<SetSecret>();
 builder.Services.AddScoped<DeleteSecret>();
 builder.Services.AddScoped<RestoreSecret>();
 builder.Services.AddScoped<ImportSecrets>();
+builder.Services.AddScoped<ReadMissingKeys>();
+builder.Services.AddScoped<DismissMissingKey>();
+builder.Services.AddScoped<WithdrawDismissal>();
 builder.Services.AddScoped<ExportEnvironment>();
 builder.Services.AddScoped<PurgeProject>();
 builder.Services.AddScoped<PurgeEnvironment>();
@@ -127,6 +130,7 @@ app.MapDevicePage();
 app.MapTokens();
 app.MapProjects();
 app.MapSecrets();
+app.MapMissingKeys();
 app.MapHistory();
 
 // Every address the application routes itself is one the browser may also ask

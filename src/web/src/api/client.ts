@@ -29,6 +29,7 @@ export type Instance = Schemas["Instance"];
 export type Project = Schemas["Project"];
 export type Environment = Schemas["Environment"];
 export type Secret = Schemas["Secret"];
+export type MissingKey = Schemas["MissingKey"];
 export type Change = Schemas["Change"];
 export type ChangePage = Schemas["ChangePage"];
 export type Version = Schemas["Version"];

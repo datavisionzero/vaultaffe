@@ -37,6 +37,7 @@ deployment have their own tickets, and this file is kept accurate as each lands.
 /api/v1/organization             what this organization is called
 /api/v1/projects                 the catalogue, by name
 /api/v1/projects/…/secrets       names and status; one value at a time
+/api/v1/projects/…/missing       keys this environment has not got and its siblings have
 /api/v1/changes                  what was changed, by whom, and of what kind
 /device                          the page a human confirms a login on
 
@@ -467,6 +468,45 @@ which is precisely the contradiction `inject` was rejected for
 back out is part of being trustworthy, and it is `human-only` with
 `humanAction: "export"` — an agent or service token is refused however many scopes
 it carries. Nothing is recorded for it: the change log holds mutations, not reads.
+
+### The missing-key notice
+
+Keys this environment has not got and its siblings have
+([§6.1](../Specification.md#61-web-ui)). **It displays; nothing here writes a
+secret.**
+
+```
+GET    …/environments/{environment}/missing
+POST   …/environments/{environment}/missing/{KEY}/dismissal    stop saying it here
+DELETE …/environments/{environment}/missing/{KEY}/dismissal    say it again
+```
+
+**The rule is a majority, and that is the whole design.** A key is missing here
+when **more than half** of this project's other environments hold it. Held
+pairwise — "present in any other environment" — the notice would report every key
+`prod` legitimately has alone, and would hold three shared environments against a
+personal `dev-alex`; environment names are free
+([§5](../Specification.md#5-core-concepts)) and nothing in the model says which
+one is complete, so a notice built on a single comparison partner is one somebody
+clicks away, and then it is worthless on the day it is right. A majority needs no
+new field and no declared reference environment: a personal environment is one
+voice among the others, and with two environments a majority of one is the other
+one. A tie is not a majority.
+
+Each line answers `{name, presentIn, dismissedAt}` — `presentIn` names the
+environments that have the key, so a reader can see the reason rather than take
+it. A placeholder counts as present; a deleted secret counts as absent.
+
+**It reaches only where the caller does.** The comparison runs over the
+environments the token's binding covers, so a notice never tells a token which
+keys exist somewhere it may not touch — and a token bound to one environment gets
+an empty notice rather than a filtered one, because there is nothing left to
+compare with.
+
+**Dismissal is per key and per environment**, needs `write`, and is the one thing
+this notice offers besides showing. Dismissing twice is dismissing once. Reading
+needs `names`, because names is all this ever says. A dismissal appears in no
+change log: it changes what a screen says, not what the vault holds.
 
 ## The change log and the value history
 

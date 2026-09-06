@@ -139,8 +139,9 @@ that leaked into the vault. And some vendors hand out a separate sandbox per
 developer. An ordinary additional environment, `dev-robin`, can separate values
 only when those values may be shared with the whole team. It provides no privacy:
 everyone in the organization can access it (§6.4). Genuinely personal credentials
-are outside the MVP. The later missing-key notice must also account for such
-additional environments (§12).
+are outside the MVP. The missing-key notice accounts for such additional
+environments by asking a majority of a project's environments rather than any one
+of them (§6.1).
 
 What this buys us is more than a saved level: **not a single exception** to
 "everyone in the organization sees everything" (personal configs are precisely
@@ -173,8 +174,12 @@ an opt-in action the user triggers, it is a plausible next step (§12).
 - Import/export of a `.env` per environment (the pragmatic migration path). The
   export is the human path to a plaintext file; the CLI equivalent exists but is
   restricted to human sessions (§6.2).
-- **After MVP:** a notice for keys missing in one environment but present in another — as a
-  display with a "dismiss" option, not as automation.
+- A notice for keys missing in this environment but present in others — a
+  display with a "dismiss" option, not automation. It reports a key when **more
+  than half** of the project's other environments hold it, which is what keeps a
+  freely named personal environment from either drowning the notice or silencing
+  it (§5); dismissal is per key and per environment. Delivered after the MVP, as
+  §6.6 stage 3 said.
 - Change log and bounded value history with rollback and purge; restore deleted
   secrets, environments, and projects within their recovery window (§6.5).
 - Token management: create, name, revoke; for agent tokens also the binding and

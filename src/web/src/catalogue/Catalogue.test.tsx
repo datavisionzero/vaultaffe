@@ -135,7 +135,11 @@ describe("the environment screen", () => {
     expect(screen.getByText("empty")).toBeInTheDocument();
     expect(screen.getByText("waiting for a person to fill it")).toBeInTheDocument();
 
-    expect(calls).toHaveLength(1);
+    // Two requests and no more: the keys of this environment, and the notice
+    // about the ones that are not in it. Neither of them reads a value, and
+    // nothing on this screen does.
+    expect(calls.every((call) => !call.url.includes("/secrets/"))).toBe(true);
+    expect(calls).toHaveLength(2);
   });
 
   it("offers import beside the first key, because that is where teams arrive from", async () => {

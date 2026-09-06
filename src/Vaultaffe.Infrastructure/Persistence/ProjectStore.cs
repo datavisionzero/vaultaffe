@@ -117,12 +117,24 @@ public sealed class ProjectStore(VaultaffeDbContext context) : IProjectStore
         context.SaveChangesAsync(cancellationToken);
 
     // A secret's retained values follow it, which is the one cascade this schema
-    // declares and exactly the case it was declared for.
-    private async Task RemoveSecretsOfAsync(Guid environmentId, CancellationToken cancellationToken) =>
+    // declares and exactly the case it was declared for. What an environment
+    // holds besides its secrets goes here explicitly, for the same reason
+    // everything else between the containers does.
+    private async Task RemoveSecretsOfAsync(Guid environmentId, CancellationToken cancellationToken)
+    {
         context.RemoveRange(
             await context.Secrets
                 .Where(secret => secret.EnvironmentId == environmentId)
                 .ToListAsync(cancellationToken));
+
+        // A dismissal is about a place, so it goes with the place. Nothing is
+        // lost that anybody could want back: it said only that a notice was not
+        // to mention a key in an environment that no longer exists.
+        context.RemoveRange(
+            await context.DismissedKeys
+                .Where(dismissal => dismissal.EnvironmentId == environmentId)
+                .ToListAsync(cancellationToken));
+    }
 
     private IQueryable<Environment> Live(
         System.Linq.Expressions.Expression<Func<Environment, bool>> which) =>

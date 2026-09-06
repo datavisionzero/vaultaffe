@@ -121,8 +121,13 @@ an empty placeholder is and what it stops; the bounds on value history — five
 versions, 72 hours, whichever is hit first — and the recovery window on a
 deletion. `Secrets/DotEnv` is here for the same reason the name rules are: there
 is no standard for that format, every tool differs at its edges, and what this one
-does at them is a decision this product makes rather than a library's habit. The test of whether something
-belongs here: **anything the specification already states as a rule.** A token
+does at them is a decision this product makes rather than a library's habit.
+`Secrets/MissingKeys` is here for a reason of its own: it is arithmetic over key
+names — a key is missing here when more than half of the project's other
+environments hold it — and putting the rule in the domain is what lets it be
+read, tested and argued about with no database anywhere near it, which for the
+one feature that is *only* a rule is the whole point. The test of whether
+something belongs here: **anything the specification already states as a rule.** A token
 that can be constructed without a binding, or a value version that can outlive
 both of its bounds, is a rule that escaped. `Authorization/` is the one to look
 at twice: the short list of §6.4 that only a person may do, and the sentences a
@@ -135,7 +140,8 @@ signing in, the three steps of a device login, creating and revoking tokens,
 creating and listing and renaming and deleting and restoring a project, an
 environment or a secret, writing a value, reading one, importing a file and
 exporting one, reading the change log and the value history, rolling back to an
-earlier value, purging one early. Beside them the sweep that removes what the
+earlier value, purging one early, and reading the missing-key notice and
+dismissing a line of it. Beside them the sweep that removes what the
 deadlines have passed, which is the one thing here that is not an act because
 nobody asked for it. Beside them the ports: the stores, the identity of the caller, the thing that hashes a
 password, the key ring that seals a value and opens it again, and the clock —

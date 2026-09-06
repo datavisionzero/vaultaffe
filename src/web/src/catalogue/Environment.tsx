@@ -13,6 +13,7 @@ import { Rows } from "@/shared/Rows";
 import { projectPath, secretPath } from "@/shell/views";
 import { Deleted } from "./Deleted";
 import { ExportDialog, ImportDialog } from "./EnvironmentFile";
+import { MissingKeys } from "./MissingKeys";
 import { WriteDialog } from "./WriteDialog";
 
 /**
@@ -70,6 +71,14 @@ export function Environment() {
       </PageHeader>
 
       <div className="flex flex-1 flex-col gap-3 p-4">
+        {/*
+          Above the keys and outside the deleted switch: it is about what is not
+          here, so a listing of what is would be the wrong place for it — and it
+          says nothing at all when there is nothing to say.
+        */}
+        {!deleted && (
+          <MissingKeys project={project} environment={environment} onChanged={again} />
+        )}
         {secrets.at === "asking" && <Rows count={5} />}
         {secrets.at === "refused" && <Refusal>{secrets.why}</Refusal>}
         {secrets.at === "answered" &&

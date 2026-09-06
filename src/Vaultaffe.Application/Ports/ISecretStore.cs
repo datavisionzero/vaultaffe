@@ -21,6 +21,14 @@ public interface ISecretStore
     /// <summary>Every secret of that environment, deleted ones left out, by name.</summary>
     Task<IReadOnlyList<Secret>> ListAsync(Guid environmentId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The secrets of several environments at once, deleted ones left out — what
+    /// the missing-key notice compares, in one query rather than one per
+    /// environment (Specification §6.1).
+    /// </summary>
+    Task<IReadOnlyList<Secret>> ListAsync(
+        IReadOnlyList<Guid> environmentIds, CancellationToken cancellationToken);
+
     /// <summary>That secret of that environment, deleted or not, or null.</summary>
     Task<Secret?> FindAsync(Guid environmentId, string name, CancellationToken cancellationToken);
 
@@ -58,6 +66,21 @@ public interface ISecretStore
     /// </summary>
     Task<IReadOnlyList<SecretValueVersion>> HistoryAsync(
         Guid secretId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The keys the notice was told not to mention in that environment again.
+    /// </summary>
+    Task<IReadOnlyList<DismissedKey>> DismissalsAsync(
+        Guid environmentId, CancellationToken cancellationToken);
+
+    void Add(DismissedKey dismissal);
+
+    /// <summary>
+    /// Take a dismissal back, so that the notice mentions that key here again. A
+    /// plain removal: a dismissal is the one thing in this schema with nothing to
+    /// recover it from, because it is recovered by making it again.
+    /// </summary>
+    void Remove(DismissedKey dismissal);
 
     Task SaveAsync(CancellationToken cancellationToken);
 }

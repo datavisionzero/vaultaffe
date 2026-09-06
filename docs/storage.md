@@ -1,6 +1,6 @@
 # The Data Model
 
-Ten tables, and the rules the database itself holds. What each concept *means*
+Eleven tables, and the rules the database itself holds. What each concept *means*
 is [Specification §5](../Specification.md#5-core-concepts); this says how it is
 stored and which of the promises are constraints rather than intentions.
 
@@ -31,6 +31,7 @@ organization
 ├─ invitation               (organization_id, the hash of the code in a link)
 └─ project                  (organization_id, name unique per organization)
    └─ environment           (project_id, name unique per project)
+      ├─ dismissed_key      (environment_id, name unique per environment)
       └─ secret             (environment_id, name unique per environment)
          └─ secret_value_version
 
@@ -51,10 +52,19 @@ change_log_entry            (points at nothing)
 | `environment` | `dev`, `staging`, `prod` — one level, no branch or personal configs. |
 | `secret` | A key, and its current value sealed under the secret's data key. |
 | `secret_value_version` | Values this secret used to hold, tightly bounded. |
+| `dismissed_key` | A key the missing-key notice was told not to mention in this environment again. |
 | `token` | A credential: kind, scope set, and the hash of a value shown once. |
 | `token_binding` | What a token may touch. No rows means the whole organization. |
 | `device_authorization` | One `vaultaffe login` in progress: two codes, and what has happened to it. |
 | `change_log_entry` | What was done, by whom, and of what type — never a value. |
+
+The one row that holds a preference rather than a fact about the vault is
+`dismissed_key`, and it is deliberately the thinnest table here: an environment,
+a key, and when somebody said "not here". It has no `deleted_at`, because
+withdrawing a dismissal deletes the row and nothing about that needs to be
+recoverable — the way back is to say it again. Purging an environment takes its
+dismissals with it, explicitly and in the same act, the way everything else
+between the containers goes.
 
 ## Every table carries the organization
 

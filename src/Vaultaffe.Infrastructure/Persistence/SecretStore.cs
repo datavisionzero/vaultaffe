@@ -28,6 +28,14 @@ public sealed class SecretStore(VaultaffeDbContext context) : ISecretStore
             .OrderBy(secret => secret.Name)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<Secret>> ListAsync(
+        IReadOnlyList<Guid> environmentIds, CancellationToken cancellationToken) =>
+        await context.Secrets
+            .Where(secret =>
+                environmentIds.Contains(secret.EnvironmentId) && secret.DeletedAt == null)
+            .OrderBy(secret => secret.Name)
+            .ToListAsync(cancellationToken);
+
     public Task<Secret?> FindAsync(
         Guid environmentId, string name, CancellationToken cancellationToken) =>
         context.Secrets.FirstOrDefaultAsync(
@@ -73,6 +81,17 @@ public sealed class SecretStore(VaultaffeDbContext context) : ISecretStore
             .Where(version => version.SecretId == secretId)
             .OrderByDescending(version => version.ReplacedAt)
             .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<DismissedKey>> DismissalsAsync(
+        Guid environmentId, CancellationToken cancellationToken) =>
+        await context.DismissedKeys
+            .Where(dismissal => dismissal.EnvironmentId == environmentId)
+            .OrderBy(dismissal => dismissal.Name)
+            .ToListAsync(cancellationToken);
+
+    public void Add(DismissedKey dismissal) => context.Add(dismissal);
+
+    public void Remove(DismissedKey dismissal) => context.Remove(dismissal);
 
     public Task SaveAsync(CancellationToken cancellationToken) =>
         context.SaveChangesAsync(cancellationToken);
