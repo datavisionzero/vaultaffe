@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -22,7 +23,13 @@ func newTokens(g *globals) *cobra.Command {
 		Short:   "The tokens of this organization. Never their values.",
 		Long: "Listing is not human-only: a revocation list an agent cannot read is not\n" +
 			"one. Creating and revoking are, because a token is itself a secret and one\n" +
-			"created through an agent's CLI would be printed into that agent's context.",
+			"created through an agent's CLI would be printed into that agent's context.\n\n" +
+			"**Two lists and not one**, the way the console shows them. What an agent or\n" +
+			"a service acts under is created deliberately, carries a name and is one of a\n" +
+			"few; a session is what every sign-in leaves behind, has no name, and there\n" +
+			"are as many as there are devices. The headings a person reads go to stderr\n" +
+			"and the rows to stdout, so piping this into grep sees exactly what it always\n" +
+			"saw. --json is the instance's answer, ungrouped.",
 		Args: cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
 			_, c, err := g.instance()
@@ -44,13 +51,21 @@ func newTokens(g *globals) *cobra.Command {
 				return render.JSON(g.out(), resp.JSON200)
 			}
 
-			table := tabwriter.NewWriter(g.out(), 0, 0, 2, ' ', 0)
-			for _, token := range *resp.JSON200 {
-				fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\n",
-					token.Id, token.Kind, valueOr(token.Name, "—"),
-					strings.Join(token.Scopes, ","), standing(token))
+			issued, sessions := apart(*resp.JSON200)
+
+			if err := section(g, "Tokens",
+				"What an agent or a service acts under. Named, and never listed with a value.",
+				"No agent or service token yet.", issued); err != nil {
+				return err
 			}
-			return table.Flush()
+
+			// The blank line separates the two halves and is not printed after
+			// the second: it belongs between them, not at the end of the answer.
+			fmt.Fprintln(g.msg())
+
+			return section(g, "Sessions",
+				"One for every sign-in. They carry no name, because nobody gives one to a login.",
+				"No session on record.", sessions)
 		},
 	}
 	command.AddCommand(newTokensCreate(g), newTokensRevoke(g))
@@ -211,6 +226,83 @@ func bindingFor(ctx context.Context, c *client.Client, project, environment stri
 	}
 	return api.Binding{}, &config.UsageError{Message: fmt.Sprintf(
 		"%s has no environment %q: it has %s.", project, environment, strings.Join(names(resp.JSON200.Environments), ", "))}
+}
+
+// apart splits the one listing the instance answers with into the two lists a
+// person actually asks about, and orders each the way the console does
+// (VAULT-36): "which standing credentials exist, and how far does each reach"
+// is an inventory and reads by name; "where am I signed in, and is one of these
+// not mine" is a question about devices and reads newest first.
+//
+// What is still usable comes first in both, and what is revoked or run out
+// stays below it rather than disappearing: a revocation list that hides
+// revocations is not one, and a session that expired is how somebody notices a
+// device they forgot.
+func apart(all []api.Token) (issued, sessions []api.Token) {
+	for _, token := range all {
+		if token.Kind == "session" {
+			sessions = append(sessions, token)
+			continue
+		}
+		issued = append(issued, token)
+	}
+
+	now := time.Now()
+
+	slices.SortStableFunc(issued, func(a, b api.Token) int {
+		if first := inUseFirst(a, b, now); first != 0 {
+			return first
+		}
+		return strings.Compare(valueOr(a.Name, ""), valueOr(b.Name, ""))
+	})
+
+	slices.SortStableFunc(sessions, func(a, b api.Token) int {
+		if first := inUseFirst(a, b, now); first != 0 {
+			return first
+		}
+		return b.CreatedAt.Compare(a.CreatedAt)
+	})
+
+	return issued, sessions
+}
+
+// section prints one of the two lists: the heading and the sentence under it to
+// stderr, the rows to stdout. That split is the whole reason this grouping can
+// exist at all — `vaultaffe tokens | grep …` keeps receiving nothing but rows,
+// exactly as it did when there was one undivided table.
+//
+// The rows are flushed before the next heading is written, so that a person
+// watching a terminal sees heading, rows, heading, rows rather than both
+// headings and then everything else.
+func section(g *globals, title, what, none string, tokens []api.Token) error {
+	fmt.Fprintf(g.msg(), "%s — %s\n", title, what)
+
+	if len(tokens) == 0 {
+		fmt.Fprintln(g.msg(), none)
+		return nil
+	}
+
+	table := tabwriter.NewWriter(g.out(), 0, 0, 2, ' ', 0)
+	for _, token := range tokens {
+		fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\n",
+			token.Id, token.Kind, valueOr(token.Name, "—"),
+			strings.Join(token.Scopes, ","), standing(token))
+	}
+	return table.Flush()
+}
+
+// inUseFirst is the console's ordering rule, in the console's terms: revoked or
+// past its expiry sorts below what still works. It is deliberately not
+// standing(), which prints a future expiry as "expires …" because that is the
+// useful thing to show about a token that is still fine.
+func inUseFirst(a, b api.Token, now time.Time) int {
+	usable := func(token api.Token) int {
+		if token.RevokedAt != nil || (token.ExpiresAt != nil && !token.ExpiresAt.After(now)) {
+			return 1
+		}
+		return 0
+	}
+	return usable(a) - usable(b)
 }
 
 func standing(token api.Token) string {

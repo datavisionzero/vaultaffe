@@ -313,6 +313,21 @@ vaultaffe tokens create "ci" --kind service --project billing --environment prod
 vaultaffe tokens revoke <id>
 ```
 
+**The listing is two lists and not one**, the way the console shows them. What
+an agent or a service acts under is created deliberately, carries a name a
+person chose, and there are a few of them; a session is what every sign-in
+leaves behind, has no name, and there are as many as there are devices. The
+questions differ as much: "which standing credentials exist" is an inventory and
+reads by name, "where am I signed in" is about devices and reads newest first.
+What is revoked or run out stays below what still works in both — a revocation
+list that hides revocations is not one.
+
+The two **headings are on stderr and every row is on stdout**, like everything
+else in this CLI: what a person reads and what a program consumes are different
+streams, so `vaultaffe tokens | grep …` receives exactly what it received before
+the listing was ever divided. `--json` is the instance's own answer, ungrouped
+and in its order — whoever reads JSON groups it themselves.
+
 **This is how an agent gets a token at all**: a person creates one under their
 own session and hands it over in `VAULTAFFE_TOKEN`. Creating and revoking are
 human-only, because a token is itself a secret and one created under an agent's
