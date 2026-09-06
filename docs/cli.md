@@ -329,6 +329,37 @@ sentence it gets names the command **this** CLI has for it, or says plainly that
 there is none
 ([ADR 0010](./adr/0010-a-refusal-names-the-action-and-the-client-names-the-command.md)).
 
+## Getting it
+
+A release carries one binary per platform, and the name has no version in it so
+that the URL can be typed:
+
+```sh
+os=$(uname -s | tr '[:upper:]' '[:lower:]')     # darwin or linux
+arch=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+curl -fL -o vaultaffe \
+  "https://github.com/datavisionzero/vaultaffe/releases/latest/download/vaultaffe_${os}_${arch}"
+chmod +x vaultaffe && sudo mv vaultaffe /usr/local/bin/
+```
+
+`checksums.txt` is beside them on the same release, and a download nobody checks
+is a download nobody should run. `/latest/` is the newest **stable** release and
+a prerelease is never behind it; a particular release is that URL with its own
+tag in place of `latest`.
+
+The macOS binaries are not signed and do not need to be: the quarantine flag
+comes from the program that downloaded a file, and `curl` sets none. One taken
+through a browser is a different matter, and Gatekeeper will say so.
+
+There is no Windows binary and there will not be one: `run` replaces itself with
+the process it starts, Windows has no `exec()` for that, and WSL runs the Linux
+one ([§7](../Specification.md#7-explicitly-not-in-the-mvp)).
+
+**Upgrade it with the instance.** Both halves of a release are built from one
+tag and carry the same version, which is what the exchange above compares — so a
+disagreement means one of them was not upgraded, and not that the release is
+inconsistent with itself.
+
 ## Building it
 
 ```sh
@@ -341,3 +372,7 @@ go build ./cmd/vaultaffe
 The generated client is not committed. `go generate` before vet, test and build
 is what keeps a working tree from being a state where the client agrees with a
 contract that has moved.
+
+A binary built this way calls itself `0.0.0-dev` and means it: the version is
+stamped in from the tag by the release workflow and there is nowhere else it
+comes from (`internal/version`).

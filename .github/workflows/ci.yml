@@ -18,8 +18,13 @@ permissions:
 # nobody is tempted to push past it, which is why the toolchains run beside each
 # other rather than in one job.
 #
-# The last job is the odd one out: it does not check a language. It starts the
+# One job is the odd one out: it does not check a language. It starts the
 # product the way an operator does and asks whether it answers.
+#
+# The two after it check nothing at all. They put what the gate just passed into
+# the registry as `:main`, which is what an installation following the trunk
+# pulls — and they are the last jobs because that name means "the trunk, green",
+# and it would mean nothing said before the rest of this file had finished.
 
 # One run at a time, and nothing is cancelled. With a single maintainer pushing
 # there is nothing to gain from two racing, and a pull request waiting a few
@@ -28,6 +33,9 @@ permissions:
 concurrency:
   group: ci
   cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/datavisionzero/vaultaffe
 
 jobs:
   # Whitespace, using directives and the naming rules of .editorconfig, checked
@@ -223,17 +231,18 @@ jobs:
   # running instance (Specification §11) and the one thing no test inside any of
   # the three toolchains can answer.
   #
-  # It pushes nothing. Publishing an image is a release, it happens from a tag,
-  # and this workflow runs on every commit.
+  # It publishes nothing itself: the image it builds is loaded into the runner's
+  # own daemon, because what is asked here is whether the stack runs. Naming
+  # a build in the registry is two jobs below, and only ever from the trunk.
   image:
     name: Image and stack
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       - name: Build the image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: deploy/Dockerfile
@@ -245,8 +254,11 @@ jobs:
           tags: vaultaffe:ci
           build-args: |
             REVISION=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # The scope the `amd64` half of a published build reads, here and in
+          # `release.yml`. Sharing one scope with the other architecture, the
+          # two would evict each other's layers and neither would ever hit it.
+          cache-from: type=gha,scope=image-amd64
+          cache-to: type=gha,mode=max,scope=image-amd64
 
       # The two values an operator fills in, generated here and thrown away with
       # the runner. They protect nothing — this installation holds one account
@@ -369,3 +381,155 @@ jobs:
       - name: Take it down
         if: always()
         run: docker compose -f deploy/docker-compose.yml down -v
+
+  # What an installation tracking the trunk pulls. It runs after everything
+  # above has gone green, which is the difference between this and the job it
+  # follows: that one asks whether the stack runs, this one puts a name in the
+  # registry, and a name nobody can trust is worse than no name at all.
+  #
+  # It is not a release. `Directory.Build.props` keeps `0.0.0-dev` for a build
+  # nobody tagged, so no `VERSION` is passed here on purpose — the tag is the
+  # only source of a version number, and `release.yml` is the only place one is
+  # given. `REVISION` is passed for the same reason `VERSION` is not: every
+  # build between two releases calls itself `0.0.0-dev`, so the commit is what
+  # tells them apart and the container cannot work it out on its own.
+  publish:
+    name: Trunk image (${{ matrix.arch }})
+    needs: [format, unit, integration, contract, web, cli, image]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    strategy:
+      # Both legs run to the end. Which architecture broke is the useful half of
+      # the answer, and cancelling the other one takes it away.
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Sign in to the registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: build
+        name: Build, and push the digest
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          build-args: |
+            REVISION=${{ github.sha }}
+          # A name and no tag. `push-by-digest` puts the manifest in the registry
+          # under its own digest alone, which is what lets the job below name
+          # both architectures at the same moment.
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          # `amd64` reads what the job above already filled, so the second build
+          # of the same commit is layers rather than work. `arm64` fills its own,
+          # for the next commit and for a release cut from this one.
+          cache-from: type=gha,scope=image-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=image-${{ matrix.arch }}
+
+      # The digest is the whole of what the index job needs, and an empty file
+      # named after it carries it across without a shell quoting anything.
+      - name: Hand the digest on
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: digest-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # The only job in this workflow that sets a tag. It merges the digests the two
+  # legs pushed into one manifest index, so that a `docker pull` on an ARM
+  # machine gets the ARM image without anybody having to name an architecture —
+  # and so that both names appear at once or not at all.
+  #
+  # Nothing is built here and nothing is checked out: `imagetools create` works
+  # on what is already in the registry.
+  image-index:
+    name: Image index
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: digest-*
+          merge-multiple: true
+          path: /tmp/digests
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Sign in to the registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Name the architectures at once
+        working-directory: /tmp/digests
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          # The two names `deploy/.env.example` says an installation can use to
+          # follow the trunk: `:main` for the newest commit, and a name for this
+          # one build so an installation can be pinned away from a bad trunk
+          # without waiting for the next commit.
+          #
+          # `:latest` is not among them. That is what a stranger's installation
+          # upgrades into, it is the default in `docker-compose.yml`, and the
+          # trunk has no claim on it — only `release.yml` moves it.
+          sources=()
+          for digest in *; do sources+=("$IMAGE@sha256:$digest"); done
+
+          docker buildx imagetools create \
+            --tag "$IMAGE:main" \
+            --tag "$IMAGE:sha-${SHA:0:7}" \
+            "${sources[@]}"
+
+      # Not "it pushed without an error" but "what is up there carries both".
+      # The index is the whole point of the two legs, and it is one command to
+      # read it back.
+      - name: Both architectures are in what now stands there
+        run: |
+          set -euo pipefail
+          docker buildx imagetools inspect "$IMAGE:main" --format '{{json .Manifest}}' > /tmp/index.json
+          python3 - <<'PY'
+          import json, pathlib, sys
+
+          index = json.loads(pathlib.Path("/tmp/index.json").read_text())
+          # The attestation manifests buildx attaches carry `unknown/unknown`.
+          have = {
+              f"{p['os']}/{p['architecture']}"
+              for m in index.get("manifests", [])
+              if (p := m.get("platform")) and p.get("architecture") != "unknown"
+          }
+          print("the index carries", ", ".join(sorted(have)))
+          missing = {"linux/amd64", "linux/arm64"} - have
+          if missing:
+              sys.exit(f"missing from the index: {', '.join(sorted(missing))}")
+          PY

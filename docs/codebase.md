@@ -483,7 +483,7 @@ assert is what an invocation did **not** print: that the session token
 is not echoed, and that nothing is sent at all to a plain-HTTP host that is not
 loopback.
 
-## One workflow, and it is the gate
+## One workflow is the gate, and a second one is the release
 
 `.github/workflows/ci.yml` runs on every push to `main`, every pull request and
 on demand. There is no review step between a commit and the trunk (ADR 0001), so
@@ -509,8 +509,32 @@ can answer: that the handshake replies through the proxy, that what is served at
 `/` is the application rather than only the API, and that the first run happens
 once and the second is refused. That is the success criterion of `git clone` to a
 running instance ([§11](../Specification.md#11-success-criteria-for-the-mvp)),
-checked on every commit rather than remembered before a release. It pushes nothing:
-publishing an image is a release and happens from a tag.
+checked on every commit rather than remembered before a release. It publishes
+nothing itself: the image it builds is loaded into the runner's own daemon,
+because what it asks is whether the stack runs.
+
+Two jobs follow it that check nothing at all. Once everything above them is
+green they build the image again on two native runners — `amd64` and `arm64` —
+push both by digest and merge them into one manifest index under `:main` and
+`:sha-<commit>`, which are the names
+[`deploy/.env.example`](../deploy/.env.example) gives an installation that wants
+to follow the trunk. They run last because `:main` means "the trunk, green", and
+it would mean nothing said before the rest of that file had finished. No
+`VERSION` is passed: `Directory.Build.props` keeps `0.0.0-dev` for a build nobody
+tagged, and a trunk build is not a release.
+
+**A release is a tag, and `.github/workflows/release.yml` is the only place a
+version number comes from.** `v1.2.3` — or `v1.2.3-rc.1` — is checked for being
+a release tag at all, then checked for naming a commit CI has a green run for,
+because a tag can be put on any commit and ADR 0001's trunk discipline is worth
+nothing if a release can step around it. What comes out is the same image with
+`VERSION` from the tag, named `:1.2.3` and — for a stable release only —
+`:latest`, and the CLI cross-compiled from one runner for macOS and Linux on both
+architectures with a `checksums.txt` beside it. No Windows binary
+([§7](../Specification.md#7-explicitly-not-in-the-mvp)); WSL runs the Linux one.
+Both halves take the same string, the .NET side through `-p:Version=` and the Go
+side through a linker flag, so the version exchange between a CLI and an instance
+cannot report skew between two halves of one release.
 
 ## What is deliberately not here
 

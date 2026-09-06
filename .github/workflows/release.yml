@@ -1,0 +1,406 @@
+name: Release
+
+# A tag is the only thing that makes a version. `Directory.Build.props` keeps
+# `0.0.0-dev` for anything nobody tagged and `internal/version.Value` says the
+# same for the CLI, so the two halves of one release cannot disagree about which
+# release they are — and this workflow is the one place either of them is told
+# otherwise.
+#
+# `workflow_dispatch` takes the tag by name so that a release can be run again —
+# because a step here failed, or because the gate had not finished — without
+# deleting and re-pushing a tag somebody may already have pulled.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The tag to release, `v1.2.3`
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Never two of these at once, and never cancelled halfway: a release moves
+# `:latest`, and a half-written one is worse than a late one.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/datavisionzero/vaultaffe
+
+jobs:
+  # What is being released, and whether it is allowed to be. Everything below
+  # reads this job and works nothing out of its own.
+  what:
+    name: Which version, and may it go out
+    runs-on: ubuntu-latest
+    # `actions: read` is for the one question this job asks that is not about
+    # the tag: whether CI has a green run on the commit it names.
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      tag: ${{ steps.read.outputs.tag }}
+      version: ${{ steps.read.outputs.version }}
+      prerelease: ${{ steps.read.outputs.prerelease }}
+      sha: ${{ steps.read.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The tag is the subject, so the tag is what is checked out — on a
+          # dispatch `github.ref` is a branch and would build the wrong commit.
+          ref: ${{ inputs.tag || github.ref }}
+
+      - id: read
+        name: Read the tag
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          # Semver with a leading `v`, and nothing else. The version this
+          # produces is compared by both halves of the handshake and printed by
+          # `vaultaffe --version`; a tag that is not one of these is a typo, and
+          # a typo must not become `:latest`.
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::$TAG is not a release tag. It has to read v1.2.3, or v1.2.3-rc.1 for a prerelease."
+            exit 1
+          fi
+
+          {
+            echo "tag=$TAG"
+            echo "version=${TAG#v}"
+            # A prerelease is what the tag says it is, and it moves `:latest`
+            # for nobody. `deploy/.env.example` has promised that since before
+            # there was a release to promise it about.
+            echo "prerelease=${BASH_REMATCH[1]:+true}"
+            echo "sha=$(git rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
+
+      # Nothing is re-tested here — the trunk is gated on every push and a tag
+      # names a commit that already went through it. What is checked is that it
+      # actually did: a tag can be put on any commit at all, and releasing one
+      # the gate never passed is the thing ADR 0001's trunk discipline exists to
+      # prevent.
+      - name: The gate passed on this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ steps.read.outputs.sha }}
+        run: |
+          set -euo pipefail
+          passed=$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$SHA&status=success" \
+            --jq '.total_count')
+          if [ "$passed" -eq 0 ]; then
+            echo "::error::CI has no successful run for $SHA. Wait for it, or fix it, then start this workflow again with the tag."
+            exit 1
+          fi
+          echo "CI passed on $SHA."
+
+  # The same image CI builds from the trunk, on the same two native runners,
+  # with the one difference that makes it a release: `VERSION` comes from the
+  # tag instead of staying at the `0.0.0-dev` the props file gives a build
+  # nobody published.
+  #
+  # It is one image and not two: the SPA is built into the API's `wwwroot` and
+  # served from the same process (ADR 0016), so there is no frontend image to
+  # publish beside it.
+  image:
+    name: Image (${{ matrix.arch }})
+    needs: what
+    strategy:
+      # Both legs run to the end. Which architecture broke is the useful half of
+      # the answer, and cancelling the other one takes it away.
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.what.outputs.tag }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Sign in to the registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: build
+        name: Build, and push the digest
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          build-args: |
+            VERSION=${{ needs.what.outputs.version }}
+            REVISION=${{ needs.what.outputs.sha }}
+          # A name and no tag. `push-by-digest` puts the manifest in the registry
+          # under its own digest alone, which is what lets the job below name
+          # both architectures at the same moment.
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          # The scope the trunk build fills, so a release does not start from an
+          # empty cache on either architecture. Read and not written: what CI
+          # cached for a commit is what a tag on that commit rebuilds from.
+          cache-from: type=gha,scope=image-${{ matrix.arch }}
+
+      # The digest is the whole of what the index job needs, and an empty file
+      # named after it carries it across without a shell quoting anything.
+      - name: Hand the digest on
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: digest-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # The names a release gets, all of them at once — and the only job in this
+  # repository that moves `:latest`. Nothing is built here and nothing is
+  # checked out: `imagetools create` works on what is already in the registry.
+  image-index:
+    name: Image index
+    needs: [what, image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: digest-*
+          merge-multiple: true
+          path: /tmp/digests
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Sign in to the registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Name the release
+        working-directory: /tmp/digests
+        env:
+          VERSION: ${{ needs.what.outputs.version }}
+          PRERELEASE: ${{ needs.what.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+
+          # `:latest` is the default in `docker-compose.yml` and therefore what
+          # a stranger's installation upgrades into. A prerelease gets its own
+          # version tag and moves nothing.
+          tags=(--tag "$IMAGE:$VERSION")
+          if [ -z "$PRERELEASE" ]; then
+            tags+=(--tag "$IMAGE:latest")
+          else
+            echo "A prerelease. It gets its own tag and does not move :latest."
+          fi
+
+          sources=()
+          for digest in *; do sources+=("$IMAGE@sha256:$digest"); done
+
+          docker buildx imagetools create "${tags[@]}" "${sources[@]}"
+
+      # Not "it pushed without an error" but "what is up there carries both".
+      # The index is the whole point of the two legs, and it is one command to
+      # read it back.
+      - name: Both architectures are in what now stands there
+        env:
+          VERSION: ${{ needs.what.outputs.version }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{json .Manifest}}' > /tmp/index.json
+          python3 - <<'PY'
+          import json, pathlib, sys
+
+          index = json.loads(pathlib.Path("/tmp/index.json").read_text())
+          # The attestation manifests buildx attaches carry `unknown/unknown`.
+          have = {
+              f"{p['os']}/{p['architecture']}"
+              for m in index.get("manifests", [])
+              if (p := m.get("platform")) and p.get("architecture") != "unknown"
+          }
+          print("the index carries", ", ".join(sorted(have)))
+          missing = {"linux/amd64", "linux/arm64"} - have
+          if missing:
+              sys.exit(f"missing from the index: {', '.join(sorted(missing))}")
+          PY
+
+  # `vaultaffe` is a client of the public API and references nothing in `src/`
+  # (Specification §9), which is what lets it be cut for every platform from one
+  # runner: Go cross-compiles, `CGO_ENABLED=0` links against no C, and the
+  # keychain it talks to on macOS it reaches through that system's own command
+  # (ADR 0012) rather than through a library that would have to be built there.
+  #
+  # No Windows. It has no `exec()`, `run` is the command this CLI exists for,
+  # and WSL runs the Linux binary (Specification §7).
+  cli:
+    name: CLI
+    needs: what
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.what.outputs.tag }}
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: src/cli/go.mod
+          cache-dependency-path: src/cli/go.sum
+
+      - name: Cut a binary per platform
+        working-directory: src/cli
+        env:
+          VERSION: ${{ needs.what.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          # The generated client of the contract, which is not committed
+          # (ADR 0011). Nothing below compiles without it.
+          go generate ./...
+
+          out=../../dist
+          mkdir -p "$out"
+
+          # The version is stamped in rather than read at runtime: a binary
+          # somebody downloaded has no repository to ask. It is the same string
+          # the image above was built with, so the handshake cannot report skew
+          # between two halves of one release.
+          ldflags="-s -w -X github.com/datavisionzero/vaultaffe/src/cli/internal/version.Value=$VERSION"
+
+          for platform in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            goos="${platform%/*}"
+            goarch="${platform#*/}"
+            # No version in the name, so that
+            # `releases/latest/download/vaultaffe_darwin_arm64` is a URL
+            # somebody can type. Which version it is, the binary says itself.
+            name="vaultaffe_${goos}_${goarch}"
+
+            echo "→ $name"
+            CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
+              go build -trimpath -ldflags "$ldflags" -o "$out/$name" ./cmd/vaultaffe
+          done
+
+          # One file to check them all against, because a download nobody can
+          # verify is a download nobody should run.
+          (cd "$out" && sha256sum vaultaffe_* > checksums.txt && cat checksums.txt)
+
+      # The binary for this runner is the one that can be run here, and a
+      # release whose CLI does not start is worth catching before it is a
+      # release.
+      - name: It runs, and says the version of the tag
+        env:
+          VERSION: ${{ needs.what.outputs.version }}
+        run: |
+          set -euo pipefail
+          said=$(./dist/vaultaffe_linux_amd64 --version)
+          echo "$said"
+          grep -qF "$VERSION" <<<"$said"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cli
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Last, because a release pointing at an image or a binary that does not exist
+  # is the one failure a person finds out about by being told.
+  #
+  # The notes are what this repository can say for itself: how to get the two
+  # artifacts, and GitHub's own list of the commits since the previous tag.
+  # Anything else is a maintainer's to add afterwards — the release is editable,
+  # and what belongs on a public page is a judgement rather than a pipeline step.
+  release:
+    name: The release
+    needs: [what, image-index, cli]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.what.outputs.tag }}
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: cli
+          path: dist
+
+      - name: Publish it
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.what.outputs.tag }}
+          VERSION: ${{ needs.what.outputs.version }}
+          PRERELEASE: ${{ needs.what.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+
+          # A quoted heredoc, so that the backticks around the platform names
+          # are backticks and not a shell running `linux/amd64`.
+          notes=$(mktemp)
+          cat > "$notes" <<'NOTES'
+          ## The instance
+
+          ```sh
+          echo VAULTAFFE_IMAGE=ghcr.io/datavisionzero/vaultaffe:VERSION_HERE >> deploy/.env
+          docker compose -f deploy/docker-compose.yml pull
+          docker compose -f deploy/docker-compose.yml up -d
+          ```
+
+          Leaving `VAULTAFFE_IMAGE` unset is `:latest`, which is this release
+          until the next one.
+
+          The image carries `linux/amd64` and `linux/arm64`, so a pull resolves
+          the right one without anybody naming a platform. Migrations apply
+          themselves at startup, and the backup comes first
+          ([`docs/operations.md`](https://github.com/datavisionzero/vaultaffe/blob/main/docs/operations.md)).
+
+          ## The CLI
+
+          Take the binary for your platform from the assets below, check it
+          against `checksums.txt`, and put it on the `PATH` as `vaultaffe`.
+          There is no Windows binary and there will not be one; WSL runs the
+          Linux one.
+
+          Both halves of this release carry the same version, which is what the
+          handshake compares — upgrade them together.
+          NOTES
+          # The heredoc is indented to sit in this file; the Markdown is not.
+          sed -i 's/^          //' "$notes"
+          sed -i "s/VERSION_HERE/$VERSION/" "$notes"
+
+          # `--latest` explicitly, both ways: `docs/cli.md` sends people to
+          # `releases/latest/download/vaultaffe_<os>_<arch>`, and that URL must
+          # never resolve to a prerelease.
+          flags=(--title "$TAG" --notes-file "$notes" --generate-notes)
+          if [ -n "$PRERELEASE" ]; then
+            flags+=(--prerelease --latest=false)
+          else
+            flags+=(--latest)
+          fi
+
+          gh release create "$TAG" "${flags[@]}" dist/*
