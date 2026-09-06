@@ -63,7 +63,7 @@ more would be a promise the product does not keep.
 | `/projects/:project/:environment` | Environment | **the main screen**: the keys of this environment, their status and when each was last written; import, export and the deleted switch | two-line rows — name and status above, the moment below; no horizontal scroll |
 | `/projects/:project/:environment/:KEY` | Secret | the masked value with its reveal, the bounded version history, this key's own change log, and who has read it | one column; the value block stays above the three blocks below it |
 | `/changes` | Change log | what was changed, by whom and **by what kind of thing**, filtered by project, environment and key | the identity and its type stay; the filters open as a dismissible sheet |
-| `/settings/tokens` | Settings · Tokens | the organization's tokens with kind, name, scopes, binding and standing; creating one; the value of a new one, once | area list folds above the area |
+| `/settings/tokens` | Settings · Tokens | **two lists**: the named tokens an agent or a service acts under — kind, scopes, binding, standing — and, below them, the sessions every sign-in leaves; creating a token; the value of a new one, once | area list folds above the area |
 | `/settings/users` | Settings · Users | the people of the organization, the invitation link to copy, an administrator's password reset, and the invitations that are still open | area list folds above the area |
 | `/settings/organization` | Settings · Organization | the organization's name | area list folds above the area |
 | `/settings/profile` | Settings · Profile | own name, own password | area list folds above the area |
@@ -108,6 +108,23 @@ form for the password they have just chosen.
 every time, and is reachable while signed in or not
 ([ADR 0008](./adr/0008-a-session-is-a-token-and-the-only-page-asks-for-a-password.md)).
 It is the one screen that already exists before this document's own screens do.
+
+## The tokens screen
+
+**Two lists, not one.** A token an agent or a service acts under is created
+deliberately, carries a name a person chose, and there are a few of them. A
+session is what every sign-in leaves behind: it has no name, it expires, and
+there is one for every browser anybody ever signed in with. They answer
+different questions — "which standing credentials exist, and how far does each
+reach" is an inventory, "where am I signed in, and is one of these not mine" is
+a question about devices — and so they are ordered differently: the tokens by
+name, the sessions by when they appeared. In a single list the sessions would,
+by number alone, push the credentials that matter off the screen, and the
+session nobody recognizes is exactly the row that has to be noticeable.
+
+Creating belongs to the first list, because this screen issues an agent or a
+service token and never a session. Revoked and expired rows stay visible at the
+foot of their own list: a revocation list that hides revocations is not one.
 
 ## The environment screen
 
@@ -178,7 +195,7 @@ and a row's acts live in that row's own menu.
 | Secret | list names and status, open one, **reveal one value**, copy one value, read the version history, read this key's change log | create, write a value, make a placeholder, delete, restore, roll back to a version | overwrite a value that is set; delete; roll back; **purge the history** |
 | Environment file | — | import a `.env`, export one | import with replace; **export**, always |
 | Change log | read, filter by project, environment and key, page | — | — |
-| Token | list with kind, name, scopes, binding and standing | create, revoke | revoke |
+| Token | list with kind, name, scopes, binding and standing, tokens and sessions apart | create, revoke | revoke |
 | User | list the people of the organization, see who is deactivated | invite by link, withdraw an invitation, reset a password as administrator, deactivate, put back | withdraw; reset a password; deactivate |
 | Organization | read the name | rename | — |
 | Profile | read own name and email | change own name, change own password | — |

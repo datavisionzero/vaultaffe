@@ -1,5 +1,5 @@
 import { PlusIcon } from "lucide-react";
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { answered, api, describe, type Project, type Token } from "@/api/client";
 import { useAsk } from "@/api/useAsk";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,17 @@ const production = ["prod", "production"];
  * binding and standing; creating one; and the value of a new one, once
  * (`docs/human-interface.md`).
  *
+ * **Two lists and not one.** A token an agent or a service acts under is created
+ * deliberately, carries a name a person chose, and there are a few of them; a
+ * session is what every sign-in leaves behind, has no name, and expires. The
+ * question each list answers differs as much: "which standing credentials exist,
+ * and how far does each reach" is an inventory, and "where am I signed in, and is
+ * one of these not mine" is a question about devices — which is also why one is
+ * ordered by name and the other by when it appeared. Mixed into a single list the
+ * sessions would, by their number alone, push the few credentials that matter off
+ * the screen. Creating belongs to the first list for the same reason: this screen
+ * issues an agent or a service token and never a session.
+ *
  * **Creating and revoking are a person's** and the instance says so: a token is
  * itself a secret, and one an agent created through the CLI would be printed to
  * its own stdout and into its context
@@ -58,50 +69,147 @@ export function Tokens() {
   const [projects] = useAsk<Project[]>("tokens:projects", () => api.GET("/api/v1/projects"));
 
   const catalogue = projects.at === "answered" ? projects.data : [];
+  const all = tokens.at === "answered" ? tokens.data : [];
+
+  // `filter` hands back a new array, so sorting it leaves what the ask holds
+  // alone.
+  const issued = all
+    .filter((token) => token.kind !== "session")
+    .sort((a, b) => inUseFirst(a, b) || (a.name ?? "").localeCompare(b.name ?? ""));
+
+  const sessions = all
+    .filter((token) => token.kind === "session")
+    .sort(
+      (a, b) =>
+        inUseFirst(a, b) || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+
+  // One refusal for one ask: both lists come from the same request, and saying
+  // it twice would suggest two things went wrong.
+  if (tokens.at === "refused") {
+    return <Refusal>{tokens.why}</Refusal>;
+  }
 
   return (
-    <div className="grid gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 className="text-sm font-semibold">Tokens</h2>
-          <p className="text-xs text-muted-foreground">
-            Every token of this organization, newest first, revoked ones and sessions among them.
-            No listing anywhere carries a value.
-          </p>
-        </div>
-        <NewToken catalogue={catalogue} onCreated={again} />
-      </div>
+    <div className="grid gap-6">
+      <Section
+        title="Tokens"
+        what="What an agent or a service acts under, so the change log can say what kind of thing acted. Named, and never listed with its value."
+        action={<NewToken catalogue={catalogue} onCreated={again} />}
+      >
+        {tokens.at === "asking" ? (
+          <Rows count={3} />
+        ) : issued.length === 0 ? (
+          <NoRows>No agent or service token yet.</NoRows>
+        ) : (
+          <List>
+            {issued.map((token) => (
+              <Row key={token.id} token={token} catalogue={catalogue} onChanged={again} showKind />
+            ))}
+          </List>
+        )}
+      </Section>
 
-      {tokens.at === "asking" && <Rows count={4} />}
-      {tokens.at === "refused" && <Refusal>{tokens.why}</Refusal>}
-      {tokens.at === "answered" && (
-        <ul className="divide-y rounded-lg border">
-          {tokens.data.map((token) => (
-            <Row key={token.id} token={token} catalogue={catalogue} onChanged={again} />
-          ))}
-        </ul>
-      )}
+      <Section
+        title="Sessions"
+        what="One for every sign-in, this browser's among them. They carry no name, because nobody gives one to a login — what tells them apart is when they appeared and where."
+      >
+        {tokens.at === "asking" ? (
+          <Rows count={2} />
+        ) : sessions.length === 0 ? (
+          <NoRows>No session on record.</NoRows>
+        ) : (
+          <List>
+            {sessions.map((token) => (
+              <Row key={token.id} token={token} catalogue={catalogue} onChanged={again} />
+            ))}
+          </List>
+        )}
+      </Section>
     </div>
   );
+}
+
+/** A titled list with its own sentence, and whatever acts on it. */
+function Section({
+  title,
+  what,
+  action,
+  children,
+}: {
+  title: string;
+  what: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    // Named, so that the two lists are two landmarks a screen reader can move
+    // between rather than one undifferentiated run of rows.
+    <section aria-label={title} className="grid gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold">{title}</h2>
+          <p className="max-w-prose text-xs text-muted-foreground">{what}</p>
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function List({ children }: { children: ReactNode }) {
+  return <ul className="divide-y rounded-lg border">{children}</ul>;
+}
+
+function NoRows({ children }: { children: ReactNode }) {
+  return (
+    <p className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
+      {children}
+    </p>
+  );
+}
+
+/** What a token's standing is, in the word the row shows. */
+function standingOf(token: Token): "in use" | "expired" | "revoked" {
+  if (token.revokedAt !== null) {
+    return "revoked";
+  }
+
+  if (token.expiresAt !== null && new Date(token.expiresAt) <= new Date()) {
+    return "expired";
+  }
+
+  return "in use";
+}
+
+/**
+ * What is still in use first, in both lists. What is revoked or expired stays
+ * below it rather than disappearing: a revocation list that hides revocations is
+ * not one, and an expired session is how somebody notices a device they forgot.
+ */
+function inUseFirst(a: Token, b: Token): number {
+  return Number(standingOf(a) !== "in use") - Number(standingOf(b) !== "in use");
 }
 
 function Row({
   token,
   catalogue,
   onChanged,
+  showKind = false,
 }: {
   token: Token;
   catalogue: Project[];
   onChanged: () => void;
+  /**
+   * Only where it distinguishes something. In the sessions list every row is a
+   * session, and a chip repeating the heading on each of them is noise.
+   */
+  showKind?: boolean;
 }) {
   const { me } = useSession();
 
-  const standing =
-    token.revokedAt !== null
-      ? "revoked"
-      : token.expiresAt !== null && new Date(token.expiresAt) <= new Date()
-        ? "expired"
-        : "in use";
+  const standing = standingOf(token);
 
   const mine = token.id === me.tokenId;
 
@@ -112,9 +220,11 @@ function Row({
           <span className="text-sm font-medium">
             {token.name ?? (token.kind === "session" ? "A signed-in session" : "unnamed")}
           </span>
-          <span className="rounded-sm border px-1 text-[11px] text-muted-foreground">
-            {token.kind}
-          </span>
+          {showKind && (
+            <span className="rounded-sm border px-1 text-[11px] text-muted-foreground">
+              {token.kind}
+            </span>
+          )}
           {/* Standing is a word: revoked says revoked. */}
           <span
             className={

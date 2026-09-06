@@ -139,6 +139,65 @@ describe("the tokens", () => {
     });
   });
 
+  // Two lists and not one: a session is what every sign-in leaves behind, and in
+  // one list with the few named credentials it would bury them by sheer number.
+  it("keeps the sessions apart from the tokens an agent or a service acts under", async () => {
+    installInstance({
+      "GET /api/v1/tokens": [
+        { ...theAgent, id: aPerson.tokenId, kind: "session", name: null },
+        {
+          ...theAgent,
+          id: "0199a000-0000-7000-8000-000000000032",
+          kind: "session",
+          name: null,
+          createdAt: "2026-09-02T09:00:00+00:00",
+        },
+        theAgent,
+        {
+          ...theAgent,
+          id: "0199a000-0000-7000-8000-000000000033",
+          kind: "service",
+          name: "the deployment",
+        },
+      ],
+      "GET /api/v1/projects": [landingPage],
+    });
+
+    renderUnderShell("/settings/tokens", <Shell />);
+
+    const tokens = await screen.findByRole("region", { name: "Tokens" });
+    const sessions = screen.getByRole("region", { name: "Sessions" });
+
+    // What is named sits in the first list, and the kind still tells the two of
+    // them apart.
+    expect(within(tokens).getByText("the agent in my terminal")).toBeInTheDocument();
+    expect(within(tokens).getByText("the deployment")).toBeInTheDocument();
+    expect(within(tokens).getByText("agent")).toBeInTheDocument();
+    expect(within(tokens).getByText("service")).toBeInTheDocument();
+    expect(within(tokens).queryByText("A signed-in session")).not.toBeInTheDocument();
+
+    // The sign-ins sit in the second, this browser's marked, and no chip repeats
+    // the heading on every row of them.
+    expect(within(sessions).getAllByText("A signed-in session")).toHaveLength(2);
+    expect(within(sessions).getByText("\u00b7 this browser")).toBeInTheDocument();
+    expect(within(sessions).queryByText("session")).not.toBeInTheDocument();
+
+    // Creating belongs to the first list: this screen issues an agent or a
+    // service token and never a session.
+    expect(within(tokens).getByRole("button", { name: "New token" })).toBeInTheDocument();
+  });
+
+  it("says so where a list has nothing in it", async () => {
+    installInstance({
+      "GET /api/v1/tokens": [{ ...theAgent, id: aPerson.tokenId, kind: "session", name: null }],
+      "GET /api/v1/projects": [],
+    });
+
+    renderUnderShell("/settings/tokens", <Shell />);
+
+    expect(await screen.findByText("No agent or service token yet.")).toBeInTheDocument();
+  });
+
   it("says what revoking the session of this browser would do", async () => {
     installInstance({
       "GET /api/v1/tokens": [{ ...theAgent, id: aPerson.tokenId, kind: "session", name: null }],
