@@ -5,12 +5,14 @@ that work daily with CLI-based AI agents and operate their own infrastructure.
 
 > **Status: pre-MVP, but it runs.** `docker compose -f deploy/docker-compose.yml
 > up -d` brings up an instance you can start and use — there is no release to
-> pull yet, so the first `up` builds the image from the checkout. What is still
-> missing before the MVP: a documented backup and restore path, released
-> binaries and images, and the documentation. Read
+> pull yet, so the first `up` builds the image from the checkout. Backing it up
+> and putting it back is `deploy/backup.sh` and `deploy/restore.sh`. What is
+> still missing before the MVP: released binaries and images, and the
+> documentation. Read
 > [`Vision.md`](Vision.md) for the product direction,
 > [`Specification.md`](Specification.md) for detailed behavior and architecture,
-> [`docs/codebase.md`](docs/codebase.md) for the layout and
+> [`docs/codebase.md`](docs/codebase.md) for the layout,
+> [`docs/operations.md`](docs/operations.md) for running one and
 > [`docs/storage.md`](docs/storage.md) for the data model. If you need a working
 > self-hosted secrets manager today, use [Infisical](https://infisical.com).
 

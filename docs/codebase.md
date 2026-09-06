@@ -52,13 +52,16 @@ vaultaffe/
 │  ├─ Dockerfile               one image: the API and the SPA it serves
 │  ├─ docker-compose.yml       the instance, Postgres, and Caddy in front
 │  ├─ Caddyfile                the site address, and the whole TLS decision
-│  └─ .env.example             the two values an operator fills in
+│  ├─ .env.example             the two values an operator fills in
+│  ├─ backup.sh                one file holding the dump and the key together
+│  └─ restore.sh               and the way back in
 ├─ docs/                       the decisions, and this
 │  ├─ adr/
 │  ├─ api.md                   the HTTP surface: versions, headers, the shape of a refusal
 │  ├─ api/openapi.json         the contract, captured from a running instance and checked in
 │  ├─ cli.md                   the CLI surface: the token, the binding, the exit codes
 │  ├─ human-interface.md       the screens, their actions, and who may do what
+│  ├─ operations.md            keeping an instance: backup, restore, the key
 │  └─ storage.md               the data model: tables, constraints, what is enforced where
 ├─ src/
 │  ├─ Vaultaffe.Domain/         the rules
@@ -85,11 +88,12 @@ here so far: [`storage.md`](./storage.md), [`api.md`](./api.md),
 of them written *before* its surface exists, which is deliberate: the screens are
 held together by that document rather than by their components.
 
-The fifth is the one still missing: an operations guide, which needs backup and
-restore beside it to be worth reading and arrives with them. Until it does, what
-an operator has to decide is in the comments of the files they edit — one
-`docker-compose.yml` and one `.env.example`, which is where somebody setting an
-instance up is actually looking.
+The fifth is [`operations.md`](./operations.md), which arrived with backup and
+restore because it needed them to be worth reading — and is that and nothing else
+so far. What an operator has to *decide* is still in the comments of the files
+they edit, one `docker-compose.yml` and one `.env.example`, which is where
+somebody setting an instance up is actually looking; what they have to *know*
+before they need it is in the guide.
 
 ## The four layers
 

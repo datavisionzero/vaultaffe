@@ -45,6 +45,12 @@ jobs:
       - run: dotnet restore Vaultaffe.slnx
       - run: dotnet format Vaultaffe.slnx --verify-no-changes
 
+      # The other language an operator runs directly. Two scripts, on the path
+      # where being wrong loses an installation (ADR 0017) — and the round trip
+      # in the last job exercises what they do, not how they quote it.
+      - name: The operator's shell
+        run: shellcheck deploy/*.sh
+
   # Seconds, and nothing installed: the rules of Domain and the use cases of
   # Application against substituted ports, plus the layering test that reads the
   # four project files and fails a reference pointing outward (ADR 0002).
@@ -291,6 +297,70 @@ jobs:
             -H 'content-type: application/json' \
             -d '{"email":"somebody@example.test","name":"Somebody Else","password":"a-password-of-real-length"}')"
           test "$again" = "409" || { echo "the second first run answered $again"; exit 1; }
+
+      # A backup nobody has restored is a belief, so the round trip runs here on
+      # every commit (ADR 0017): a value is written, the artifact is taken, the
+      # installation is destroyed with `down -v` — both halves, the volume and
+      # the `.env` — and the value is read back out of the artifact alone.
+      #
+      # The value is generated here and masked, and only its checksum crosses
+      # between steps. A workflow that printed one would be this project's own
+      # product rule broken by its CI (Specification §6.5).
+      - name: A value to lose
+        run: |
+          set -euo pipefail
+          token="$(curl --fail --silent -X POST http://localhost:8080/api/v1/sessions \
+            -H 'content-type: application/json' \
+            -d '{"email":"maintainer@example.test","password":"a-password-of-real-length"}' \
+            | jq -r .token)"
+          echo "::add-mask::$token"
+          curl --fail --silent -X POST http://localhost:8080/api/v1/projects \
+            -H "authorization: Bearer $token" -H 'content-type: application/json' \
+            -d '{"name":"checkout"}' -o /dev/null
+          value="sk_$(openssl rand -hex 16)"
+          echo "::add-mask::$value"
+          curl --fail --silent -X PUT \
+            http://localhost:8080/api/v1/projects/checkout/environments/prod/secrets/STRIPE_KEY \
+            -H "authorization: Bearer $token" -H 'content-type: application/json' \
+            -d "{\"value\":\"$value\"}" -o /dev/null
+          printf '%s' "$value" | sha256sum | cut -d' ' -f1 > /tmp/value.sha256
+
+      - name: Take a backup, and destroy the installation
+        run: |
+          set -euo pipefail
+          deploy/backup.sh /tmp > /tmp/artifact
+          docker compose -f deploy/docker-compose.yml down -v
+          rm deploy/.env
+        env:
+          VAULTAFFE_IMAGE: vaultaffe:ci
+          VAULTAFFE_HTTP_PORT: "8080"
+          VAULTAFFE_HTTPS_PORT: "8443"
+
+      # One command, on a machine that now has neither the data nor the key.
+      # Nothing brings the stack up first: that is what a restore onto a new
+      # host is, and it is the case worth exercising.
+      - name: Restore it, and the value is the one that was written
+        run: |
+          set -euo pipefail
+          deploy/restore.sh "$(cat /tmp/artifact)" --yes
+          token="$(curl --fail --silent -X POST http://localhost:8080/api/v1/sessions \
+            -H 'content-type: application/json' \
+            -d '{"email":"maintainer@example.test","password":"a-password-of-real-length"}' \
+            | jq -r .token)"
+          echo "::add-mask::$token"
+          value="$(curl --fail --silent \
+            http://localhost:8080/api/v1/projects/checkout/environments/prod/secrets/STRIPE_KEY \
+            -H "authorization: Bearer $token" | jq -r .value)"
+          echo "::add-mask::$value"
+          printf '%s' "$value" | sha256sum | cut -d' ' -f1 > /tmp/value.restored
+          cmp --silent /tmp/value.sha256 /tmp/value.restored || {
+            echo "the restored value is not the one that was written"
+            exit 1
+          }
+        env:
+          VAULTAFFE_IMAGE: vaultaffe:ci
+          VAULTAFFE_HTTP_PORT: "8080"
+          VAULTAFFE_HTTPS_PORT: "8443"
 
       - name: What the stack said, if any of that failed
         if: failure()

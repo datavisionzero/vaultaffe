@@ -13,9 +13,13 @@
 # The first `up` builds the image from this checkout, because no release has
 # been published yet; it is a few minutes once. Afterwards, upgrading is
 # `docker compose pull` followed by `docker compose up -d`: migrations apply
-# themselves on startup, only ever forward, so take a dump first — and keep the
-# master key with it, because a dump without the key is worthless
-# (Specification §6.3).
+# themselves on startup, only ever forward, so take a backup first:
+#
+#   ./backup.sh /somewhere
+#
+# That writes one file holding the dump *and* the `.env` beside it, because
+# either half alone restores nothing (ADR 0017). `./restore.sh <file>` puts it
+# back, on this machine or on a new one — `docs/operations.md` is the rest.
 
 name: vaultaffe
 
