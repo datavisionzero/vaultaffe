@@ -41,7 +41,7 @@ public sealed class NameTests
     [InlineData("webshop-api")]
     [InlineData("landing-page")]
     [InlineData("dev")]
-    [InlineData("dev-alex")]
+    [InlineData("dev-robin")]
     [InlineData("v2.1")]
     [InlineData("a")]
     public void A_project_or_environment_name_may_appear_in_a_reference(string name) =>

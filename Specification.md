@@ -136,7 +136,7 @@ the store wins over your shell (§6.2), so the "machine-specific values come fro
 the machine" argument only holds for keys that are *absent* from the vault. `run`
 therefore reports every collision, because a collision is usually configuration
 that leaked into the vault. And some vendors hand out a separate sandbox per
-developer. An ordinary additional environment, `dev-alex`, can separate values
+developer. An ordinary additional environment, `dev-robin`, can separate values
 only when those values may be shared with the whole team. It provides no privacy:
 everyone in the organization can access it (§6.4). Genuinely personal credentials
 are outside the MVP. The later missing-key notice must also account for such
@@ -325,14 +325,15 @@ service token defaults to one project, one environment, `names` and `read`.
 
 **Agent tokens.** An agent never acts under a human's session. Without this, the
 server cannot tell an agent from the person whose terminal it sits in: the change
-log would say "alex" for everything, and the identity type in §6.5 would have no
-source. So a human creates an agent token — in the UI or from their own session —
-and hands it to the agent through its environment as `VAULTAFFE_TOKEN`, which the
-agent harness sets for the agent's process and `run` strips from every child
-(§6.2). The point is **attribution, not restriction**. Accordingly the default
-binding is the whole organization with every scope; the human narrows it at
-creation, and excluding production environments is the first switch offered.
-Whether an agent may delete is a scope, not a doctrine.
+log would carry the human's name for everything, and the identity type in §6.5
+would have no source. So a human creates an agent token — in the UI or from
+their own session — and hands it to the agent through its environment as
+`VAULTAFFE_TOKEN`, which the agent harness sets for the agent's process and
+`run` strips from every child (§6.2). The point is **attribution, not
+restriction**. Accordingly the default binding is the whole organization with
+every scope; the human narrows it at creation, and excluding production
+environments is the first switch offered. Whether an agent may delete is a
+scope, not a doctrine.
 
 **Human-only actions** are the short list where an agent's mistake cannot be
 undone or where the output is itself a secret: **purging value history or deleted
@@ -659,10 +660,17 @@ and it should never be sold as one. Three points remain, and they hold:
   Frequent `dev-<firstname>` environments can indicate demand for individual
   values. Environment inheritance alone would not provide privacy; any later
   support for personal credentials also needs an explicit visibility model.
-- How an agent harness gets `VAULTAFFE_TOKEN` into the agent's process in
+- ~~How an agent harness gets `VAULTAFFE_TOKEN` into the agent's process in
   practice, per tool (Claude Code, Cursor, Codex): a settings file, a hook, a
-  wrapper script. The mechanism is the harness's, not ours, but the documentation
-  has to show it for each, or the agent-token model stays theoretical.
+  wrapper script.~~ **Answered**, per harness, in
+  [`docs/agents.md`](docs/agents.md). The mechanism is the harness's and not
+  ours, and it is a settings block, a shell profile keyed on the harness's own
+  marker, and a forwarding policy respectively. The finding worth the file: one
+  of the three strips names containing `TOKEN` from what it forwards by default,
+  and the failure is silent — the CLI falls back to the human's session in the
+  keychain, everything works, and the change log attributes the agent's changes
+  to a person. `vaultaffe status` names the rung a token came from, which is the
+  check every harness reduces to.
 
 ## 11. Success criteria for the MVP
 

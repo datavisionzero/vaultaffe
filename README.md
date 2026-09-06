@@ -1,79 +1,68 @@
 # Vaultaffe
 
-A self-hostable, open-source secrets manager for solo developers and small teams
-that work daily with CLI-based AI agents and operate their own infrastructure.
+A self-hostable secrets manager for solo developers and small teams who work
+daily with CLI-based AI agents and run their own infrastructure. Secrets by
+project and environment, a web UI to manage them, and a CLI that puts them into
+any process as environment variables — no temporary `.env` on disk:
 
-> **Status: pre-MVP, but it runs.** `docker compose -f deploy/docker-compose.yml
-> up -d` brings up an instance you can start and use — there is no release to
-> pull yet, so the first `up` builds the image from the checkout. Backing it up
-> and putting it back is `deploy/backup.sh` and `deploy/restore.sh`. What is
-> still missing before the MVP: released binaries and images, and the
-> documentation. Read
-> [`Vision.md`](Vision.md) for the product direction,
-> [`Specification.md`](Specification.md) for detailed behavior and architecture,
-> [`docs/codebase.md`](docs/codebase.md) for the layout,
-> [`docs/operations.md`](docs/operations.md) for running one and
-> [`docs/storage.md`](docs/storage.md) for the data model. If you need a working
-> self-hosted secrets manager today, use [Infisical](https://infisical.com).
-
-## What it will be
-
-Secrets organized by project and environment, a web UI to manage them, and a CLI
-that injects them into any process as environment variables:
-
-```bash
+```sh
 vaultaffe run -- npm run dev
 ```
 
-The CLI injects values without writing a temporary `.env` file. One `docker compose up` to host
-it yourself — with HTTPS included — one Postgres, one documented backup path.
+Hosting it is one `docker compose up`, with HTTPS, one Postgres, and one
+documented backup that holds the key beside the data.
 
 ## The one thing that is different
 
-AI agents run commands, start dev servers, and provision services — and they need
-credentials to do it. An agent holding a token in plaintext leaks it into
-transcripts, logs, and model providers.
+Agents run commands, start dev servers and provision services, and they need
+credentials to do it — and an agent holding a token in plaintext leaks it into
+transcripts, logs and model providers. Vaultaffe's default workflows let **an
+agent use a secret by name without seeing its value**:
 
-Vaultaffe's default workflows let **the agent use a secret by name without
-needing to see its value.**
-
-```bash
-vaultaffe secrets                          # lists names and status — never values
-stripe api-keys create | vaultaffe secrets set STRIPE_KEY   # value only via stdin
-vaultaffe secrets set SMTP_PASSWORD --empty                 # a placeholder for a human to fill
+```sh
+vaultaffe secrets                                          # names and status — never values
+stripe api-keys create | vaultaffe secrets set STRIPE_KEY  # a value arrives only on stdin
+vaultaffe secrets set SMTP_PASSWORD --empty                # a placeholder for a human to fill
 ```
 
-An agent can pipe a freshly created API key straight into the store without ever
-reading it, and can prepare a key for a human to fill. These workflows deliver
-values to processes without requiring them in the model context. The agent acts under its own token, so
-the change log says who did what — a person or an agent.
-
-This is a workflow property, not an access barrier, and assumes a cooperative
-agent. An authorized agent can read values. `run` hands values to the process it
-starts, and an agent hijacked into exfiltrating them is beyond what a secrets
-manager with a run command can prevent. We don't pretend otherwise.
+The agent acts under [its own token](docs/agents.md), so the change log says who
+did what. This is a workflow property, not an access barrier: an authorized agent
+can read values, `run` hands them to the process it starts, and an agent hijacked
+into exfiltrating them is beyond what a secrets manager with a run command can
+prevent. We don't pretend otherwise.
 
 ## What it deliberately is not
 
-No integrations to Vercel, AWS, or Kubernetes. No fine-grained RBAC — everyone in
-an organization sees everything, while tokens carry binding and scope. No secret
-rotation, no dynamic secrets, no compliance tooling, no SSO. No zero-knowledge
-encryption. No native Windows CLI in the MVP; WSL works.
+No integrations with Vercel, AWS or Kubernetes. No fine-grained RBAC — everyone
+in an organization sees everything, and tokens carry the binding and the scopes.
+No rotation, no dynamic secrets, no compliance tooling, no SSO, no zero-knowledge
+encryption. No native Windows CLI; WSL runs the Linux binary. Shared team
+secrets, not personal ones. That list is the product decision, not a roadmap of
+regrets — if you need things from it, [Infisical](https://infisical.com) is the
+better tool and we would rather say so.
 
-The MVP covers shared team secrets; personal credentials and private development
-environments are outside its scope.
+## Running one
 
-That list is the product decision, not a roadmap of regrets. If you need items
-from it, [Infisical](https://infisical.com) is the better tool and we would rather
-say so than pretend otherwise.
+```sh
+cp deploy/.env.example deploy/.env    # and make the two values it asks for
+docker compose -f deploy/docker-compose.yml up -d
+open http://localhost                 # the first person here is the administrator
+```
 
-## Stack
+> **Status: pre-MVP.** It runs and it is usable, but nothing is released yet: the
+> first `up` builds the image from the checkout, and there are no CLI binaries to
+> download.
 
-.NET 10 backend, React frontend, PostgreSQL, Docker Compose with Caddy for TLS.
-The CLI is written in Go, because `exec()` needs a system call Go exposes directly
-and because a static binary with millisecond startup sits in front of every
-command.
+.NET 10, React, PostgreSQL, Caddy for TLS. The CLI is Go, because `exec()` wants
+a system call Go exposes directly and a static binary with millisecond startup
+sits in front of every command.
 
-## License
+| | |
+| --- | --- |
+| [`Vision.md`](Vision.md) · [`Specification.md`](Specification.md) | what this is, and how it behaves |
+| [`docs/operations.md`](docs/operations.md) | running an instance: the key, upgrades, backup and restore |
+| [`docs/agents.md`](docs/agents.md) | handing an agent its token, per harness |
+| [`docs/cli.md`](docs/cli.md) · [`docs/api.md`](docs/api.md) · [`docs/human-interface.md`](docs/human-interface.md) | the three surfaces |
+| [`docs/codebase.md`](docs/codebase.md) · [`docs/storage.md`](docs/storage.md) | the layout, and the data model |
 
 MIT. All of it — no `ee/` directory, no feature behind a second license.

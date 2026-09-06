@@ -57,11 +57,12 @@ vaultaffe/
 │  └─ restore.sh               and the way back in
 ├─ docs/                       the decisions, and this
 │  ├─ adr/
+│  ├─ agents.md                handing an agent its token, per harness
 │  ├─ api.md                   the HTTP surface: versions, headers, the shape of a refusal
 │  ├─ api/openapi.json         the contract, captured from a running instance and checked in
 │  ├─ cli.md                   the CLI surface: the token, the binding, the exit codes
 │  ├─ human-interface.md       the screens, their actions, and who may do what
-│  ├─ operations.md            keeping an instance: backup, restore, the key
+│  ├─ operations.md            keeping an instance: the key, upgrades, backup and restore
 │  └─ storage.md               the data model: tables, constraints, what is enforced where
 ├─ src/
 │  ├─ Vaultaffe.Domain/         the rules
@@ -89,11 +90,20 @@ of them written *before* its surface exists, which is deliberate: the screens ar
 held together by that document rather than by their components.
 
 The fifth is [`operations.md`](./operations.md), which arrived with backup and
-restore because it needed them to be worth reading — and is that and nothing else
-so far. What an operator has to *decide* is still in the comments of the files
-they edit, one `docker-compose.yml` and one `.env.example`, which is where
-somebody setting an instance up is actually looking; what they have to *know*
-before they need it is in the guide.
+restore because it needed them to be worth reading and now covers the whole of an
+instance's life: bringing one up, what is configured and what deliberately is
+not, the key, upgrading, and what to look at when something is wrong. It does not
+repeat the comments in `docker-compose.yml` and `.env.example` — those are where
+somebody setting an instance up is actually looking, and what they have to *know*
+before they need it is here.
+
+The sixth, [`agents.md`](./agents.md), is the only one that documents somebody
+else's software, and it exists because the agent-token model is one sentence of
+ours (`VAULTAFFE_TOKEN` in the agent's environment,
+[§6.4](../Specification.md#64-permissions-in-the-mvp)) and three different
+answers in the harnesses people actually run — one of which drops the variable
+without a word, leaving the change log to credit a human for everything the agent
+did.
 
 ## The four layers
 

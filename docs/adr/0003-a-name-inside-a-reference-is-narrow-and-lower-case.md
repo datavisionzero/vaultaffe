@@ -26,7 +26,7 @@ case were significant, `Prod` and `prod` would be two different environments tha
 no human reading a deployment log could tell apart, and if it were not, the
 database would have to be told so in every index and every lookup. Making the
 name lower-case settles it once. Every name in the specification's own examples —
-`webshop-api`, `landing-page`, `dev`, `staging`, `prod`, `dev-alex` — is already
+`webshop-api`, `landing-page`, `dev`, `staging`, `prod`, `dev-robin` — is already
 of that shape.
 
 ## Consequences
