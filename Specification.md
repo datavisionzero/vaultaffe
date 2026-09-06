@@ -322,7 +322,12 @@ Properties that matter to us:
   first release; CLI and server exchange versions, and the CLI says clearly when
   it is too old or too new.
 - First-run wizard: the first user becomes administrator, the default
-  organization is created.
+  organization is created. It needs the instance's **claim secret** — one the
+  instance makes for itself and writes to its own log at every start until
+  somebody claims it, so that the window between `docker compose up` and the
+  first sign-in belongs to whoever can read that log rather than to whoever
+  reaches the port first
+  ([ADR 0019](docs/adr/0019-an-unclaimed-instance-holds-its-own-claim-secret.md)).
 
 ### 6.4 Permissions in the MVP
 
@@ -371,6 +376,15 @@ because with writing agents that is the interesting question. No value, not even
 as a diff. We follow AWS here, not
 Doppler: Doppler puts the old and new value into the log and consequently had to
 bolt on a redaction feature, which doesn't even truly delete the value.
+
+**The one value that reaches a log is the claim secret, and it is an exception
+by name.** An unclaimed instance prints it at every start, because the first run
+needs it and the operator has no other way to be handed one
+([ADR 0019](docs/adr/0019-an-unclaimed-instance-holds-its-own-claim-secret.md)).
+It is not a secret of anybody's: it is the key to an **empty** instance, it opens
+one endpoint, it authenticates nobody, and the first run deletes it in the same
+transaction that consumes it. Nothing else is ever printed, and a log line
+carrying any other value is a bug rather than an untidiness.
 
 **Value history is tightly bounded.** Rollback is a real need and writing agents
 make it more common, not less — an agent that wrecks a value overnight needs an

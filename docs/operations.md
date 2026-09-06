@@ -26,13 +26,29 @@ pulled, which is what a working copy of an unreleased change is. `up -d` returns
 opened — Caddy waits for the health check, which is the handshake, which is
 served after the migrations have run.
 
-That last address is the **first run**, and it happens exactly once
-([ADR 0007](./adr/0007-the-first-run-is-unauthenticated-and-happens-once.md)): the
-first person to reach an unstarted instance names the organization and becomes its
-administrator. Nothing authenticates that page, because there is nobody to
-authenticate against yet. **So do it now rather than tomorrow** — until somebody
-has, whoever reaches the instance first is the one it happens for. From a console
-with no browser, `vaultaffe instance start` is the same act
+That last address is the **first run**, and it happens exactly once: the person
+who completes it names nothing and becomes the administrator of the default
+organization. Nothing authenticates that page, because there is nobody to
+authenticate against yet — so it asks for this instance's **claim secret**
+instead:
+
+```sh
+deploy/claim.sh                          # or: docker compose logs vaultaffe
+```
+
+The instance makes that secret for itself before it serves anything and prints it
+at every start until somebody claims it
+([ADR 0019](./adr/0019-an-unclaimed-instance-holds-its-own-claim-secret.md)).
+Nothing goes in `deploy/.env` for it and nothing has to be generated: whoever can
+read this log can start this instance, and whoever merely reaches the port
+cannot. **A lost secret is a restart** — `docker compose restart vaultaffe`
+prints the same one again, so closing the terminal costs nothing.
+
+**Still do the first run now rather than tomorrow.** The claim secret means an
+unclaimed instance is no longer anybody's for the taking, so this is now about
+tidiness rather than about a window: an instance nobody has claimed is an
+instance nobody is watching. From a console with no browser,
+`vaultaffe instance start --claim-file` is the same act
 ([`cli.md`](./cli.md)).
 
 `VAULTAFFE_SITE_ADDRESS` is the whole of the TLS decision. Unset it is `:80`,
@@ -309,8 +325,9 @@ its schema — which turns most questions into one of these:
 - **The CLI and the instance disagree on the contract.** Exit code `9`, and it
   says which side is behind. The two halves of a release are built together, so
   this means one of them was not upgraded.
-- **The first run is gone.** It happens once and cannot be repeated
-  ([ADR 0007](./adr/0007-the-first-run-is-unauthenticated-and-happens-once.md)).
+- **The first run is gone.** It happens once and cannot be repeated, and the
+  claim secret it needed was deleted by the run that used it
+  ([ADR 0019](./adr/0019-an-unclaimed-instance-holds-its-own-claim-secret.md)).
   An administrator who has lost their password is reset by another
   administrator; an instance with no reachable administrator at all is a restore
   from a backup taken before that was true.

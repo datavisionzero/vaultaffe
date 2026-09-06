@@ -88,6 +88,7 @@ Beyond the handshake, every request and every response carries a version:
 | --- | --- | --- |
 | `Vaultaffe-Client` | request | The client's release, e.g. `0.4.1`. Optional; a browser sends none. |
 | `Vaultaffe-Version` | response | This instance's release. On every answer, including refusals and failures. |
+| `Vaultaffe-Claim` | request | An unclaimed instance's claim secret. On `POST /api/v1/instance` and nowhere else. |
 
 A `Vaultaffe-Client` below `minimumClient` is refused with `client-too-old`
 before it reaches an endpoint, and one that is not a version at all with
@@ -118,10 +119,33 @@ hold.
 ### The first run
 
 `GET /api/v1/instance` says whether this instance has been started, without a
-token. `POST /api/v1/instance` starts it: the default organization is created, the
-first user becomes its administrator, and the answer carries a session token. It
-needs no credential, because there is none yet, and it refuses the second time
-([ADR 0007](./adr/0007-the-first-run-is-unauthenticated-and-happens-once.md)).
+token, and whether the first run wants a claim secret — `needsClaim`, which is
+what lets a client put the field on the screen. It says that one is required and
+nothing whatsoever about it.
+
+`POST /api/v1/instance` starts it: the default organization is created, the first
+user becomes its administrator, and the answer carries a session token. It
+authenticates nobody, because there is nobody yet, and it refuses the second
+time.
+
+**It does require this instance's claim secret**, in `Vaultaffe-Claim`
+([ADR 0019](./adr/0019-an-unclaimed-instance-holds-its-own-claim-secret.md)). The
+instance generates one for itself before it serves anything and writes it to its
+own log at every start until somebody claims it, so that the window between
+`docker compose up` and the first sign-in belongs to whoever can read that log
+rather than to whoever reaches the port first. It is a header rather than a field
+of the body because it is a credential and not a property of the organization
+being made — and it is described here rather than in the contract, like
+`Authorization` and `Vaultaffe-Client`.
+
+The two refusals are ordered, and the order is the point. An instance that has
+already been started answers `already-started` **before** the claim secret is
+looked at, so a running instance never says whether a guess was right. An
+unstarted one answers `claim-refused` for a secret that is missing and for one
+that is wrong, in constant time and without ever echoing what was presented.
+
+The first run **deletes** the claim secret in the same transaction that consumes
+it: a started instance holds no working credential nobody knows about.
 
 ### Signing in
 
@@ -730,6 +754,7 @@ an untidiness. `detail` says what was refused, not what it was refused about.
 | `insufficient-scope` | 403 | The token is missing a scope. Carries `requiredScopes` and `grantedScopes`. |
 | `out-of-reach` | 403 | The token is bound elsewhere. Carries `projectId` and `environmentId`. |
 | `already-started` | 409 | The instance already has its first user. |
+| `claim-refused` | 403 | The first run presented no claim secret, or not this instance's. Never carries the secret. |
 | `name-taken` | 409 | Something of that name is here. Carries `takenBySomethingDeleted`. |
 | `not-recoverable` | 410 | Deleted longer ago than the 72-hour window. |
 | `replace-required` | 409 | That key holds a value and the request did not say to overwrite. Carries `secretName`. |

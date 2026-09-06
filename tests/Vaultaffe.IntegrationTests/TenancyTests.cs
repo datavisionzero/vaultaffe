@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Vaultaffe.Domain.Identities;
 using Vaultaffe.Domain.Organizations;
 using Vaultaffe.Domain.Projects;
 using Vaultaffe.Domain.Secrets;
@@ -23,21 +24,35 @@ public sealed class TenancyTests(PostgresFixture postgres)
 
         foreach (var entity in context.Model.GetEntityTypes())
         {
-            // The organization table is the one exception, and it is an
-            // exception of shape rather than of rule — it is filtered by its own
-            // key. Everything else carries the column.
-            if (entity.ClrType != typeof(Organization))
+            // Two exceptions, and both are listed here rather than assumed, so
+            // that a third one cannot arrive by somebody forgetting the rule.
+            //
+            // The organization table is an exception of shape rather than of
+            // rule — it is filtered by its own key. The claim secret is an
+            // exception of time: it is the row that exists in the window before
+            // there is an organization to belong to, and it is deleted by the
+            // first run that creates one (ADR 0019).
+            if (entity.ClrType == typeof(Organization) || entity.ClrType == typeof(InstanceClaim))
             {
-                Assert.True(
-                    typeof(IBelongToAnOrganization).IsAssignableFrom(entity.ClrType),
-                    $"{entity.ClrType.Name} is a domain table that does not carry its organization.");
+                continue;
             }
+
+            Assert.True(
+                typeof(IBelongToAnOrganization).IsAssignableFrom(entity.ClrType),
+                $"{entity.ClrType.Name} is a domain table that does not carry its organization.");
 
             Assert.True(
                 entity.GetDeclaredQueryFilters().Count > 0,
                 $"{entity.ClrType.Name} has no organization filter, so a query over it "
                 + "would answer another organization's rows.");
         }
+
+        // Said the other way round as well: the two exceptions are these two and
+        // the claim table really is unfiltered, rather than quietly having
+        // acquired a filter that would hide it from the code that has to read it
+        // before anybody is anywhere.
+        Assert.Empty(
+            context.Model.FindEntityType(typeof(InstanceClaim))!.GetDeclaredQueryFilters());
     }
 
     [Fact]

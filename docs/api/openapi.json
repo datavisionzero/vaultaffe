@@ -249,6 +249,16 @@
               }
             }
           },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict",
             "content": {
@@ -4142,7 +4152,8 @@
       "Instance": {
         "required": [
           "started",
-          "organizationName"
+          "organizationName",
+          "needsClaim"
         ],
         "type": "object",
         "properties": {
@@ -4154,6 +4165,9 @@
               "null",
               "string"
             ]
+          },
+          "needsClaim": {
+            "type": "boolean"
           }
         }
       },

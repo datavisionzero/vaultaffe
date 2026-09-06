@@ -41,6 +41,12 @@ const (
 	EnvProject      = "VAULTAFFE_PROJECT"
 	EnvEnvironment  = "VAULTAFFE_ENVIRONMENT"
 	EnvInsecureHTTP = "VAULTAFFE_INSECURE_HTTP"
+
+	// What the first run presents to claim an unstarted instance (ADR 0019).
+	// Not a token and never confused with one: it authenticates nobody and
+	// opens exactly one endpoint, which is why it is its own variable rather
+	// than a use of VAULTAFFE_TOKEN.
+	EnvClaim = "VAULTAFFE_CLAIM"
 )
 
 // Address answers which instance this invocation talks to: the flag, then the

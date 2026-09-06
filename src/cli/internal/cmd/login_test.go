@@ -287,3 +287,130 @@ func TestTheFirstRunTakesThePasswordFromStdinOnly(t *testing.T) {
 		t.Fatal("the first run did not leave a session behind")
 	}
 }
+
+// The claim secret an unstarted instance is claimed with (ADR 0019). It travels
+// in a header and comes from a file or the environment — never an argument,
+// where the shell history and `ps` would keep it, and never stdin, which the
+// password already has.
+func TestTheFirstRunPresentsTheClaimSecretFromAFile(t *testing.T) {
+	in := startInstanceStub(t)
+	in.answer("POST /api/v1/instance", http.StatusOK, aStartedInstance())
+
+	s := newSession(t, in)
+	s.stdin = "correct horse battery staple\n"
+
+	// A trailing newline is what an editor and a redirect both leave behind, and
+	// it is not part of the secret.
+	claim := filepath.Join(t.TempDir(), "claim")
+	if err := os.WriteFile(claim, []byte(aClaimSecret+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got := s.run(t, "instance", "start",
+		"--email", "maintainer@example.com", "--name", "A Maintainer", "--claim-file", claim)
+
+	if got.Code != exit.OK {
+		t.Fatalf("exit %d\n%s", got.Code, got.Stderr)
+	}
+	if sent := in.sent("POST", "/api/v1/instance").Header.Get("Vaultaffe-Claim"); sent != aClaimSecret {
+		t.Fatalf("the claim secret arrived as %q", sent)
+	}
+	if got.mentions(aClaimSecret) {
+		t.Fatalf("the claim secret was printed:\n%s%s", got.Stdout, got.Stderr)
+	}
+}
+
+func TestTheFirstRunTakesTheClaimSecretFromTheEnvironment(t *testing.T) {
+	in := startInstanceStub(t)
+	in.answer("POST /api/v1/instance", http.StatusOK, aStartedInstance())
+
+	s := newSession(t, in)
+	s.stdin = "correct horse battery staple\n"
+	s.env[config.EnvClaim] = aClaimSecret
+
+	got := s.run(t, "instance", "start", "--email", "maintainer@example.com", "--name", "A Maintainer")
+
+	if got.Code != exit.OK {
+		t.Fatalf("exit %d\n%s", got.Code, got.Stderr)
+	}
+	if sent := in.sent("POST", "/api/v1/instance").Header.Get("Vaultaffe-Claim"); sent != aClaimSecret {
+		t.Fatalf("the claim secret arrived as %q", sent)
+	}
+}
+
+// Nothing to present means nothing is presented: an empty header is a secret
+// that is wrong, and this CLI has offered none. The instance is what decides —
+// one older than ADR 0019 does not ask for a claim secret at all.
+func TestNoClaimSecretMeansNoHeaderAtAll(t *testing.T) {
+	in := startInstanceStub(t)
+	in.answer("POST /api/v1/instance", http.StatusOK, aStartedInstance())
+
+	s := newSession(t, in)
+	s.stdin = "correct horse battery staple\n"
+	got := s.run(t, "instance", "start", "--email", "maintainer@example.com", "--name", "A Maintainer")
+
+	if got.Code != exit.OK {
+		t.Fatalf("exit %d\n%s", got.Code, got.Stderr)
+	}
+	if _, present := in.sent("POST", "/api/v1/instance").Header["Vaultaffe-Claim"]; present {
+		t.Fatal("a claim secret header was sent when there was none to send")
+	}
+}
+
+// The instance names the log, because it does not know who is asking. This end
+// knows it is a terminal, so it names its own way of passing one
+// (ADR 0010).
+func TestARefusedClaimNamesTheWayThisCLIPassesOne(t *testing.T) {
+	in := startInstanceStub(t)
+	in.refuse("POST /api/v1/instance", http.StatusForbidden, "claim-refused",
+		"The first run needs this instance's claim secret.")
+
+	s := newSession(t, in)
+	s.stdin = "correct horse battery staple\n"
+	got := s.run(t, "instance", "start", "--email", "maintainer@example.com", "--name", "A Maintainer")
+
+	if got.Code == exit.OK {
+		t.Fatal("a refused first run left with 0")
+	}
+	if !strings.Contains(got.Stderr, "--claim-file") || !strings.Contains(got.Stderr, config.EnvClaim) {
+		t.Fatalf("it did not say how to pass one:\n%s", got.Stderr)
+	}
+}
+
+// A secret that was presented and refused is a different sentence: the operator
+// has one, it is the wrong one, and what they need to know is which one works.
+func TestAWrongClaimSecretSaysTheNewestOneInTheLogIsTheOne(t *testing.T) {
+	in := startInstanceStub(t)
+	in.refuse("POST /api/v1/instance", http.StatusForbidden, "claim-refused",
+		"The first run needs this instance's claim secret.")
+
+	s := newSession(t, in)
+	s.stdin = "correct horse battery staple\n"
+	s.env[config.EnvClaim] = aClaimSecret
+
+	got := s.run(t, "instance", "start", "--email", "maintainer@example.com", "--name", "A Maintainer")
+
+	if got.Code == exit.OK {
+		t.Fatal("a refused first run left with 0")
+	}
+	if !strings.Contains(got.Stderr, "newest") {
+		t.Fatalf("it did not say which one works:\n%s", got.Stderr)
+	}
+	if got.mentions(aClaimSecret) {
+		t.Fatalf("the refusal echoed the secret back:\n%s", got.Stderr)
+	}
+}
+
+const aClaimSecret = "vaultaffe_claim_" +
+	"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+
+func aStartedInstance() map[string]any {
+	return map[string]any{
+		"organizationId": "6f1f1a2e-0000-4000-8000-000000000009", "organizationName": "Default",
+		"session": map[string]any{
+			"userId": "6f1f1a2e-0000-4000-8000-000000000001", "name": "A Maintainer",
+			"email": "maintainer@example.com", "isAdministrator": true,
+			"token": aSession, "expiresAt": "2026-12-31T00:00:00Z",
+		},
+	}
+}

@@ -54,7 +54,7 @@ public static class Problems
             StatusCodes.Status400BadRequest,
         RefusalCode.Unauthenticated => StatusCodes.Status401Unauthorized,
         RefusalCode.Forbidden or RefusalCode.HumanOnly or RefusalCode.InsufficientScope
-            or RefusalCode.OutOfReach =>
+            or RefusalCode.OutOfReach or RefusalCode.ClaimRefused =>
             StatusCodes.Status403Forbidden,
         RefusalCode.NotFound or RefusalCode.UnsupportedApiVersion => StatusCodes.Status404NotFound,
         RefusalCode.AlreadyStarted or RefusalCode.NameTaken or RefusalCode.ReplaceRequired =>
@@ -80,6 +80,7 @@ public static class Problems
         RefusalCode.InsufficientScope => "This token does not carry the scope this needs",
         RefusalCode.OutOfReach => "This token is not bound to that project or environment",
         RefusalCode.AlreadyStarted => "This instance already has its first user",
+        RefusalCode.ClaimRefused => "The first run needs this instance's claim secret",
         RefusalCode.NameTaken => "Something of that name is already here",
         RefusalCode.NotRecoverable => "That was deleted longer ago than the recovery window",
         RefusalCode.ReplaceRequired => "That key already holds a value",

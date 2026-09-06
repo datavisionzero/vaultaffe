@@ -8,6 +8,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Vaultaffe.Api.Http;
+using Vaultaffe.Application.Ports;
 using Vaultaffe.Infrastructure;
 using Vaultaffe.Infrastructure.Encryption;
 
@@ -40,6 +42,12 @@ internal sealed class AnInstance(string connectionString, string masterKey)
     public string ConnectionString => connectionString;
 
     /// <summary>
+    /// The key this instance was started with, so that a test can bring a second
+    /// one up on the same database — which is what a restart is.
+    /// </summary>
+    public string MasterKeyInUse => masterKey;
+
+    /// <summary>
     /// The clock this instance runs on. It starts at the real one and a test
     /// moves it — which is the only way to ask what happens after a window that
     /// is measured in days (Specification §6.5).
@@ -54,6 +62,8 @@ internal sealed class AnInstance(string connectionString, string masterKey)
     {
         using var client = ClientAnnouncing(null);
 
+        client.DefaultRequestHeaders.Add(IdentityEndpoints.ClaimHeader, await ClaimSecretAsync());
+
         using var response = await client.PostAsJsonAsync(
             "/api/v1/instance",
             new { email = Administrator, name = "Maintainer", password = AdministratorPassword },
@@ -65,6 +75,23 @@ internal sealed class AnInstance(string connectionString, string masterKey)
             TestContext.Current.CancellationToken))!;
 
         return started["session"]!["token"]!.GetValue<string>();
+    }
+
+    /// <summary>
+    /// This instance's claim secret, read the way the operator reads it out of
+    /// the log — from the instance itself (ADR 0019). A test that wants to be
+    /// refused passes something else; a test that wants to get in passes this.
+    /// </summary>
+    public async Task<string> ClaimSecretAsync()
+    {
+        await using var scope = Services.CreateAsyncScope();
+
+        var claim = await scope.ServiceProvider.GetRequiredService<IIdentityStore>()
+            .FindTheClaimAsync(TestContext.Current.CancellationToken);
+
+        return claim?.Secret
+            ?? throw new InvalidOperationException(
+                "This instance has no claim secret, so it has already been started.");
     }
 
     /// <summary>

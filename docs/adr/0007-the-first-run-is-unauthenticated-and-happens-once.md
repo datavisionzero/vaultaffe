@@ -1,5 +1,12 @@
 # The First Run Is Unauthenticated, and Happens Once
 
+> **Superseded by [ADR 0019](./0019-an-unclaimed-instance-holds-its-own-claim-secret.md).**
+> The first run now requires a claim secret the instance makes for itself and
+> prints in its own log. What is written below is the decision as it stood, and
+> the last paragraph — the additive retrofit — is the one that was taken. The
+> rest of it still holds: the first run happens once, authenticates nobody, and
+> `GET /api/v1/instance` answers without a token.
+
 `POST /api/v1/instance` takes an email address, a name and a password, creates the
 default organization and makes that person its administrator. It needs no
 credential, because there is none yet, and it refuses the second time it is

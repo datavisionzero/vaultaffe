@@ -86,7 +86,10 @@ describe("signing in", () => {
 });
 
 describe("the first run", () => {
-  const unstarted = { started: false, organizationName: null };
+  const unstarted = { started: false, organizationName: null, needsClaim: true };
+
+  // What the operator pastes out of the instance's own log (ADR 0019).
+  const claimSecret = "vaultaffe_claim_" + "a".repeat(43);
 
   // A reader in front of a fresh installation gets the one screen it has,
   // rather than a sign-in form that would read as a password gone wrong.
@@ -115,6 +118,7 @@ describe("the first run", () => {
     await userEvent.type(await screen.findByLabelText("Your name"), "Maintainer");
     await userEvent.type(screen.getByLabelText("Email"), "maintainer@example.test");
     await userEvent.type(screen.getByLabelText("Password"), "a-password-of-real-length");
+    await userEvent.type(screen.getByLabelText("Claim secret"), claimSecret);
     await userEvent.click(screen.getByRole("button", { name: "Start the instance" }));
 
     expect(held).toEqual(["vaultaffe_session_thenewone"]);
@@ -127,16 +131,40 @@ describe("the first run", () => {
       name: "Maintainer",
       password: "a-password-of-real-length",
     });
+
+    // The claim secret is a credential and travels beside the request rather
+    // than inside it, so it is never a field of the thing being made.
+    expect(firstRun.headers.get("Vaultaffe-Claim")).toBe(claimSecret);
   });
 
-  // The window between `docker compose up` and this form is real and belongs to
-  // the operator, so the screen names it instead of leaving it to a manual.
-  it("says that whoever gets here first is the one it happens for", async () => {
+  // Without it this page would hand the instance to whoever reached it first,
+  // which is the window ADR 0007 left open and ADR 0019 closes. The button
+  // stays shut rather than sending a request that can only be refused.
+  it("will not start the instance until a claim secret is in the form", async () => {
     installInstance({ "GET /api/v1/instance": unstarted });
 
     renderAt("/start", <Doorway onSignedIn={() => undefined} />);
 
-    expect(await screen.findByText(/anybody who reaches this instance before you do/)).toBeInTheDocument();
+    await userEvent.type(await screen.findByLabelText("Your name"), "Maintainer");
+    await userEvent.type(screen.getByLabelText("Email"), "maintainer@example.test");
+    await userEvent.type(screen.getByLabelText("Password"), "a-password-of-real-length");
+
+    expect(screen.getByRole("button", { name: "Start the instance" })).toBeDisabled();
+
+    await userEvent.type(screen.getByLabelText("Claim secret"), claimSecret);
+
+    expect(screen.getByRole("button", { name: "Start the instance" })).toBeEnabled();
+  });
+
+  // The window between `docker compose up` and this form is real and belongs to
+  // the operator, so the screen names it instead of leaving it to a manual.
+  it("says where the claim secret is, for an operator who does not know it exists", async () => {
+    installInstance({ "GET /api/v1/instance": unstarted });
+
+    renderAt("/start", <Doorway onSignedIn={() => undefined} />);
+
+    expect(await screen.findByText(/docker compose logs vaultaffe/)).toBeInTheDocument();
+    expect(screen.getByText(/a lost one is a restart away/)).toBeInTheDocument();
   });
 
   it("shows the instance's own sentence when the second one is refused", async () => {
@@ -159,6 +187,7 @@ describe("the first run", () => {
     await userEvent.type(await screen.findByLabelText("Your name"), "Somebody Else");
     await userEvent.type(screen.getByLabelText("Email"), "somebody@example.test");
     await userEvent.type(screen.getByLabelText("Password"), "a-password-of-real-length");
+    await userEvent.type(screen.getByLabelText("Claim secret"), claimSecret);
     await userEvent.click(screen.getByRole("button", { name: "Start the instance" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("has already been started");

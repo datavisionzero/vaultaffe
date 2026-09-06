@@ -37,6 +37,13 @@ public sealed class VaultaffeDbContext(
 
     public DbSet<Invitation> Invitations => Set<Invitation>();
 
+    /// <summary>
+    /// The claim secret, at most one row and usually none: it exists only while
+    /// this instance is unclaimed (ADR 0019). It belongs to no organization, so
+    /// no filter of <see cref="OnModelCreating"/> applies to it.
+    /// </summary>
+    public DbSet<InstanceClaim> InstanceClaims => Set<InstanceClaim>();
+
     public DbSet<DeviceAuthorization> DeviceAuthorizations => Set<DeviceAuthorization>();
 
     public DbSet<Project> Projects => Set<Project>();

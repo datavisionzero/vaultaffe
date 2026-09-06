@@ -85,6 +85,11 @@ builder.Services.AddScoped<RevokeToken>();
 
 builder.Services.AddHostedService<SchemaAtStartup>();
 
+// After the schema and before the first request: an unclaimed instance makes its
+// claim secret and says it, so that the first run is an act only somebody who can
+// read this instance's log can perform (ADR 0019).
+builder.Services.AddHostedService<ClaimSecretAtStartup>();
+
 // A window nothing enforces is a promise rather than a window (§6.5).
 builder.Services.AddHostedService<ExpiryAtIntervals>();
 

@@ -42,6 +42,8 @@ token                       (organization_id, user_id)
 device_authorization        (one `vaultaffe login` in progress)
 
 change_log_entry            (points at nothing)
+
+instance_claim              (no organization: there is none yet)
 ```
 
 | Table | What it holds |
@@ -59,6 +61,7 @@ change_log_entry            (points at nothing)
 | `token_binding` | What a token may touch. No rows means the whole organization. |
 | `device_authorization` | One `vaultaffe login` in progress: two codes, and what has happened to it. |
 | `change_log_entry` | What was done, by whom, and of what type — never a value. |
+| `instance_claim` | The claim secret an unstarted instance is claimed with. At most one row, and none once the first run has consumed it. |
 
 The one row that holds a preference rather than a fact about the vault is
 `dismissed_key`, and it is deliberately the thinnest table here: an environment,
@@ -81,11 +84,21 @@ The column is carried even where the parent could be walked to: a secret's
 environment knows its project and the project knows its organization. A join the
 filter had to walk would be a filter each query could get wrong on its own.
 
-`organization` is the one exception, and it is an exception of shape rather than
-of rule: a row of that table *is* an organization and cannot carry a key to one,
-so it is filtered by its own. `TenancyTests` reads the model and fails if any
-table is unfiltered, and puts a second organization in the database to prove the
-filter holds against real rows.
+There are two exceptions, and `TenancyTests` lists both by name so that a third
+cannot arrive by somebody forgetting the rule. It reads the model and fails if
+any other table is unfiltered, and puts a second organization in the database to
+prove the filter holds against real rows.
+
+`organization` is an exception of **shape**: a row of that table *is* an
+organization and cannot carry a key to one, so it is filtered by its own.
+
+`instance_claim` is an exception of **time**. It holds the claim secret the first
+run has to present ([ADR 0019](./adr/0019-an-unclaimed-instance-holds-its-own-claim-secret.md)),
+and it exists precisely in the window when there is no organization to belong to.
+It is the one table whose row is stored as it is read rather than as a hash,
+because the instance has to print it again at every start until somebody claims
+it — and the first run deletes it in the same transaction that consumes it, so a
+started instance never carries one.
 
 **A caller inside no organization sees nothing.** The filter compares against a
 `Guid?`, and null never equals a column. That is the safe end of the comparison;

@@ -28,6 +28,11 @@ const ClientHeader = "Vaultaffe-Client"
 // VersionHeader is the instance's release, on every answer including refusals.
 const VersionHeader = "Vaultaffe-Version"
 
+// ClaimHeader is where the first run presents an unstarted instance's claim
+// secret (docs/api.md, ADR 0019). It appears on exactly one request in the life
+// of an instance.
+const ClaimHeader = "Vaultaffe-Claim"
+
 // Failure is an answer this CLI turns into an exit code: what to print to
 // stderr, and which code to leave with.
 type Failure struct {

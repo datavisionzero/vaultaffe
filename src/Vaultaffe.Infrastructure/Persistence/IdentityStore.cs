@@ -72,9 +72,37 @@ public sealed class IdentityStore(VaultaffeDbContext context) : IIdentityStore
     }
 
     public async Task StartTheInstanceAsync(
-        Organization organization, User user, Token token, CancellationToken cancellationToken)
+        Organization organization,
+        User user,
+        Token token,
+        InstanceClaim claim,
+        CancellationToken cancellationToken)
     {
         context.AddRange(organization, user, token);
+
+        // The claim secret goes in the same transaction that consumes it. An
+        // instance that has an administrator and still holds a working claim
+        // secret would be one credential nobody knows about, sitting in a row
+        // nothing reads (ADR 0019).
+        context.Remove(claim);
+
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// The claim secret. Past the filter, and the one query here that is not
+    /// merely asked before the caller is inside an organization but before there
+    /// is one at all.
+    /// </summary>
+    public Task<InstanceClaim?> FindTheClaimAsync(CancellationToken cancellationToken) =>
+        context.InstanceClaims
+            .IgnoreQueryFilters()
+            .OrderBy(claim => claim.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task AddClaimAsync(InstanceClaim claim, CancellationToken cancellationToken)
+    {
+        context.Add(claim);
 
         await context.SaveChangesAsync(cancellationToken);
     }

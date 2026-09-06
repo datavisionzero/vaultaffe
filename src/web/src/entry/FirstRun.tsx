@@ -14,13 +14,17 @@ import { Doorstep } from "./Doorstep";
  * sign-in form in front of an empty instance reads as a password that went
  * wrong.
  *
- * The request needs no credential because there is none yet, and the second one
- * is refused
- * ([ADR 0007](../../../../docs/adr/0007-the-first-run-is-unauthenticated-and-happens-once.md)).
- * That leaves a window between `docker compose up` and this form in which
- * whoever arrives first owns the instance — the screen says so, because it is
- * the operator rather than the product who can close it, and only by doing this
- * now.
+ * It authenticates nobody, because there is nobody yet, and the second attempt
+ * is refused. What it does ask for is **this instance's claim secret**, which
+ * the instance writes to its own log at every start until somebody claims it
+ * ([ADR 0019](../../../../docs/adr/0019-an-unclaimed-instance-holds-its-own-claim-secret.md)).
+ * Whoever can read that log can start the instance; whoever merely reaches this
+ * page cannot. That is what closes the window ADR 0007 left open between
+ * `docker compose up` and this form.
+ *
+ * The field says where the secret is rather than assuming the person knows one
+ * exists: they are an operator who has just brought a container up, and the
+ * answer they need is a command they can paste.
  *
  * The answer carries a session, exactly as an accepted invitation's does, so
  * the first administrator lands inside rather than at a sign-in asking for the
@@ -30,6 +34,7 @@ export function FirstRun({ onSignedIn }: { onSignedIn: (token: string) => void }
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [claim, setClaim] = useState("");
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<string>();
 
@@ -41,6 +46,9 @@ export function FirstRun({ onSignedIn }: { onSignedIn: (token: string) => void }
     try {
       const { data, error, response } = await api.POST("/api/v1/instance", {
         body: { email, name, password },
+        // A credential and not a field of the organization being made, so it
+        // travels beside the request rather than inside it.
+        headers: { "Vaultaffe-Claim": claim.trim() },
       });
 
       if (data === undefined) {
@@ -87,23 +95,46 @@ export function FirstRun({ onSignedIn }: { onSignedIn: (token: string) => void }
           onChange={(event) => setPassword(event.target.value)}
           hint="At least twelve characters. Length is the only rule."
         />
+        <Field
+          label="Claim secret"
+          // Not a password field. It is not remembered, not chosen and not
+          // typed twice — it is pasted out of a log, and a person pasting one
+          // has to be able to see that they pasted the whole of it.
+          autoComplete="off"
+          spellCheck={false}
+          required
+          value={claim}
+          onChange={(event) => setClaim(event.target.value)}
+          hint="This instance printed it in its own log. On the machine it runs on: docker compose logs vaultaffe"
+        />
 
         {refusal !== undefined && <Refusal>{refusal}</Refusal>}
 
-        <Button type="submit" disabled={busy || name.trim() === "" || email === "" || password.length < 12}>
+        <Button
+          type="submit"
+          disabled={
+            busy ||
+            name.trim() === "" ||
+            email === "" ||
+            password.length < 12 ||
+            claim.trim() === ""
+          }
+        >
           {busy ? "Starting…" : "Start the instance"}
         </Button>
 
         {/* Both sentences are the operator's business rather than decoration.
-            The first says why there is no invitation to wait for; the second is
-            the exposure window, and it closes when this form is submitted. */}
+            The first says why there is no invitation to wait for; the second
+            says what the claim secret is protecting, which is what stops it
+            reading as one more field to get past. */}
         <p className="text-xs text-muted-foreground">
           You become the administrator of the organization, which is called Default and can be
           renamed afterwards. Everybody else arrives by an invitation you hand over.
         </p>
         <p className="text-xs text-muted-foreground">
-          This happens once, and anybody who reaches this instance before you do would be the one
-          it happens for. Do it now rather than tomorrow.
+          This happens once, and the claim secret is what makes it yours: without it this page
+          would hand the instance to whoever reached it first. It is printed at every start until
+          somebody claims this instance, so a lost one is a restart away.
         </p>
       </form>
     </Doorstep>

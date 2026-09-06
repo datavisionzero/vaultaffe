@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
+using static Vaultaffe.Api.Http.IdentityEndpoints;
 
 namespace Vaultaffe.IntegrationTests;
 
@@ -12,7 +13,7 @@ namespace Vaultaffe.IntegrationTests;
 public sealed class IdentityTests(PostgresFixture postgres)
 {
     [Fact]
-    public async Task A_fresh_instance_says_it_has_not_been_started()
+    public async Task A_fresh_instance_says_it_has_not_been_started_and_that_it_wants_claiming()
     {
         await using var instance = await AnInstance.StartedAsync(postgres);
         using var client = instance.ClientWith(null);
@@ -22,6 +23,10 @@ public sealed class IdentityTests(PostgresFixture postgres)
 
         Assert.False(shape!["started"]!.GetValue<bool>());
         Assert.Null(shape["organizationName"]);
+
+        // What lets the first-run page put the field on the screen. It says a
+        // secret is needed and nothing whatsoever about the secret (ADR 0019).
+        Assert.True(shape["needsClaim"]!.GetValue<bool>());
     }
 
     [Fact]
@@ -29,6 +34,8 @@ public sealed class IdentityTests(PostgresFixture postgres)
     {
         await using var instance = await AnInstance.StartedAsync(postgres);
         using var client = instance.ClientWith(null);
+
+        client.DefaultRequestHeaders.Add(ClaimHeader, await instance.ClaimSecretAsync());
 
         using var response = await client.PostAsJsonAsync(
             "/api/v1/instance",
@@ -60,6 +67,10 @@ public sealed class IdentityTests(PostgresFixture postgres)
             "/api/v1/instance", TestContext.Current.CancellationToken);
 
         Assert.True(shape!["started"]!.GetValue<bool>());
+
+        // The claim secret is consumed by the run that used it: a started
+        // instance holds no working credential nobody knows about (ADR 0019).
+        Assert.False(shape["needsClaim"]!.GetValue<bool>());
     }
 
     /// <summary>
@@ -75,6 +86,8 @@ public sealed class IdentityTests(PostgresFixture postgres)
 
         using var client = instance.ClientWith(null);
 
+        // No claim secret on this one, deliberately: `already-started` comes
+        // first, so a running instance never answers whether a guess was right.
         using var again = await client.PostAsJsonAsync(
             "/api/v1/instance",
             new { email = "someone@example.test", name = "Someone", password = "another-long-password" },
@@ -84,11 +97,106 @@ public sealed class IdentityTests(PostgresFixture postgres)
         Assert.Equal("already-started", await CodeOf(again));
     }
 
+    /// <summary>
+    /// The window ADR 0007 left open and ADR 0019 closes: between
+    /// `docker compose up` and the first sign-in, an instance published on a port
+    /// is reachable by anybody, and the first run is the act that would hand it
+    /// to them. Without this instance's claim secret it is refused.
+    /// </summary>
+    [Fact]
+    public async Task A_first_run_without_the_claim_secret_is_refused()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        using var client = instance.ClientWith(null);
+
+        using var response = await client.PostAsJsonAsync(
+            "/api/v1/instance",
+            new { email = "stranger@example.test", name = "Stranger", password = "a-password-of-real-length" },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("claim-refused", await CodeOf(response));
+
+        // And nothing was made on the way to refusing.
+        var shape = await client.GetFromJsonAsync<JsonNode>(
+            "/api/v1/instance", TestContext.Current.CancellationToken);
+
+        Assert.False(shape!["started"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task A_first_run_with_the_wrong_claim_secret_is_refused()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        using var client = instance.ClientWith(null);
+
+        client.DefaultRequestHeaders.Add(ClaimHeader, "vaultaffe_claim_" + new string('a', 43));
+
+        using var response = await client.PostAsJsonAsync(
+            "/api/v1/instance",
+            new { email = "stranger@example.test", name = "Stranger", password = "a-password-of-real-length" },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("claim-refused", await CodeOf(response));
+    }
+
+    /// <summary>
+    /// The refusal has to be actionable, because the person reading it is an
+    /// operator who does not yet know this secret exists (ADR 0010). It names
+    /// where to find it, and it never carries the secret itself — a refusal
+    /// carrying the credential it refuses would hand the instance to exactly the
+    /// caller it just turned away.
+    /// </summary>
+    [Fact]
+    public async Task The_refusal_says_where_the_claim_secret_is_and_never_what_it_is()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        var secret = await instance.ClaimSecretAsync();
+
+        using var client = instance.ClientWith(null);
+
+        using var response = await client.PostAsJsonAsync(
+            "/api/v1/instance",
+            new { email = "stranger@example.test", name = "Stranger", password = "a-password-of-real-length" },
+            TestContext.Current.CancellationToken);
+
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Contains("log", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(secret, body, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A claim secret is good until it is used, and a restart does not rotate it:
+    /// an operator who closed their terminal restarts the container and reads the
+    /// same one again. The secret surviving a second startup is what makes that
+    /// true.
+    /// </summary>
+    [Fact]
+    public async Task The_claim_secret_is_the_same_one_after_a_restart()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+
+        var secret = await instance.ClaimSecretAsync();
+
+        await using var restarted = new AnInstance(instance.ConnectionString, instance.MasterKeyInUse);
+
+        Assert.Equal(secret, await restarted.ClaimSecretAsync());
+    }
+
+    /// <summary>
+    /// The body is read after the claim secret is, so this presents one: a
+    /// caller who cannot claim the instance is refused before anything of theirs
+    /// is validated.
+    /// </summary>
     [Fact]
     public async Task A_password_under_the_rule_is_refused_by_name()
     {
         await using var instance = await AnInstance.StartedAsync(postgres);
         using var client = instance.ClientWith(null);
+
+        client.DefaultRequestHeaders.Add(ClaimHeader, await instance.ClaimSecretAsync());
 
         using var response = await client.PostAsJsonAsync(
             "/api/v1/instance",

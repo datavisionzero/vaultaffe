@@ -44,7 +44,7 @@ vaultaffe logout                 revoke this machine's session and forget it
 vaultaffe setup                  bind this directory to a project and an environment
 vaultaffe status                 which instance, as whom, and what this directory means
 vaultaffe instance               whether this instance has been started
-vaultaffe instance start         the first run: the organization, the first person, a session
+vaultaffe instance start         the first run — needs the instance's claim secret
 vaultaffe run -- <command>       start a process with this environment's secrets in it
 
 vaultaffe secrets                names and status — never values
@@ -120,6 +120,30 @@ An agent's token never comes through `login`. It arrives in `VAULTAFFE_TOKEN`,
 set by whatever harness starts the agent
 ([§6.4](../Specification.md#64-permissions-in-the-mvp)), and `logout` refuses to
 revoke one that came from there.
+
+### The first run needs the instance's claim secret
+
+```sh
+docker compose logs vaultaffe          # or deploy/claim.sh, on the machine it runs on
+printf '%s' "$PASSWORD" | vaultaffe instance start \
+    --email you@example.com --name 'Your Name' --claim-file ./claim
+```
+
+`instance start` authenticates nobody — there is nobody yet — and it still is not
+open to whoever reaches the port. It presents the **claim secret** the instance
+made for itself and printed in its own log, and without it the instance refuses
+with `claim-refused`
+([ADR 0019](./adr/0019-an-unclaimed-instance-holds-its-own-claim-secret.md)).
+
+The password is on stdin, as everywhere in this CLI, so the claim secret cannot
+also be: it comes from `--claim-file` or from `VAULTAFFE_CLAIM`, and never from
+an argument. **Prefer the file, or export the variable** — an assignment written
+in front of the command is in the shell history exactly like an argument would
+be.
+
+A lost secret is a restart: it is printed at every start until somebody claims
+the instance, so the newest one in the log is always the one that works. It stops
+working the moment the first run succeeds.
 
 ## The binding
 

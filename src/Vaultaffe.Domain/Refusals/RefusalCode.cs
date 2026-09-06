@@ -87,4 +87,12 @@ public enum RefusalCode
     /// know. Also not the caller's doing.
     /// </summary>
     SealedValueDamaged = 20,
+
+    /// <summary>
+    /// The first run presented no claim secret, or not this instance's
+    /// (ADR 0019). Nobody is authenticated here — there is nobody to be yet —
+    /// so it is not <see cref="Unauthenticated"/>: the caller is refused an act,
+    /// not a session.
+    /// </summary>
+    ClaimRefused = 21,
 }

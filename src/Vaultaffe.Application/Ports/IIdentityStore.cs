@@ -56,7 +56,26 @@ public interface IIdentityStore
     /// for.
     /// </summary>
     Task StartTheInstanceAsync(
-        Organization organization, User user, Token token, CancellationToken cancellationToken);
+        Organization organization,
+        User user,
+        Token token,
+        InstanceClaim claim,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// This instance's claim secret, or null once the first run has consumed it
+    /// (ADR 0019). Reaches past the filter, and past it further than anything
+    /// else here: the row belongs to no organization, because when it matters
+    /// there is none.
+    /// </summary>
+    Task<InstanceClaim?> FindTheClaimAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Put one there. Called at startup rather than by a request: an instance
+    /// that waited for somebody to ask before it made its claim secret would
+    /// have no secret to print in the log the operator is already reading.
+    /// </summary>
+    Task AddClaimAsync(InstanceClaim claim, CancellationToken cancellationToken);
 
     /// <summary>
     /// Add a token and write. Whatever else the acts changed on rows this port
