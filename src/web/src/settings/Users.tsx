@@ -88,6 +88,7 @@ export function Users() {
 function Person({ person, onChanged }: { person: User; onChanged: () => void }) {
   const { me } = useSession();
   const [resetting, setResetting] = useState(false);
+  const [readdressing, setReaddressing] = useState(false);
   const [deactivating, setDeactivating] = useState(false);
 
   const yourself = person.id === me.userId;
@@ -131,6 +132,11 @@ function Person({ person, onChanged }: { person: User; onChanged: () => void }) 
             reason={notAnAdministrator}
             onClick={() => setResetting(true)}
           />
+          <Act
+            label="Change their address…"
+            reason={notAnAdministrator}
+            onClick={() => setReaddressing(true)}
+          />
           {person.deactivatedAt === null ? (
             <Act
               label="Deactivate…"
@@ -162,6 +168,19 @@ function Person({ person, onChanged }: { person: User; onChanged: () => void }) 
         person={person}
         open={resetting}
         onOpenChange={setResetting}
+        onChanged={onChanged}
+      />
+
+      {/*
+        Keyed by the address, so that a change remounts the dialog. Its field
+        starts at the address this person has, and a dialog that kept the state
+        of the previous one would offer to put the old address back.
+      */}
+      <AddressDialog
+        key={person.email}
+        person={person}
+        open={readdressing}
+        onOpenChange={setReaddressing}
         onChanged={onChanged}
       />
 
@@ -274,6 +293,100 @@ function ResetDialog({
             </Button>
             <Button type="submit" disabled={busy || password.length < 12}>
               {busy ? "Setting…" : "Set it"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * An administrator changes the address somebody signs in with.
+ *
+ * The address here is the login name and not somewhere mail is sent — this
+ * instance sends none — so this dialog says what moves and what does not. An
+ * administrator's for the reason a reset is one: a mistyped address cannot
+ * correct itself, because the correction needs the sign-in it just took away.
+ */
+function AddressDialog({
+  person,
+  open,
+  onOpenChange,
+  onChanged,
+}: {
+  person: User;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onChanged: () => void;
+}) {
+  const [email, setEmail] = useState(person.email);
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string>();
+
+  function change(next: boolean) {
+    onOpenChange(next);
+
+    if (!next) {
+      setEmail(person.email);
+      setRefusal(undefined);
+    }
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setRefusal(undefined);
+
+    try {
+      const { data, error, response } = await api.POST("/api/v1/users/{id}/email", {
+        params: { path: { id: person.id } },
+        body: { email },
+      });
+
+      if (data === undefined) {
+        setRefusal(describe(error, response.status));
+        return;
+      }
+
+      change(false);
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={change}>
+      <DialogContent>
+        <form className="grid gap-4" onSubmit={(event) => void submit(event)}>
+          <DialogHeader>
+            <DialogTitle>Change the address of {person.name}</DialogTitle>
+            <DialogDescription>
+              This is the address they sign in with, not one this instance sends anything to. From
+              now on it is the only one that works for them. Their password and every session and
+              token of theirs are untouched.
+            </DialogDescription>
+          </DialogHeader>
+          <Field
+            label="The address they will sign in with"
+            type="email"
+            autoComplete="off"
+            required
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            hint="One spelling is kept: an address is stored and looked up in lower case."
+          />
+          {refusal !== undefined && <Refusal>{refusal}</Refusal>}
+          <DialogFooter>
+            <Button variant="outline" disabled={busy} onClick={() => change(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={busy || email.trim() === "" || email.trim() === person.email}
+            >
+              {busy ? "Changing…" : "Change it"}
             </Button>
           </DialogFooter>
         </form>

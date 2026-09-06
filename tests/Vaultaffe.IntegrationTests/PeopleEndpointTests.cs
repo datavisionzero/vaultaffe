@@ -338,6 +338,129 @@ public sealed class PeopleEndpointTests(PostgresFixture postgres)
         Assert.Equal("forbidden", await IdentityTests.CodeOf(refused));
     }
 
+    /// <summary>
+    /// The address is the login name, so changing it changes what somebody signs
+    /// in with — and nothing else. The password is unchanged because its hash
+    /// never depended on the address, and the sessions stay because a token names
+    /// its person by id.
+    /// </summary>
+    [Fact]
+    public async Task An_address_changes_and_takes_the_sign_in_with_it_and_nothing_else()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        using var human = instance.ClientWith(await instance.StartAsync());
+
+        using var theirs = instance.ClientWith(await JoinAsync(instance, human));
+
+        using var changed = await human.PostAsJsonAsync(
+            $"/api/v1/users/{await IdOfAsync(human, "newcomer@example.test")}/email",
+            new { email = "Newcomer@Elsewhere.test" },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
+
+        // One spelling, the one the index holds and a sign-in looks up by.
+        Assert.Equal(
+            "newcomer@elsewhere.test",
+            (await changed.Content.ReadFromJsonAsync<JsonNode>(
+                TestContext.Current.CancellationToken))!["email"]!.GetValue<string>());
+
+        // The session they were holding is untouched.
+        using var afterwards = await theirs.GetAsync(
+            "/api/v1/me", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, afterwards.StatusCode);
+
+        using var stranger = instance.ClientWith(null);
+
+        // The new address signs in with the password they already had.
+        using var signedIn = await stranger.PostAsJsonAsync(
+            "/api/v1/sessions",
+            new { email = "newcomer@elsewhere.test", password = TheirPassword },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, signedIn.StatusCode);
+
+        // And the old one is now an address nobody here has, which is the same
+        // refusal as a wrong password.
+        using var byTheOldOne = await stranger.PostAsJsonAsync(
+            "/api/v1/sessions",
+            new { email = "newcomer@example.test", password = TheirPassword },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, byTheOldOne.StatusCode);
+    }
+
+    [Fact]
+    public async Task An_address_somebody_here_already_signs_in_with_is_refused()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        using var human = instance.ClientWith(await instance.StartAsync());
+
+        await JoinAsync(instance, human);
+
+        using var refused = await human.PostAsJsonAsync(
+            $"/api/v1/users/{await IdOfAsync(human, "newcomer@example.test")}/email",
+            new { email = AnInstance.Administrator },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.Equal("name-taken", await IdentityTests.CodeOf(refused));
+
+        // Their own address in another spelling is not a collision: it normalizes
+        // to what they already have, and refusing it would be refusing to change
+        // nothing.
+        using var themselves = await human.PostAsJsonAsync(
+            $"/api/v1/users/{await IdOfAsync(human, "newcomer@example.test")}/email",
+            new { email = "NEWCOMER@example.test" },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, themselves.StatusCode);
+
+        // What is not an address at all is a validation failure, and names the
+        // field it is about.
+        using var malformed = await human.PostAsJsonAsync(
+            $"/api/v1/users/{await IdOfAsync(human, "newcomer@example.test")}/email",
+            new { email = "not an address" },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, malformed.StatusCode);
+    }
+
+    /// <summary>
+    /// §6.4: administering the people of the organization is a person's, and an
+    /// administrator's. The address is the login name, so this is the sharpest
+    /// case of it — whoever may change one may decide who signs in as whom.
+    /// </summary>
+    [Fact]
+    public async Task Changing_an_address_is_an_administrators_and_a_persons()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        using var human = instance.ClientWith(await instance.StartAsync());
+
+        var them = await IdOfAsync(human, AnInstance.Administrator);
+
+        using var agent = instance.ClientWith(await AgentAsync(human));
+
+        using var byAnAgent = await agent.PostAsJsonAsync(
+            $"/api/v1/users/{them}/email",
+            new { email = "somewhere@example.test" },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, byAnAgent.StatusCode);
+        Assert.Equal("human-only", await IdentityTests.CodeOf(byAnAgent));
+
+        using var theirs = instance.ClientWith(await JoinAsync(instance, human));
+
+        using var byAMember = await theirs.PostAsJsonAsync(
+            $"/api/v1/users/{them}/email",
+            new { email = "somewhere@example.test" },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, byAMember.StatusCode);
+        Assert.Equal("forbidden", await IdentityTests.CodeOf(byAMember));
+    }
+
     [Fact]
     public async Task The_listing_says_who_is_here_and_nothing_about_their_password()
     {

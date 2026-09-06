@@ -104,13 +104,46 @@ describe("the people of the organization", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: "Actions for Maintainer" }));
 
-    // Both acts of the row are there, and both say the same reason: it is the
+    // Every act of the row is there, and each says the same reason: it is the
     // instance's rule, said before it has to say it.
     expect(
       await screen.findAllByText("Administering the organization and its people is an administrator's."),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
     expect(screen.getByText("Reset their password…")).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Reset their password…" })).not.toBeInTheDocument();
+  });
+
+  // The address is the login name, and the dialog has to say that before it is
+  // changed: what moves is what they sign in with, and nothing else does.
+  it("changes an address, and says that the password and the sessions stay", async () => {
+    const { calls } = installInstance({
+      "GET /api/v1/users": [maintainer, newcomer],
+      "GET /api/v1/invitations": [],
+      [`POST /api/v1/users/${newcomer.id}/email`]: {
+        ...newcomer,
+        email: "newcomer@elsewhere.test",
+      },
+    });
+
+    renderUnderShell("/settings/users", <Users />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Actions for Newcomer" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Change their address…" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/not one this instance sends anything to/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/password and every session and token/)).toBeInTheDocument();
+
+    // It opens on the address they have, and changing nothing is not an act.
+    const field = within(dialog).getByLabelText("The address they will sign in with");
+    expect(field).toHaveValue("newcomer@example.test");
+    expect(within(dialog).getByRole("button", { name: "Change it" })).toBeDisabled();
+
+    await userEvent.clear(field);
+    await userEvent.type(field, "newcomer@elsewhere.test");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Change it" }));
+
+    expect(calls.some((call) => call.url.endsWith(`/users/${newcomer.id}/email`))).toBe(true);
   });
 
   it("says why nobody deactivates themselves", async () => {

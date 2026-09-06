@@ -282,6 +282,7 @@ and for teams of this size the right one.
 ```
 GET    /api/v1/users                        who is here, oldest first
 POST   /api/v1/users/{id}/password          an administrator sets one
+POST   /api/v1/users/{id}/email             an administrator changes a login name
 POST   /api/v1/users/{id}/deactivate        take somebody out of the organization
 POST   /api/v1/users/{id}/reactivate        put them back
 
@@ -318,6 +319,23 @@ tells them to ask for a new one.
 person had** — a reset that leaves the sessions opened with the old password
 working is not one. Their service and agent tokens are untouched: those never
 depended on the password.
+
+**An address is a login name, and changing one is an administrator's too.** It is
+not somewhere this instance sends anything — it sends nothing — it is what
+somebody types to sign in, and people marry, change their name, or move to another
+address at the same company. `POST /users/{id}/email` moves it, and moves nothing
+else: the password hash carries its own salt and never depended on the address,
+and every token names its person by id, so **their sessions stay**. That is the
+one line between this and a reset, which ends them because a password somebody
+else may know is worth nothing while the sessions opened with it still work.
+
+It is an administrator's for the same reason a reset is: a mistyped address cannot
+correct itself, because the correction needs the sign-in that the mistyped address
+just took away, and there is no mail to send a way back through. The address is
+stored in **one spelling**, lower-case and trimmed, so a change to another
+spelling of what somebody already has is not a conflict. An address somebody here
+already signs in with is `name-taken`; an address that is not one is a validation
+failure naming `email`.
 
 **Deactivating somebody takes every token of theirs with it**, their sessions and
 the agent tokens they are accountable for included — a person who is out of the

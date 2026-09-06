@@ -97,6 +97,20 @@ public sealed class User : IBelongToAnOrganization
     /// <summary>Rename.</summary>
     public void RenameTo(string name) => Name = Named(name);
 
+    /// <summary>
+    /// Change the address this person signs in with. An administrator's act for
+    /// the same reason a reset is (§6.4): the address is the login name, and a
+    /// mistyped one cannot correct itself, because the correction would need a
+    /// sign-in that no longer works.
+    /// </summary>
+    /// <remarks>
+    /// It is only this column. The password hash carries its own salt and does
+    /// not depend on the address, and every token names a person by id — so
+    /// nothing that was signed in stops working, and nothing in the history
+    /// loses its author.
+    /// </remarks>
+    public void ChangeEmailTo(string email) => Email = EmailAddress.Require(email, nameof(email));
+
     /// <summary>Take them out of the organization. Repeating it does not move the moment.</summary>
     public void DeactivateAt(DateTimeOffset moment) => DeactivatedAt ??= moment;
 

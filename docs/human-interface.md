@@ -64,7 +64,7 @@ more would be a promise the product does not keep.
 | `/projects/:project/:environment/:KEY` | Secret | the masked value with its reveal, the bounded version history, this key's own change log, and who has read it | one column; the value block stays above the three blocks below it |
 | `/changes` | Change log | what was changed, by whom and **by what kind of thing**, filtered by project, environment and key | the identity and its type stay; the filters open as a dismissible sheet |
 | `/settings/tokens` | Settings · Tokens | **two lists**: the named tokens an agent or a service acts under — kind, scopes, binding, standing — and, below them, the sessions every sign-in leaves; creating a token; the value of a new one, once | area list folds above the area |
-| `/settings/users` | Settings · Users | the people of the organization, the invitation link to copy, an administrator's password reset, and the invitations that are still open | area list folds above the area |
+| `/settings/users` | Settings · Users | the people of the organization, the invitation link to copy, an administrator's password reset and address change, and the invitations that are still open | area list folds above the area |
 | `/settings/organization` | Settings · Organization | the organization's name | area list folds above the area |
 | `/settings/profile` | Settings · Profile | own name, own password | area list folds above the area |
 
@@ -196,7 +196,7 @@ and a row's acts live in that row's own menu.
 | Environment file | — | import a `.env`, export one | import with replace; **export**, always |
 | Change log | read, filter by project, environment and key, page | — | — |
 | Token | list with kind, name, scopes, binding and standing, tokens and sessions apart | create, revoke | revoke |
-| User | list the people of the organization, see who is deactivated | invite by link, withdraw an invitation, reset a password as administrator, deactivate, put back | withdraw; reset a password; deactivate |
+| User | list the people of the organization, see who is deactivated | invite by link, withdraw an invitation, reset a password as administrator, change the address somebody signs in with, deactivate, put back | withdraw; reset a password; change an address; deactivate |
 | Organization | read the name | rename | — |
 | Profile | read own name and email | change own name, change own password | — |
 

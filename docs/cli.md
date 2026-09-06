@@ -69,6 +69,7 @@ vaultaffe tokens                 list; create and revoke, which are a person's a
 vaultaffe users                  the people of the organization — an administrator only
 vaultaffe users invite           write an invitation and print its link, once
 vaultaffe users password         set somebody's password, from stdin
+vaultaffe users email            change the address somebody signs in with
 vaultaffe users deactivate       take somebody out; reactivate puts them back
 vaultaffe invitations            the ones written, and withdraw
 vaultaffe organization           what this organization is called; rename it
@@ -334,6 +335,7 @@ environment is answered against the ones that exist.
 vaultaffe users                                        # address, name, role, standing
 vaultaffe users invite somebody@example.test --name "Somebody"
 vaultaffe users password somebody@example.test < /dev/stdin
+vaultaffe users email somebody@example.test somebody-else@example.test
 vaultaffe users deactivate somebody@example.test       # reactivate puts them back
 vaultaffe invitations                                  # and `invitations withdraw <id>`
 vaultaffe organization rename "Datavision Zero"
@@ -363,6 +365,15 @@ every value in this CLI does:
 ```sh
 pwgen -s 24 1 | vaultaffe users password somebody@example.test
 ```
+
+**An address is a name, so both of them are arguments.** `users email` takes the
+address somebody signs in with today and the one they will sign in with from now
+on — it is not a value and there is nothing to keep out of a shell history. What
+moves is the sign-in and nothing else: their password is the one they had, and
+every session and token of theirs goes on working, because a token names its
+person by id. It is an administrator's for the reason a reset is one — a mistyped
+address cannot correct itself, since the correction needs the sign-in it just took
+away.
 
 ## Purge
 

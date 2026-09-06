@@ -56,6 +56,7 @@ func newUsers(g *globals) *cobra.Command {
 	command.AddCommand(
 		newUsersInvite(g),
 		newUsersPassword(g),
+		newUsersEmail(g),
 		newUsersDeactivate(g),
 		newUsersReactivate(g))
 	return command
@@ -179,6 +180,53 @@ func newUsersPassword(g *globals) *cobra.Command {
 	}
 	command.Flags().BoolVar(&raw, "raw", false, "keep the bytes exactly as they came, trailing newline included")
 	return command
+}
+
+func newUsersEmail(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use:   "email <email> <new-email>",
+		Short: "Change the address somebody signs in with. An administrator only.",
+		Long: "The address here is not somewhere mail is sent — the instance sends none —\n" +
+			"it is the name somebody signs in under. People marry, change their name or\n" +
+			"move to another address at the same company, and without this the only way\n" +
+			"through is a second account that loses everything the first one signed.\n\n" +
+			"An administrator's, for the reason a password reset is one: a mistyped\n" +
+			"address cannot correct itself, because the correction needs the sign-in it\n" +
+			"just took away.\n\n" +
+			"Their password and their sessions are untouched. The hash never depended on\n" +
+			"the address, and every token names its person by id.\n\n" +
+			"    vaultaffe users email somebody@example.com somebody-else@example.com",
+		Args: cobra.ExactArgs(2),
+		RunE: func(command *cobra.Command, args []string) error {
+			people, c, err := g.people(command.Context())
+			if err != nil {
+				return err
+			}
+			id, err := whoIs(people, args[0])
+			if err != nil {
+				return err
+			}
+
+			resp, err := c.ChangeEmailWithResponse(command.Context(), id,
+				api.ChangeEmailRequest{Email: args[1]})
+			if err != nil {
+				return client.Transport(err)
+			}
+			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
+				return err
+			}
+			if resp.JSON200 == nil {
+				return unreadable("a person")
+			}
+			fmt.Fprintf(g.msg(),
+				"%s signs in as %s now. Their password and their sessions are unchanged.\n",
+				args[0], resp.JSON200.Email)
+			if g.json {
+				return render.JSON(g.out(), resp.JSON200)
+			}
+			return nil
+		},
+	}
 }
 
 func newUsersDeactivate(g *globals) *cobra.Command {

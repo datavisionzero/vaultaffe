@@ -53,6 +53,38 @@ func TestAnAddressNobodyHereHasIsAUsageErrorAndNamesTheOnesThereAre(t *testing.T
 	}
 }
 
+// An address is a name and not a value, so both of them are arguments — and the
+// person is still named by the address they sign in with today.
+func TestAnAddressChangesByNamingTheOldOneAndTheNewOne(t *testing.T) {
+	in := startInstanceStub(t)
+	in.answer("GET /api/v1/users", http.StatusOK, people())
+
+	changed := people()[0]
+	changed["email"] = "maintainer@elsewhere.test"
+	in.answer("POST /api/v1/users/"+maintainerID+"/email", http.StatusOK, changed)
+
+	got := bound(newSession(t, in)).run(t,
+		"users", "email", "maintainer@example.test", "maintainer@elsewhere.test")
+
+	if got.Code != exit.OK {
+		t.Fatalf("exit %d\n%s", got.Code, got.Stderr)
+	}
+
+	var sent map[string]any
+	if err := json.Unmarshal(in.sent("POST", "/api/v1/users/"+maintainerID+"/email").Body, &sent); err != nil {
+		t.Fatal(err)
+	}
+	if sent["email"] != "maintainer@elsewhere.test" {
+		t.Fatalf("the new address did not arrive: %v", sent)
+	}
+
+	// What a person needs to hear is that the sign-in moved and nothing else did.
+	if !strings.Contains(got.Stderr, "maintainer@elsewhere.test") ||
+		!strings.Contains(got.Stderr, "sessions are unchanged") {
+		t.Fatalf("it did not say what changed:\n%s", got.Stderr)
+	}
+}
+
 // A password is never an argument, for the reason every value in this CLI is
 // never one: an argument is in the shell history and in `ps`.
 func TestAPasswordResetTakesThePasswordFromStdin(t *testing.T) {

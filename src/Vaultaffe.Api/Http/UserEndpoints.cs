@@ -19,6 +19,9 @@ public sealed record InviteUserRequest(string Email, string Name, bool IsAdminis
 /// <summary>An administrator's reset: the password they will hand over.</summary>
 public sealed record ResetPasswordRequest(string Password);
 
+/// <summary>The address somebody will sign in with from now on.</summary>
+public sealed record ChangeEmailRequest(string Email);
+
 /// <summary>An invitation as every listing shows it — everything but the code.</summary>
 public sealed record InvitationShape(
     Guid Id,
@@ -100,6 +103,24 @@ public static class UserEndpoints
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound);
+
+        // Not `PATCH /users/{id}`, because there is one field and it is the login
+        // name: an endpoint that says what it does is worth more here than a
+        // general one that could later do several things at once.
+        users.MapPost("/{id:guid}/email", async (
+                Guid id,
+                ChangeEmailRequest request,
+                ChangeEmail change,
+                CancellationToken cancellation) =>
+                Shape(await change.ExecuteAsync(id, request.Email, cancellation)))
+            .AdministratorOnly()
+            .WithName("ChangeEmail")
+            .WithSummary("An administrator changes the address somebody signs in with. Their sessions stay.")
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
 
         users.MapPost("/{id:guid}/deactivate", async (
                 Guid id, DeactivateUser deactivate, CancellationToken cancellation) =>

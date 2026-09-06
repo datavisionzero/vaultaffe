@@ -81,7 +81,8 @@ public sealed class ContractTests(PostgresFixture postgres)
                 "/api/v1/sessions", "/api/v1/sessions/current",
                 "/api/v1/tokens", "/api/v1/tokens/{id}",
                 "/api/v1/users", "/api/v1/users/{id}/deactivate",
-                "/api/v1/users/{id}/password", "/api/v1/users/{id}/reactivate",
+                "/api/v1/users/{id}/email", "/api/v1/users/{id}/password",
+                "/api/v1/users/{id}/reactivate",
                 "/problems", "/problems/{code}",
             ],
             paths);

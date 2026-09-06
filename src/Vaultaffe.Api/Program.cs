@@ -36,6 +36,7 @@ builder.Services.AddScoped<ConfirmDeviceLogin>();
 builder.Services.AddScoped<RedeemDeviceLogin>();
 builder.Services.AddScoped<ListUsers>();
 builder.Services.AddScoped<ResetPassword>();
+builder.Services.AddScoped<ChangeEmail>();
 builder.Services.AddScoped<DeactivateUser>();
 builder.Services.AddScoped<ReactivateUser>();
 builder.Services.AddScoped<InviteUser>();

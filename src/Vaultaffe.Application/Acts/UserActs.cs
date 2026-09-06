@@ -90,6 +90,67 @@ public sealed class ResetPassword(
 }
 
 /// <summary>
+/// An administrator changes the address somebody signs in with
+/// (Specification §6.1).
+/// </summary>
+/// <remarks>
+/// People marry, change their name, or move to another address at the same
+/// company, and the address here is not a delivery target — the instance sends no
+/// mail — but the <b>login name</b>. Without this the only ways out are a second
+/// account, which loses everything the first one ever signed, or a write straight
+/// into the database.
+/// <para>
+/// An administrator's, for the reason a reset is one: a mistyped address cannot
+/// correct itself, because the correction needs a sign-in that the mistyped
+/// address just took away, and there is no mail to send a way back through.
+/// </para>
+/// <para>
+/// <b>Their sessions stay.</b> A reset ends them because a password somebody else
+/// may know is worth nothing while the sessions opened with it still work; an
+/// address is not a credential and nothing was compromised by changing it. Every
+/// token names its person by id, so none of them notices.
+/// </para>
+/// </remarks>
+public sealed class ChangeEmail(IIdentityStore identities, ICallerIdentity caller)
+{
+    public async Task<UserRow> ExecuteAsync(
+        Guid userId, string email, CancellationToken cancellationToken)
+    {
+        _ = caller.Required;
+
+        if (!EmailAddress.IsValid(email))
+        {
+            throw Refusal.Validation(
+                "email",
+                "One '@', something on either side of it, no spaces, at most "
+                + $"{EmailAddress.Limit} characters.");
+        }
+
+        var address = EmailAddress.Normalize(email);
+
+        var user = await identities.FindUserAsync(userId, cancellationToken)
+            ?? throw Refusal.NotFound("Nobody here by that id.");
+
+        var held = await identities.FindUserByEmailAsync(address, cancellationToken);
+
+        // Themselves is not a collision: the same address in another spelling
+        // normalizes to what they already have, and saying no to that would be
+        // refusing to change nothing.
+        if (held is not null && held.Id != user.Id)
+        {
+            throw Refusal.NameTaken(
+                "Somebody here already signs in with that address.", bySomethingDeleted: false);
+        }
+
+        user.ChangeEmailTo(address);
+
+        await identities.SaveAsync(cancellationToken);
+
+        return ListUsers.Row(user);
+    }
+}
+
+/// <summary>
 /// Taking somebody out of the organization, and putting them back
 /// (Specification §6.4).
 /// </summary>

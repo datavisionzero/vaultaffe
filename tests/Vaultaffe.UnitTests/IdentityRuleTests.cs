@@ -43,6 +43,37 @@ public sealed class IdentityRuleTests
     }
 
     /// <summary>
+    /// Changing the address a person signs in with is one column and nothing
+    /// else. The hash carries its own salt, so the password they had is the
+    /// password they have — which is what makes this safe to do to somebody who
+    /// is not in the room.
+    /// </summary>
+    [Fact]
+    public void An_address_changes_without_touching_anything_else()
+    {
+        var person = new User(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "maintainer@example.test",
+            "Maintainer",
+            "a-hash-standing-in-for-argon",
+            isAdministrator: true,
+            DateTimeOffset.UnixEpoch);
+
+        person.ChangeEmailTo("  Maintainer@Elsewhere.test ");
+
+        Assert.Equal("maintainer@elsewhere.test", person.Email);
+        Assert.Equal("Maintainer", person.Name);
+        Assert.Equal("a-hash-standing-in-for-argon", person.PasswordHash);
+        Assert.True(person.IsAdministrator);
+
+        // What an index could not hold is refused here too, and not at the
+        // constraint.
+        Assert.Throws<ArgumentException>(() => person.ChangeEmailTo("not an address"));
+        Assert.Equal("maintainer@elsewhere.test", person.Email);
+    }
+
+    /// <summary>
     /// Length, and nothing else. Composition rules are what push people towards
     /// `Password1!` and towards using it in three places.
     /// </summary>
