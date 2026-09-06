@@ -1,5 +1,13 @@
 import { useState } from "react";
-import { answered, api, type ChangePage, type Purged, type Secret, type Version } from "@/api/client";
+import {
+  answered,
+  api,
+  type Access,
+  type ChangePage,
+  type Purged,
+  type Secret,
+  type Version,
+} from "@/api/client";
 import { useAsk } from "@/api/useAsk";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -122,7 +130,80 @@ export function History({
       </section>
 
       <Trail project={project} environment={environment} name={secret.name} stamp={stamp} />
+
+      <Reads project={project} environment={environment} name={secret.name} stamp={stamp} />
     </div>
+  );
+}
+
+/**
+ * The access summary: who has read this key, and when they first and last did
+ * ([Specification §6.5](../../../../Specification.md#65-logging-and-history)).
+ *
+ * **A summary, and the screen has to say so.** A successful read does not prove
+ * that an application started, so this block promises two moments per identity
+ * and nothing else — no count, no list of occasions, and the sentence under the
+ * heading says what it is rather than leaving somebody to read it as a record of
+ * every run. That line is the feature; without it this would be an execution
+ * history the product does not have.
+ *
+ * The identity's **type** is on the row for the same reason it is in the change
+ * log: with writing agents, the interesting question is what kind of thing acted.
+ */
+function Reads({
+  project,
+  environment,
+  name,
+  stamp,
+}: {
+  project: string;
+  environment: string;
+  name: string;
+  stamp: string;
+}) {
+  const [asked] = useAsk<Access[]>(`access:${stamp}`, () =>
+    api.GET("/api/v1/projects/{project}/environments/{environment}/secrets/{name}/access", {
+      params: { path: { project, environment, name } },
+    }),
+  );
+
+  return (
+    <section className="grid gap-3">
+      <h2 className="text-sm font-medium">Who has read it</h2>
+
+      <p className="text-xs text-muted-foreground">
+        The first and last time each identity read this key. A summary and not a record of every
+        run: a value read does not prove that anything started with it.
+      </p>
+
+      {asked.at === "asking" && <Skeleton className="h-16 w-full" />}
+      {asked.at === "refused" && <Refusal>{asked.why}</Refusal>}
+      {asked.at === "answered" &&
+        (asked.data.length === 0 ? (
+          <p className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+            Nothing has read this key yet.
+          </p>
+        ) : (
+          <ul className="divide-y rounded-lg border">
+            {asked.data.map((one) => (
+              <li
+                key={one.identity.id}
+                className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-3 py-2.5"
+              >
+                <span className="text-sm">{one.identity.name}</span>
+                <span className="rounded-sm border border-dashed px-1 text-[11px] text-muted-foreground">
+                  {one.identity.type}
+                </span>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  <span title={when(one.firstAt)}>first {around(one.firstAt)}</span>
+                  {" · "}
+                  <span title={when(one.lastAt)}>last {around(one.lastAt)}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        ))}
+    </section>
   );
 }
 

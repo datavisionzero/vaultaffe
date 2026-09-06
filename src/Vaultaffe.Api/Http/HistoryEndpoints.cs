@@ -23,6 +23,17 @@ public sealed record IdentityShape(Guid Id, string Type, string Name);
 /// <summary>A page of the log, and how many entries the filter matched.</summary>
 public sealed record ChangePageShape(IReadOnlyList<ChangeShape> Entries, int Total);
 
+/// <summary>
+/// One identity that has read this secret, and when it first and last did.
+/// </summary>
+/// <remarks>
+/// Two moments and no count. A summary rather than an execution history
+/// (Specification §6.5): a successful read does not prove that an application
+/// started, and a number here would read as though it did.
+/// </remarks>
+public sealed record AccessShape(
+    IdentityShape Identity, DateTimeOffset FirstAt, DateTimeOffset LastAt);
+
 /// <summary>A value a secret used to hold — when, until when, and until when it is kept.</summary>
 public sealed record VersionShape(
     Guid Id, DateTimeOffset WrittenAt, DateTimeOffset ReplacedAt, DateTimeOffset ExpiresAt);
@@ -82,6 +93,21 @@ public static class HistoryEndpoints
             .Needing(Scopes.Names)
             .WithName("ReadSecretVersions")
             .WithSummary("What this secret used to hold: when, and until when it is kept.")
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        api.MapGet("/{name}/access", async (
+                string project,
+                string environment,
+                string name,
+                ReadAccessSummary read,
+                CancellationToken cancellation) =>
+                (await read.ExecuteAsync(project, environment, name, cancellation))
+                    .Select(Recorded.Access).ToList())
+            .Needing(Scopes.Names)
+            .WithName("ReadSecretAccess")
+            .WithSummary("Who has read this key, and when they first and last did. Never what.")
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound);
@@ -152,4 +178,10 @@ public static class Recorded
 
     public static VersionShape Version(VersionRow row) =>
         new(row.Id, row.WrittenAt, row.ReplacedAt, row.ExpiresAt);
+
+    public static AccessShape Access(AccessRow row) =>
+        new(
+            new IdentityShape(row.IdentityId, TypeOf(row.IdentityType), row.IdentityName),
+            row.FirstAt,
+            row.LastAt);
 }

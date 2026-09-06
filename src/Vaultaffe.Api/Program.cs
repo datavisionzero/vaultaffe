@@ -75,6 +75,7 @@ builder.Services.AddScoped<PurgeSecret>();
 builder.Services.AddScoped<PurgeValueHistory>();
 builder.Services.AddScoped<ReadChangeLog>();
 builder.Services.AddScoped<ReadValueHistory>();
+builder.Services.AddScoped<ReadAccessSummary>();
 builder.Services.AddScoped<RollBackSecret>();
 builder.Services.AddScoped<CreateToken>();
 builder.Services.AddScoped<ListTokens>();

@@ -45,15 +45,29 @@ const entries = [
   },
 ];
 
+const reads = [
+  {
+    identity: {
+      id: "0199a000-0000-7000-8000-000000000043",
+      type: "service-token",
+      name: "the checkout service",
+    },
+    firstAt: "2026-09-02T09:00:00+00:00",
+    lastAt: "2026-09-05T09:00:00+00:00",
+  },
+];
+
 const secrets = "GET /api/v1/projects/landing-page/environments/prod/secrets";
 const theVersions =
   "/api/v1/projects/landing-page/environments/prod/secrets/DATABASE_URL/versions";
+const theAccess = "/api/v1/projects/landing-page/environments/prod/secrets/DATABASE_URL/access";
 
-/** A key's screen, with both halves of its history answered. */
+/** A key's screen, with all three halves of its history answered. */
 function aKeyWith(routes: Record<string, unknown> = {}) {
   return installInstance({
     [secrets]: [key],
     [`GET ${theVersions}`]: versions,
+    [`GET ${theAccess}`]: reads,
     "GET /api/v1/changes": { entries, total: 1 },
     ...routes,
   } as Parameters<typeof installInstance>[0]);
@@ -177,5 +191,47 @@ describe("a purge", () => {
     await vi.waitFor(() => {
       expect(calls.some((one) => one.url.endsWith("/projects/landing-page/purge"))).toBe(true);
     });
+  });
+});
+
+describe("who has read a key", () => {
+  it("names the identity, its type, and the two moments — and no count", async () => {
+    aKeyWith();
+
+    renderUnderShell("/projects/landing-page/prod/DATABASE_URL", <Shell />);
+
+    // Awaited on the row rather than on the heading: the heading is there while
+    // the question is still out, and asserting on it would pass before the
+    // answer arrived.
+    expect(await screen.findByText("the checkout service")).toBeInTheDocument();
+
+    const section = screen.getByText("Who has read it").closest("section")!;
+
+    expect(within(section).getByText("service-token")).toBeInTheDocument();
+    expect(within(section).getByText(/^first /)).toBeInTheDocument();
+    expect(within(section).getByText(/^last /)).toBeInTheDocument();
+    expect(within(section).queryByText(/\d+ (reads|times)/)).not.toBeInTheDocument();
+  });
+
+  /**
+   * The line that keeps this from reading as an execution history the product
+   * does not have.
+   */
+  it("says on the screen that it is a summary and not a record of every run", async () => {
+    aKeyWith();
+
+    renderUnderShell("/projects/landing-page/prod/DATABASE_URL", <Shell />);
+
+    expect(
+      await screen.findByText(/does not prove that anything started with it/),
+    ).toBeInTheDocument();
+  });
+
+  it("says so when nothing has read it", async () => {
+    aKeyWith({ [`GET ${theAccess}`]: [] });
+
+    renderUnderShell("/projects/landing-page/prod/DATABASE_URL", <Shell />);
+
+    expect(await screen.findByText("Nothing has read this key yet.")).toBeInTheDocument();
   });
 });

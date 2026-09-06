@@ -49,6 +49,8 @@ public sealed class VaultaffeDbContext(
 
     public DbSet<DismissedKey> DismissedKeys => Set<DismissedKey>();
 
+    public DbSet<SecretAccess> SecretAccesses => Set<SecretAccess>();
+
     public DbSet<Token> Tokens => Set<Token>();
 
     public DbSet<TokenBinding> TokenBindings => Set<TokenBinding>();

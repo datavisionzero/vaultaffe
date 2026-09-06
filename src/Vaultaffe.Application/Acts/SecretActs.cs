@@ -175,7 +175,12 @@ public sealed class ListSecrets(
 /// it is deliberately one key at a time.
 /// </summary>
 public sealed class ReadSecret(
-    IProjectStore projects, ISecretStore secrets, IKeyRing keys, Authority authority)
+    IProjectStore projects,
+    ISecretStore secrets,
+    ISecretAccessStore access,
+    IKeyRing keys,
+    Authority authority,
+    TimeProvider clock)
 {
     public async Task<SecretValueRow> ExecuteAsync(
         string project, string environment, string name, CancellationToken cancellationToken)
@@ -184,6 +189,13 @@ public sealed class ReadSecret(
             projects, authority, project, environment, cancellationToken);
 
         var secret = await Vault.InUseAsync(secrets, inside, name, cancellationToken);
+
+        // Two moments per identity and secret, not an entry per read (§6.5). It
+        // is recorded for a placeholder too: somebody asked for this key, which
+        // is what the summary is about, and whether there was anything in it is
+        // a different question.
+        await access.RecordAsync(
+            secret.Id, authority.Caller.Identity, clock.GetUtcNow(), cancellationToken);
 
         // A placeholder has no value, rather than an empty one. Answering with
         // an empty string here is exactly the silence the placeholder exists to
@@ -493,7 +505,12 @@ public sealed class ImportSecrets(
 /// </para>
 /// </remarks>
 public sealed class ExportEnvironment(
-    IProjectStore projects, ISecretStore secrets, IKeyRing keys, Authority authority)
+    IProjectStore projects,
+    ISecretStore secrets,
+    ISecretAccessStore access,
+    IKeyRing keys,
+    Authority authority,
+    TimeProvider clock)
 {
     public async Task<string> ExecuteAsync(
         string project, string environment, CancellationToken cancellationToken)
@@ -502,6 +519,17 @@ public sealed class ExportEnvironment(
             projects, authority, project, environment, cancellationToken);
 
         var all = await secrets.ListAsync(inside.Id, cancellationToken);
+
+        // An export reads every value of the environment at once, so it is an
+        // access to every one of them. Leaving it out would make the one read
+        // that takes everything the one read the summary does not know about.
+        var moment = clock.GetUtcNow();
+
+        foreach (var secret in all)
+        {
+            await access.RecordAsync(
+                secret.Id, authority.Caller.Identity, moment, cancellationToken);
+        }
 
         return DotEnv.Write(all.Select(secret => new DotEnv.Setting(
             secret.Name,

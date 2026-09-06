@@ -140,8 +140,11 @@ signing in, the three steps of a device login, creating and revoking tokens,
 creating and listing and renaming and deleting and restoring a project, an
 environment or a secret, writing a value, reading one, importing a file and
 exporting one, reading the change log and the value history, rolling back to an
-earlier value, purging one early, and reading the missing-key notice and
-dismissing a line of it. Beside them the sweep that removes what the
+earlier value, purging one early, reading the missing-key notice and dismissing a
+line of it, and reading the access summary of a key. Beside the ports one is
+worth naming for what it is not: `ISecretAccessStore` is the only thing here
+written on a **read**, which is why it is a port of its own rather than two more
+methods among the ones that seal and delete values. Beside them the sweep that removes what the
 deadlines have passed, which is the one thing here that is not an act because
 nobody asked for it. Beside them the ports: the stores, the identity of the caller, the thing that hashes a
 password, the key ring that seals a value and opens it again, and the clock —

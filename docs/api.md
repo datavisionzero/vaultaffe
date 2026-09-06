@@ -39,6 +39,7 @@ deployment have their own tickets, and this file is kept accurate as each lands.
 /api/v1/projects/…/secrets       names and status; one value at a time
 /api/v1/projects/…/missing       keys this environment has not got and its siblings have
 /api/v1/changes                  what was changed, by whom, and of what kind
+/api/v1/projects/…/access        who has read a key, first and last
 /device                          the page a human confirms a login on
 
 /api/handshake       what this instance is and what it serves
@@ -508,16 +509,18 @@ this notice offers besides showing. Dismissing twice is dismissing once. Reading
 needs `names`, because names is all this ever says. A dismissal appears in no
 change log: it changes what a screen says, not what the vault holds.
 
-## The change log and the value history
+## The change log, the value history and the access summary
 
-Two things that get lumped together and have completely different risk profiles
+Three things that get lumped together and have completely different risk profiles
 ([§6.5](../Specification.md#65-logging-and-history)). The log holds no value at
-all; the history holds a few under tight bounds and hands none of them out.
+all; the history holds a few under tight bounds and hands none of them out; the
+summary holds two moments per identity and is not an execution history.
 
 ```
 GET  /api/v1/changes                                     what was changed, by whom
 GET  …/environments/{environment}/secrets/{KEY}/versions  what it used to hold, and when
 POST …/environments/{environment}/secrets/{KEY}/rollback  put one back
+GET  …/environments/{environment}/secrets/{KEY}/access    who has read it, first and last
 ```
 
 **The log never contains a value**, not even as a diff. An entry is a moment, an
@@ -532,8 +535,9 @@ Actions are words: `created`, `renamed`, `value-set`, `value-rolled-back`,
 `placeholder-created`, `deleted`, `restored`, `purged`.
 
 **Reads are not in it.** `run` reads values, but a successful read does not prove
-an application started, and the MVP records mutations rather than every
-invocation. An export is a read too, and is not recorded either.
+an application started, and the log records mutations rather than every
+invocation. What is known about reads is the access summary below, and it is
+deliberately less than a log.
 
 **A reader names what they are asking about.** The entries carry names and no
 ids, so a binding cannot narrow the answer afterwards — instead `project`,
@@ -554,6 +558,28 @@ append-only log does, and it is not worth a cursor here.
 and `expiresAt` — no value, because five old credentials in one answer would be
 the bulk disclosure the rest of this product spends every decision avoiding, and
 nothing needs it.
+
+**The access summary is two moments per identity, and that is the whole
+promise.** Each line is an identity with its type, `firstAt` and `lastAt` — and
+no count, because a count would be the beginning of the execution history this
+product does not have. A successful read does not prove that an application
+started; two moments are what can be said honestly, so two moments are what is
+stored. Reading a key a thousand times is still one line, and the table is
+bounded by how many identities an organization has rather than by how often
+anything runs.
+
+Reading the summary needs `names`, like the change log beside it: it says who
+read a key and when, never what. A read of an **empty placeholder** counts —
+somebody asked for the key, which is what this is about — and an **export**
+counts as a read of every key in the environment, because leaving it out would
+make the one read that takes everything the one read nothing knows about.
+
+The summary is written on the read itself, in one `on conflict … do update`
+statement rather than a read followed by a write: two processes starting at the
+same moment under the same token must not race each other into a duplicate. It
+commits by itself and is best effort — a summary that could not be written does
+not take a value read down with it. Purging a secret takes its summary with it,
+the way it takes the values it used to hold.
 
 **Rollback is a write like any other and available to agents.** An agent that
 wrecks a value overnight is exactly who needs an undo button. It costs `write`

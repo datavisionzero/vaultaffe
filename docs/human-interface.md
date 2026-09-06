@@ -61,7 +61,7 @@ more would be a promise the product does not keep.
 | `/projects` | Projects | every project this session reaches, each with its environments, and a switch for what is deleted and recoverable | one card per project, environments as chips that wrap |
 | `/projects/:project` | Project | the project's environments, each with a key count, how many keys are still waiting for a value, and when a value in it was last written; and the project's own acts | environments stack; the acts move into the row's menu |
 | `/projects/:project/:environment` | Environment | **the main screen**: the keys of this environment, their status and when each was last written; import, export and the deleted switch | two-line rows — name and status above, the moment below; no horizontal scroll |
-| `/projects/:project/:environment/:KEY` | Secret | the masked value with its reveal, the bounded version history, and this key's own change log | one column; the value block stays above the history |
+| `/projects/:project/:environment/:KEY` | Secret | the masked value with its reveal, the bounded version history, this key's own change log, and who has read it | one column; the value block stays above the three blocks below it |
 | `/changes` | Change log | what was changed, by whom and **by what kind of thing**, filtered by project, environment and key | the identity and its type stay; the filters open as a dismissible sheet |
 | `/settings/tokens` | Settings · Tokens | the organization's tokens with kind, name, scopes, binding and standing; creating one; the value of a new one, once | area list folds above the area |
 | `/settings/users` | Settings · Users | the people of the organization, the invitation link to copy, an administrator's password reset, and the invitations that are still open | area list folds above the area |
@@ -149,6 +149,21 @@ number, and never a value. Export is the plainest screen in the application and
 the one that asks the hardest question: it writes every value of the environment
 in plaintext, it is a person's alone, and the dialog says both of those before it
 does it.
+
+## Who has read a key
+
+The third block on a key's screen, under what it used to hold and what happened
+to it, and the one that has to say what it is **not**. It lists each identity
+that has read this key with its type, and two moments: the first time and the
+last.
+
+There is no count, and the sentence under the heading says why — a value read
+does not prove that anything started with it
+([§6.5](../Specification.md#65-logging-and-history)). That line is the feature.
+Without it a reader would take the block for a record of every run, and this
+product does not have one; with it, the block says exactly as much as is true.
+The identity's type is on the row for the same reason it is in the change log:
+with writing agents, the interesting question is what kind of thing acted.
 
 ## Action matrix
 

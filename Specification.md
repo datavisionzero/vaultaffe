@@ -406,11 +406,13 @@ Thus agent deletion preserves the undo window; permanent early removal is the
 same human-only capability regardless of the object's level in the hierarchy.
 
 **Reads are not logged exhaustively.** `run` reads values, but a successful read
-does not prove that an application started. The MVP change log records mutations,
-not every invocation or application start. After MVP, first and last access per
-identity and secret provide an access summary, not an execution history. Agent
-identity attribution applies to recorded changes and, when available, these
-access summaries.
+does not prove that an application started. The change log records mutations, not
+every invocation or application start. What is known about reads is the **access
+summary**: first and last use per identity and secret — two moments and no count,
+because a count would read as the execution history this deliberately is not. A
+read of an empty placeholder counts, and an export counts as a read of every key
+in the environment. Agent identity attribution applies to recorded changes and to
+these access summaries alike. Delivered after the MVP, as §6.6 stage 3 said.
 
 **What deserves honest documentation:** a purge in the database does not reach
 into last night's backup. We promise backups (§6.3); no product we examined says

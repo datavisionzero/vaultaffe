@@ -39,6 +39,22 @@ public sealed record VersionRow(
     Guid Id, DateTimeOffset WrittenAt, DateTimeOffset ReplacedAt, DateTimeOffset ExpiresAt);
 
 /// <summary>
+/// One identity that has read this secret, and the two moments that are honestly
+/// known about it (Specification §6.5).
+/// </summary>
+/// <remarks>
+/// Two moments and no count, because a count would be the beginning of the
+/// execution history this deliberately is not — and because nothing that reads a
+/// value can tell whether the application it was read for ever started.
+/// </remarks>
+public sealed record AccessRow(
+    Guid IdentityId,
+    IdentityType IdentityType,
+    string IdentityName,
+    DateTimeOffset FirstAt,
+    DateTimeOffset LastAt);
+
+/// <summary>
 /// Reading the change log (Specification §6.5).
 /// </summary>
 /// <remarks>
@@ -171,6 +187,44 @@ public sealed class ReadValueHistory(
             .. (await secrets.HistoryAsync(secret.Id, cancellationToken))
                 .Select(version => new VersionRow(
                     version.Id, version.WrittenAt, version.ReplacedAt, version.ExpiresAt)),
+        ];
+    }
+}
+
+/// <summary>
+/// The access summary of one secret: first and last use per identity
+/// (Specification §6.5).
+/// </summary>
+/// <remarks>
+/// <b>A summary and not an execution history</b>, and this act is where that has
+/// to stay legible: a successful read does not prove that an application started,
+/// so what comes back is two moments per identity and nothing that could be
+/// mistaken for a run of anything.
+/// <para>
+/// <c>names</c>, like the change log it sits beside. It says who read a key and
+/// when, never what they read.
+/// </para>
+/// </remarks>
+public sealed class ReadAccessSummary(
+    IProjectStore projects, ISecretStore secrets, ISecretAccessStore access, Authority authority)
+{
+    public async Task<IReadOnlyList<AccessRow>> ExecuteAsync(
+        string project, string environment, string name, CancellationToken cancellationToken)
+    {
+        var (_, inside) = await Vault.InAsync(
+            projects, authority, project, environment, cancellationToken);
+
+        var secret = await Vault.InUseAsync(secrets, inside, name, cancellationToken);
+
+        return
+        [
+            .. (await access.SummaryAsync(secret.Id, cancellationToken))
+                .Select(one => new AccessRow(
+                    one.IdentityId,
+                    one.IdentityType,
+                    one.IdentityName,
+                    one.FirstAt,
+                    one.LastAt)),
         ];
     }
 }

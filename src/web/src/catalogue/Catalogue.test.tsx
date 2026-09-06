@@ -56,6 +56,8 @@ const oneSecret = "GET /api/v1/projects/landing-page/environments/prod/secrets/D
 const history = {
   "GET /api/v1/projects/landing-page/environments/prod/secrets/DATABASE_URL/versions": [],
   "GET /api/v1/projects/landing-page/environments/prod/secrets/SMTP_PASSWORD/versions": [],
+  "GET /api/v1/projects/landing-page/environments/prod/secrets/DATABASE_URL/access": [],
+  "GET /api/v1/projects/landing-page/environments/prod/secrets/SMTP_PASSWORD/access": [],
   "GET /api/v1/changes": { entries: [], total: 0 },
 };
 

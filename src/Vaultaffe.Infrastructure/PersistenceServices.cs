@@ -34,6 +34,10 @@ public static class PersistenceServices
         services.AddScoped<ISecretStore, SecretStore>();
         services.AddScoped<IChangeLogStore, ChangeLogStore>();
 
+        // The one that does not commit with the rest, and says so: the access
+        // summary is written on a read, where there is no transaction to join.
+        services.AddScoped<ISecretAccessStore, SecretAccessStore>();
+
         services.AddSingleton<SchemaMigrator>();
         services.AddSingleton<ExpirySweep>();
 

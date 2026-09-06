@@ -1,6 +1,6 @@
 # The Data Model
 
-Eleven tables, and the rules the database itself holds. What each concept *means*
+Twelve tables, and the rules the database itself holds. What each concept *means*
 is [Specification §5](../Specification.md#5-core-concepts); this says how it is
 stored and which of the promises are constraints rather than intentions.
 
@@ -33,7 +33,8 @@ organization
    └─ environment           (project_id, name unique per project)
       ├─ dismissed_key      (environment_id, name unique per environment)
       └─ secret             (environment_id, name unique per environment)
-         └─ secret_value_version
+         ├─ secret_value_version
+         └─ secret_access    (one row per identity, two moments)
 
 token                       (organization_id, user_id)
 └─ token_binding            (a project, or one environment of it)
@@ -52,6 +53,7 @@ change_log_entry            (points at nothing)
 | `environment` | `dev`, `staging`, `prod` — one level, no branch or personal configs. |
 | `secret` | A key, and its current value sealed under the secret's data key. |
 | `secret_value_version` | Values this secret used to hold, tightly bounded. |
+| `secret_access` | First and last use of this secret by one identity. Two moments, never a count. |
 | `dismissed_key` | A key the missing-key notice was told not to mention in this environment again. |
 | `token` | A credential: kind, scope set, and the hash of a value shown once. |
 | `token_binding` | What a token may touch. No rows means the whole organization. |
@@ -146,10 +148,12 @@ in the schema rather than in code:
   subtree is retained and restored as one. A database cascade would be the
   opposite of that promise.
 
-The one cascade is `secret_value_version` → `secret`, and it does not contradict
-the window: a deleted secret keeps its row, so it fires only when that row is
-genuinely removed — a human purge, or the end of the window. When a secret is
-gone its history has to be gone with it. That is what a purge means.
+The cascades are the two things that hang directly off a secret —
+`secret_value_version` and `secret_access` — and neither contradicts the window: a
+deleted secret keeps its row, so they fire only when that row is genuinely
+removed, at a human purge or the end of the window. When a secret is gone, what
+it used to hold and what was recorded about reading it have to be gone with it.
+That is what a purge means.
 
 The acts do the same thing the schema does: deleting a project sets `deleted_at`
 on the project row and touches nothing underneath. The subtree is retained and
@@ -170,11 +174,44 @@ answer it with nothing at all. It runs every fifteen minutes inside the
 installation rather than as an operator's cron job, because a window nothing
 enforces is a promise rather than a window. It removes the containers in the order
 the schema demands — there is no cascade between them, on purpose — and leaves
-the one cascade, a secret's versions, to the database that declares it.
+the two that hang off a secret, its versions and its access summary, to the
+database that declares them.
 
 A purge is the same removal asked for early by a person, and it goes through the
 tracked change tracker rather than `ExecuteDelete` so that the change-log entry
 recorded about it commits in the same transaction as the rows it describes.
+
+## The access summary is two moments, and is written on a read
+
+`secret_access` is the one table in this product written by a **read**, and the
+one written by hand-rolled SQL. Both follow from what it is
+([§6.5](../Specification.md#65-logging-and-history)): first and last use per
+identity and secret, and never a row per read.
+
+```sql
+insert into secret_access (…) values (…)
+on conflict (secret_id, identity_id) do update set
+    identity_name = excluded.identity_name,
+    last_at = greatest(secret_access.last_at, excluded.last_at)
+```
+
+One statement rather than a lookup followed by a write, because two `run`s
+starting at the same moment under the same token would otherwise race each other
+into a duplicate, and the loser of that race would turn a value read into a 500.
+`greatest` is the rule the domain type declares by shape: `first_at` is written
+once and never again, `last_at` only ever moves forward.
+
+It commits by itself. A read is not part of a transaction that changes anything,
+and a summary that could not be written must not take the value read down with
+it — which is the one place in this schema where best effort is the right answer
+and is written down as such.
+
+The table is bounded by how many identities an organization has, not by how often
+anything runs, and there is **no count column**. A count would be the beginning of
+the execution history §6.5 declines to promise: a successful read does not prove
+that an application started, and two moments are what can be said honestly. Like
+the change log, the identity is an id with its type and name beside it rather
+than a foreign key, and there is no column a value could go in.
 
 ## Value history is bounded, and the clock is `replaced_at`
 

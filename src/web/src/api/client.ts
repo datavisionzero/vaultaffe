@@ -33,6 +33,7 @@ export type MissingKey = Schemas["MissingKey"];
 export type Change = Schemas["Change"];
 export type ChangePage = Schemas["ChangePage"];
 export type Version = Schemas["Version"];
+export type Access = Schemas["Access"];
 export type Purged = Schemas["Purged"];
 export type Token = Schemas["Token"];
 export type User = Schemas["User"];
