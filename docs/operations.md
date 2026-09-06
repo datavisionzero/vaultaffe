@@ -20,9 +20,9 @@ docker compose -f deploy/docker-compose.yml up -d
 open http://localhost                    # or the domain in VAULTAFFE_SITE_ADDRESS
 ```
 
-The first `up` builds the image from the checkout, because `:latest` moves only
-on a stable release and there has not been one yet; naming a released tag in
-`VAULTAFFE_IMAGE` — a prerelease included — fetches it and never builds. `up -d` returns when the instance *answers* and not when a port
+The first `up` pulls what `VAULTAFFE_IMAGE` names, which unset is `:latest`, the
+newest stable release; it builds from the checkout only when that image cannot be
+pulled, which is what a working copy of an unreleased change is. `up -d` returns when the instance *answers* and not when a port
 opened — Caddy waits for the health check, which is the handshake, which is
 served after the migrations have run.
 

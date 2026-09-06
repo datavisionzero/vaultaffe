@@ -49,10 +49,10 @@ docker compose -f deploy/docker-compose.yml up -d
 open http://localhost                 # the first person here is the administrator
 ```
 
-> **Status: pre-MVP.** It runs and it is usable, and the first prerelease is out
-> — `v0.1.0-rc.1`, with the image and the CLI binaries on it. Nothing stable is
-> released yet, so `:latest` does not exist and the first `up` still builds the
-> image from the checkout.
+> **Status: the MVP, released.** `v0.1.0` is out — one image for `amd64` and
+> `arm64`, and CLI binaries for macOS and Linux. The five success criteria of
+> [`Specification.md` §11](Specification.md#11-success-criteria-for-the-mvp) were
+> played through rather than asserted, HTTPS and the ten minutes included.
 
 .NET 10, React, PostgreSQL, Caddy for TLS. The CLI is Go, because `exec()` wants
 a system call Go exposes directly and a static binary with millisecond startup
