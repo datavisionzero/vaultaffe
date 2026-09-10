@@ -39,7 +39,8 @@ organization
 token                       (organization_id, user_id)
 └─ token_binding            (a project, or one environment of it)
 
-device_authorization        (one `vaultaffe login` in progress)
+device_authorization        (one handover in progress: a login, or an enrollment)
+└─ enrollment_binding       (the reach a person agreed to, before there is a token)
 
 change_log_entry            (points at nothing)
 
@@ -59,7 +60,8 @@ instance_claim              (no organization: there is none yet)
 | `dismissed_key` | A key the missing-key notice was told not to mention in this environment again. |
 | `token` | A credential: kind, scope set, and the hash of a value shown once. |
 | `token_binding` | What a token may touch. No rows means the whole organization. |
-| `device_authorization` | One `vaultaffe login` in progress: two codes, and what has happened to it. |
+| `device_authorization` | One handover in progress — a `vaultaffe login` or a `vaultaffe enroll`: two codes, what it produces, and what has happened to it. |
+| `enrollment_binding` | What a person agreed an enrollment may reach, while there is still no token to hang it on. |
 | `change_log_entry` | What was done, by whom, and of what type — never a value. Administration is in it too, with no place and an `about_name`. |
 | `instance_claim` | The claim secret an unstarted instance is claimed with. At most one row, and none once the first run has consumed it. |
 
@@ -256,10 +258,11 @@ in that list, and asserts that none of them is `bytea`. Adding a column means
 editing that list, which is the point.
 
 The subject is recorded **by name**. Neither a purge nor an expiry removes
-change-log entries, so this table outlives the project, environment and secret it
-talks about, and a foreign key pointing at a row that is gone would take the
-entry with it. `identity_name` is kept for the same reason: a revoked token's
-entries should still read as something other than a bare id.
+change-log entries, so this table outlives the project, environment and secret
+it talks about, and a foreign key pointing at a row that is gone would take the
+entry with it. `identity_name` is kept for the same reason: the entries of a
+token that was revoked — or purged, and whose row is genuinely gone — should
+still read as something other than a bare id.
 
 **`about_name` is the fourth name, and it is what makes this one log rather than
 two** ([ADR 0020](./adr/0020-one-change-log-and-not-two.md)). An entry with no
@@ -272,9 +275,11 @@ It holds an **identifier and never a credential**: no password, no token value,
 no invitation code. That is the same rule as the missing value column, pointed at
 people, and the column list above is what enforces it.
 
-There is no foreign key to `app_user` or to `token` either. The reason is the one
-above and one more: a deactivated person and a revoked token both keep their rows
-today, but the log must not depend on that — it outlives everything it names.
+There is no foreign key to `app_user` or to `token` either. The reason is the
+one above and one more: the log must not depend on a row staying. A deactivated
+person keeps theirs, and a revoked token keeps its own until somebody purges it
+— which is exactly the case this column was written for, and the reason a token
+can be removed at all.
 
 **What deserves honest documentation** (Specification §6.5): a purge in the
 database does not reach into last night's backup, and this product promises
@@ -337,7 +342,7 @@ state is read from them rather than stored as one, exactly as a device login's
 is. `accepted_by_user_id` is the person it turned into, so an administrator
 reading the list can see which of the people below arrived through which link.
 
-## A login in progress is a row, and it holds no code
+## A handover in progress is a row, and it holds no code
 
 `device_authorization` is the device-code flow of
 [§6.2](../Specification.md#62-cli) between the CLI asking and a human confirming.
@@ -357,6 +362,32 @@ It carries an `organization_id` like every other domain table, and at the moment
 it is created nobody has authenticated. The MVP has exactly one organization (§5)
 and that is the one it gets; the day there are several, what resolves it is the
 human who confirms, and this is the column that answer already goes into.
+
+**`produces` says what is at the far end**, and it is why this is one table
+rather than two ([ADR 0021](./adr/0021-an-agent-asks-for-its-own-token.md)). A
+login hands the person who confirmed a session; an enrollment hands the machine
+that asked an agent token of its own. Everything before that last step — the two
+codes, the ten minutes, the states, the rule that a code works once — is the
+same protocol, and a second table would have been that protocol written out
+twice. `ck_device_authorization_produces` keeps the column to the two that
+exist, the way `ck_token_kind` keeps a token to the three kinds.
+
+An enrollment carries three more columns and a small table. `requested_name` is
+what the asking client called itself, capped and believed by nobody: an instance
+cannot check that a machine calling itself an agent on somebody's laptop is one.
+`approved_name` is what the person settled on, kept **beside** it rather than
+over it, because a claim and a decision are two different facts.
+`approved_scopes` is the same integer of flags a token's scopes are, null until
+somebody has agreed anything.
+
+`enrollment_binding` is the reach they agreed to, and it is not `token_binding`
+for a reason of order: a token's value exists exactly once, in the answer that
+creates it, so the token cannot be made until the machine that asked comes back
+for it. Between the agreement and that collection there is a reach with nothing
+to attach it to — and a `token_binding` row pointing at no token is a row its
+own foreign key could not hold. These rows are a decision in flight and never a
+record of anything: they go with the enrollment, and what the token ended up
+reaching is written into `token_binding` when it is finally issued.
 
 ## Tokens store a hash, and nothing else
 
@@ -384,6 +415,15 @@ for an agent token, because the point is attribution, not restriction
 `(token_id, project_id, environment_id)` is declared `nulls not distinct`, or
 Postgres would allow "this whole project" twice.
 
+**`name`, `scopes` and the binding rows are the mutable part of a token, and
+`value_hash` is not.** Changing what a credential is called, may do and reaches
+is `update token` and a rewrite of its bindings; the column authentication looks
+it up by never moves, which is what lets the same string keep working while the
+instance changes what it lets it through for. A binding this act creates is
+added to the context explicitly rather than being discovered on the aggregate,
+because a store left to tell a row it just made from a row it loaded a moment
+ago will sooner or later update where it should have inserted.
+
 `user_id` is whose token it is: for a session token the person it authenticates,
 for a service or agent token the person who created it and is accountable for what
 it does. A human creates an agent token and hands it over
@@ -391,6 +431,15 @@ it does. A human creates an agent token and hands it over
 machine back to a person is exactly what the change log's identity type is for
 (§6.5). The foreign key is `restrict` rather than `cascade`, for the reason
 revoking beats deleting: nothing here disappears quietly.
+
+**A row does go, eventually, and only after a revocation.** Purging a revoked
+token deletes it — `fk_token_binding_token` takes the bindings with it, because
+a binding records nothing on its own — and nothing else in the schema points
+here. That is deliberate rather than lucky: the change log names its identities
+instead of keying them (below), precisely so that a credential's row can be
+removed without the entries it signed going with it. A token still in use is
+refused: a row that vanished while its value worked would be a credential nobody
+could find and nobody could take back.
 
 ## What is deliberately not here
 

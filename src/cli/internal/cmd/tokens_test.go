@@ -189,3 +189,122 @@ func lines(out string) []string {
 	}
 	return rows
 }
+
+// Changing sends what was asked for and nothing else: a flag nobody passed is a
+// part of the token nobody meant to touch, and a request that carried it anyway
+// would rewrite the reach of every token somebody only wanted to rename.
+func TestChangingATokenSendsOnlyWhatWasAsked(t *testing.T) {
+	in := startInstanceStub(t)
+	in.answer("PATCH /api/v1/tokens/"+deployAgentID, http.StatusOK, map[string]any{
+		"id": deployAgentID, "kind": "agent", "name": "the agent on billing",
+		"scopes":   []string{"names", "read", "write", "delete"},
+		"bindings": []any{}, "reachesTheWholeOrganization": true,
+		"createdAt": "2026-02-15T00:00:00Z", "expiresAt": nil, "revokedAt": nil,
+	})
+
+	got := bound(newSession(t, in)).run(t, "tokens", "change", deployAgentID, "--name", "the agent on billing")
+	if got.Code != exit.OK {
+		t.Fatalf("exit %d\n%s", got.Code, got.Stderr)
+	}
+
+	var sent map[string]any
+	if err := json.Unmarshal(in.sent("PATCH", "/api/v1/tokens/"+deployAgentID).Body, &sent); err != nil {
+		t.Fatal(err)
+	}
+	if sent["name"] != "the agent on billing" {
+		t.Fatalf("the new name did not reach the instance: %v", sent)
+	}
+	for _, untouched := range []string{"scopes", "bindings"} {
+		if _, there := sent[untouched]; there {
+			t.Fatalf("%q was sent for a rename: %v", untouched, sent)
+		}
+	}
+
+	// The one sentence a person needs afterwards, because it is the thing that
+	// makes this command worth having.
+	if !strings.Contains(got.Stderr, "value is unchanged") {
+		t.Fatalf("it does not say the value is untouched:\n%s", got.Stderr)
+	}
+}
+
+// The widest a token gets, and the only way to say it: no binding at all. An
+// empty list rather than an omitted one, because omitted means unchanged here.
+func TestChangingATokenToTheWholeOrganizationSendsNoBinding(t *testing.T) {
+	in := startInstanceStub(t)
+	in.answer("PATCH /api/v1/tokens/"+ciServiceID, http.StatusOK, map[string]any{
+		"id": ciServiceID, "kind": "service", "name": "ci",
+		"scopes":   []string{"names", "read"},
+		"bindings": []any{}, "reachesTheWholeOrganization": true,
+		"createdAt": "2026-02-01T00:00:00Z", "expiresAt": nil, "revokedAt": nil,
+	})
+
+	got := bound(newSession(t, in)).run(t, "tokens", "change", ciServiceID, "--organization")
+	if got.Code != exit.OK {
+		t.Fatalf("exit %d\n%s", got.Code, got.Stderr)
+	}
+
+	var sent map[string]any
+	if err := json.Unmarshal(in.sent("PATCH", "/api/v1/tokens/"+ciServiceID).Body, &sent); err != nil {
+		t.Fatal(err)
+	}
+	bindings, ok := sent["bindings"].([]any)
+	if !ok || len(bindings) != 0 {
+		t.Fatalf("the whole organization did not travel as an empty binding: %v", sent)
+	}
+}
+
+// The directory somebody stands in does not narrow a token. `bound` puts a
+// project and an environment in the environment of this session, exactly as a
+// working directory would, and a change that carried them would be a widening
+// nobody typed.
+func TestChangingATokenIgnoresTheBindingOfTheDirectory(t *testing.T) {
+	in := startInstanceStub(t)
+
+	got := bound(newSession(t, in)).run(t, "tokens", "change", deployAgentID)
+	if got.Code != exit.Usage {
+		t.Fatalf("exit %d, not the usage error:\n%s", got.Code, got.Stderr)
+	}
+	if !strings.Contains(got.Stderr, "nothing to change") {
+		t.Fatalf("it does not say what was missing:\n%s", got.Stderr)
+	}
+}
+
+// Purging is offered on what is revoked, and the instance is the one that says
+// so — but what the command prints afterwards is the half a person cannot see:
+// the row is gone and the history is not.
+func TestPurgingATokenSaysTheLogKeepsWhatItDid(t *testing.T) {
+	in := startInstanceStub(t)
+	in.answer("POST /api/v1/tokens/"+revokedCIID+"/purge", http.StatusOK, map[string]any{
+		"id": revokedCIID, "kind": "service", "name": "an old ci",
+		"scopes":   []string{"names", "read"},
+		"bindings": []any{}, "reachesTheWholeOrganization": true,
+		"createdAt": "2026-01-01T00:00:00Z", "expiresAt": nil,
+		"revokedAt": "2026-02-01T00:00:00Z",
+	})
+
+	got := bound(newSession(t, in)).run(t, "tokens", "purge", revokedCIID)
+	if got.Code != exit.OK {
+		t.Fatalf("exit %d\n%s", got.Code, got.Stderr)
+	}
+	in.sent("POST", "/api/v1/tokens/"+revokedCIID+"/purge")
+
+	if !strings.Contains(got.Stderr, "an old ci") || !strings.Contains(got.Stderr, "keeps its name in the log") {
+		t.Fatalf("it does not say what went and what stayed:\n%s", got.Stderr)
+	}
+}
+
+// ADR 0010: the instance names the action and this client names its own command.
+// An agent refused a widening is told the command a person actually has.
+func TestARefusedChangeNamesTheCommandAPersonHas(t *testing.T) {
+	in := startInstanceStub(t)
+	in.refuse("PATCH /api/v1/tokens/"+deployAgentID, http.StatusForbidden, "human-only",
+		"Changing a token is reserved for a person.", map[string]any{"humanAction": "change-token"})
+
+	got := bound(newSession(t, in)).run(t, "tokens", "change", deployAgentID, "--scopes", "names,read")
+	if got.Code != exit.HumanOnly {
+		t.Fatalf("exit %d\n%s", got.Code, got.Stderr)
+	}
+	if !strings.Contains(got.Stderr, "vaultaffe tokens change") {
+		t.Fatalf("the refusal does not name this CLI's own command:\n%s", got.Stderr)
+	}
+}

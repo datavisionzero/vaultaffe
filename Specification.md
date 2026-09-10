@@ -191,9 +191,13 @@ an opt-in action the user triggers, it is a plausible next step (§12).
 - Change log and bounded value history with rollback and purge; restore deleted
   secrets, environments, and projects within their recovery window (§6.5).
 - Token management: create, name, revoke; for agent tokens also the binding and
-  scope set (§6.4). The value is shown exactly once. Token management is
-  **human-only**: a token is itself a secret, and one created by an agent through
-  the CLI would land on stdout — and thus in its context.
+  scope set (§6.4). The value is shown exactly once. A token that already exists
+  can be **renamed, rescoped and rebound** afterwards, and a revoked one removed
+  from the list for good — the value is the one part that never changes, which
+  is what makes amending a token better than issuing a second one and going
+  round every machine holding the first. Token management is **human-only**: a
+  token is itself a secret, and one created by an agent through the CLI would
+  land on stdout — and thus in its context.
 - Per-secret change history: who changed what, when — and whether "who" was a
   person or an agent.
 - The organization name is editable; exactly one organization ("Default") in the
@@ -205,6 +209,7 @@ The centerpiece. The target state for the secrets surface:
 
 ```bash
 vaultaffe login                       # device-code flow, session token into the OS keychain
+vaultaffe enroll "claude in ~/repo"   # the same flow for an agent's own token, never printed
 vaultaffe setup                       # binds the current directory to project + environment
 vaultaffe run -- npm run dev          # replaces itself with the process, secrets in the env
 vaultaffe secrets                     # lists names and status (set / empty) — never values
@@ -350,20 +355,30 @@ log would carry the human's name for everything, and the identity type in §6.5
 would have no source. So a human creates an agent token — in the UI or from
 their own session — and hands it to the agent through its environment as
 `VAULTAFFE_TOKEN`, which the agent harness sets for the agent's process and
-`run` strips from every child (§6.2). The point is **attribution, not
-restriction**. Accordingly the default binding is the whole organization with
-every scope; the human narrows it at creation, and excluding production
-environments is the first switch offered. Whether an agent may delete is a
-scope, not a doctrine.
+`run` strips from every child (§6.2).
+
+**Or the agent asks for one and a human agrees**, which is the same flow the
+device-code login already is, ending in an agent token rather than a session
+(ADR 0021). The value is never printed and never shown to a person: it is
+answered to the machine that asked and written to a file only its owner can
+read. That matters because the alternative to a safe path that is tedious is not
+a person being more careful — it is a token pasted into a conversation, and so
+into a transcript. Agreeing is a person's act, on the human-only list for the
+reason creating one is. The point is **attribution, not restriction**.
+Accordingly the default binding is the whole organization with every scope; the
+human narrows it at creation, and excluding production environments is the first
+switch offered. Whether an agent may delete is a scope, not a doctrine.
 
 **Human-only actions** are the short list where an agent's mistake cannot be
-undone or where the output is itself a secret: **purging value history or deleted
-objects, creating and revoking tokens, and administering the organization and
-its users.** These
-require a session token. The agent gets an error naming the human command or UI
-action. Everything else — reading, running, setting, recoverable deletion,
-restoring, creating projects and environments, rolling back — an agent
-may do by default.
+undone or where the output is itself a secret: **purging value history or
+deleted objects, the whole of a token's life — creating, changing, revoking and
+removing one — and administering the organization and its users.** Changing is
+on the list for the mirror image of the reason revoking is: an agent that could
+widen a token could widen its own, and a credential that grants itself scopes is
+not one anybody issued. These require a session token. The agent gets an error
+naming the human command or UI action. Everything else — reading, running,
+setting, recoverable deletion, restoring, creating projects and environments,
+rolling back — an agent may do by default.
 
 The honest caveat: an agent token in the agent's process environment is plaintext
 on that machine. That is inside the threat model (§4). The human's session token,

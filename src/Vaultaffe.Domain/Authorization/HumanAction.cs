@@ -10,9 +10,13 @@ namespace Vaultaffe.Domain.Authorization;
 /// create projects and environments, roll back. The list is deliberately short,
 /// because the product's answer to an agent is attribution and not restriction.
 /// <para>
-/// It is an enum rather than four booleans on a permission object because it is
-/// closed: a fifth human-only action is a change to the specification, and the
-/// compiler should say so at every place that switches on this.
+/// It is an enum rather than a handful of booleans on a permission object because
+/// it is closed: another human-only action is a change to the specification, and
+/// the compiler should say so at every place that switches on this. Three of the
+/// seven are a token's whole lifecycle after it exists — <see cref="RevokeToken"/>,
+/// <see cref="ChangeToken"/> and <see cref="PurgeToken"/> — because §6.4's
+/// clause about creating and revoking is really about who holds the pen on a
+/// credential, and renaming is the only part of that a holder could not abuse.
 /// </para>
 /// </remarks>
 public enum HumanAction
@@ -52,6 +56,21 @@ public enum HumanAction
     /// a secret, all of them at once.
     /// </summary>
     Export = 5,
+
+    /// <summary>
+    /// Changing a token: what it is called, what it may do, how far it reaches. It
+    /// is here for the mirror image of the reason revoking is — an agent that could
+    /// widen a token could widen its own, and a credential that grants itself
+    /// scopes is not one anybody issued.
+    /// </summary>
+    ChangeToken = 6,
+
+    /// <summary>
+    /// Removing a revoked token's row for good. <see cref="Purge"/> pointed at a
+    /// credential rather than at the vault, and human-only for the same reason:
+    /// it is the one removal this product cannot undo.
+    /// </summary>
+    PurgeToken = 7,
 }
 
 /// <summary>
@@ -75,6 +94,8 @@ public static class HumanActions
         HumanAction.RevokeToken => "revoke-token",
         HumanAction.AdministerOrganization => "administer-organization",
         HumanAction.Export => "export",
+        HumanAction.ChangeToken => "change-token",
+        HumanAction.PurgeToken => "purge-token",
         _ => throw new ArgumentOutOfRangeException(
             nameof(action), action, "A human-only action without a name."),
     };
@@ -103,6 +124,14 @@ public static class HumanActions
             "Exporting is reserved for a person: it writes every value of an environment in "
             + "plaintext at once. Read the one value you need instead, or hand the export to a "
             + "human, who does it under their own session.",
+        HumanAction.ChangeToken =>
+            "Changing a token is reserved for a person: what a credential may do and how far it "
+            + "reaches is a person's to widen, never its holder's. Hand it to a human, who does "
+            + "it under their own session.",
+        HumanAction.PurgeToken =>
+            "Removing a revoked token for good is reserved for a person: it is the one removal "
+            + "this product cannot undo. Hand it to a human, who does it under their own "
+            + "session.",
         _ => throw new ArgumentOutOfRangeException(
             nameof(action), action, "A human-only action without a refusal."),
     };

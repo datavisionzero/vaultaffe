@@ -197,6 +197,25 @@ public sealed class IdentityStore(VaultaffeDbContext context) : IIdentityStore
             .Include(token => token.Bindings)
             .FirstOrDefaultAsync(token => token.Id == id, cancellationToken);
 
+    public void Add(TokenBinding binding) => context.Add(binding);
+
+    public void Add(EnrollmentBinding binding) => context.Add(binding);
+
+    public void Remove(TokenBinding binding) => context.Remove(binding);
+
+    /// <summary>
+    /// Remove one. The bindings go with it through
+    /// <c>fk_token_binding_token</c>'s cascade, and nothing else points here: the
+    /// change log names its identities rather than keying them, precisely so that
+    /// a row can go without taking history with it.
+    /// </summary>
+    public async Task RemoveTokenAsync(Token token, CancellationToken cancellationToken)
+    {
+        context.Remove(token);
+
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
     /// <summary>
     /// Begin a login. Past the filter, because the request that starts one
     /// carries nothing that could have been authenticated.
@@ -217,6 +236,7 @@ public sealed class IdentityStore(VaultaffeDbContext context) : IIdentityStore
         string userCode, CancellationToken cancellationToken) =>
         context.DeviceAuthorizations
             .IgnoreQueryFilters()
+            .Include(authorization => authorization.ApprovedBindings)
             .FirstOrDefaultAsync(
                 authorization => authorization.UserCode == userCode, cancellationToken);
 
@@ -230,6 +250,7 @@ public sealed class IdentityStore(VaultaffeDbContext context) : IIdentityStore
     {
         var authorization = await context.DeviceAuthorizations
             .IgnoreQueryFilters()
+            .Include(candidate => candidate.ApprovedBindings)
             .FirstOrDefaultAsync(
                 candidate => candidate.DeviceCodeHash == deviceCodeHash, cancellationToken);
 

@@ -1,5 +1,5 @@
 import { PlusIcon } from "lucide-react";
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { answered, api, describe, type Project, type Token } from "@/api/client";
 import { useAsk } from "@/api/useAsk";
 import { Button } from "@/components/ui/button";
@@ -14,28 +14,12 @@ import {
 import { useSession } from "@/session/useSession";
 import { ActionDialog } from "@/shared/ActionDialog";
 import { Copyable } from "@/shared/Copyable";
-import { Field, Refusal } from "@/shared/Form";
+import { Refusal } from "@/shared/Form";
 import { around, when } from "@/shared/moments";
 import { Rows } from "@/shared/Rows";
+import { Choice, TokenFields } from "./TokenFields";
+import { bindingsOf, draftOf, scopes, type Draft } from "./tokenDraft";
 
-/** The four scopes, in the order the specification declares them. */
-const scopes = ["names", "read", "write", "delete"] as const;
-
-type Scope = (typeof scopes)[number];
-
-/**
- * What each scope is, said where a person is choosing one rather than in a
- * document they would have to go and find.
- */
-const whatScopeIs: Record<Scope, string> = {
-  names: "See which keys exist and which are still empty. Never a value.",
-  read: "Read one value at a time.",
-  write: "Write values, create keys and placeholders, roll one back.",
-  delete: "Delete a secret, an environment or a project — recoverably — and restore one.",
-};
-
-/** The environments a token bound to nothing but production would not reach. */
-const production = ["prod", "production"];
 
 /**
  * `/settings/tokens` — the organization's tokens with kind, name, scopes,
@@ -53,7 +37,7 @@ const production = ["prod", "production"];
  * the screen. Creating belongs to the first list for the same reason: this screen
  * issues an agent or a service token and never a session.
  *
- * **Creating and revoking are a person's** and the instance says so: a token is
+ * **Everything but listing is a person's** and the instance says so: a token is
  * itself a secret, and one an agent created through the CLI would be printed to
  * its own stdout and into its context
  * ([Specification §6.1](../../../../Specification.md#61-web-ui)). Listing is not
@@ -63,6 +47,15 @@ const production = ["prod", "production"];
  * because the point is attribution and not restriction, and the first narrowing
  * offered is keeping it out of production
  * ([§6.4](../../../../Specification.md#64-permissions-in-the-mvp)).
+ *
+ * **A row has three acts, and they are three because the value is the thing that
+ * cannot change.** Changing arranges a name, a scope set and a reach without
+ * touching the value, so whatever holds the token keeps working — this is the
+ * screen's answer to a credential that has to reach one more project, and it is
+ * why nobody has to go round every machine holding it. Revoking stops the value
+ * and leaves the row. Deleting takes the row, and only a revoked one is offered
+ * it: a revocation list that let something vanish while it still worked would be
+ * the one list nobody could trust.
  */
 export function Tokens() {
   const [tokens, again] = useAsk<Token[]>("tokens", () => api.GET("/api/v1/tokens"));
@@ -250,6 +243,16 @@ function Row({
         </p>
       </div>
 
+      {/*
+        Changing is offered on a token that still works and is not a session. A
+        session has no name and its reach is a person's, so there is nothing here
+        to arrange; a revoked or expired one authenticates nothing, and widening
+        what a dead credential may do would be a control that does nothing.
+      */}
+      {standing === "in use" && token.kind !== "session" && (
+        <ChangeToken token={token} catalogue={catalogue} onChanged={onChanged} />
+      )}
+
       {token.revokedAt === null && (
         <ActionDialog
           trigger={
@@ -267,6 +270,45 @@ function Row({
           onConfirm={async () => {
             await answered(
               api.DELETE("/api/v1/tokens/{id}", { params: { path: { id: token.id } } }),
+            );
+
+            onChanged();
+          }}
+        />
+      )}
+
+      {/*
+        And removing the row for good, which only a revoked one is offered. That
+        order is the whole rule: a revocation stands until somebody deliberately
+        takes it off the list, so nothing disappears from here while it still
+        works, and a list of revocations is only honest for as long as it keeps
+        them.
+      */}
+      {token.revokedAt !== null && (
+        <ActionDialog
+          trigger={
+            <Button variant="ghost" size="sm">
+              Delete
+            </Button>
+          }
+          title={`Delete ${token.name ?? "this revoked session"} for good?`}
+          description={
+            <>
+              <span className="block">
+                It is revoked already, so nothing stops working. What goes is the row: it leaves
+                this list, and no listing here mentions it again.
+              </span>
+              <span className="mt-2 block font-medium text-foreground">
+                The change log keeps everything it did. Entries name the identity that made them
+                rather than pointing at this row, which is exactly so that the row can go without
+                taking the history with it.
+              </span>
+            </>
+          }
+          confirmLabel="Delete for good"
+          onConfirm={async () => {
+            await answered(
+              api.POST("/api/v1/tokens/{id}/purge", { params: { path: { id: token.id } } }),
             );
 
             onChanged();
@@ -294,41 +336,23 @@ function named(catalogue: Project[], binding: { projectId: string; environmentId
   return `${project.name}/${environment?.name ?? "an environment"}`;
 }
 
-type Reach = "organization" | "not-production" | "picked";
 
 function NewToken({ catalogue, onCreated }: { catalogue: Project[]; onCreated: () => void }) {
+  const empty: Draft = { name: "", scopes: [...scopes], reach: "organization", picked: [] };
+
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<"agent" | "service">("agent");
-  const [name, setName] = useState("");
-  const [chosen, setChosen] = useState<Scope[]>([...scopes]);
-  const [reach, setReach] = useState<Reach>("organization");
-  const [picked, setPicked] = useState<string[]>([]);
+  const [draft, setDraft] = useState<Draft>(empty);
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<string>();
   const [value, setValue] = useState<string>();
-
-  // What "everything except production" actually binds to: every environment
-  // that is not called prod. Shown rather than implied, because an inclusive
-  // binding made out of an exclusion is worth seeing before it is issued.
-  const away = useMemo(
-    () =>
-      catalogue.flatMap((project) =>
-        project.environments
-          .filter((environment) => !production.includes(environment.name))
-          .map((environment) => environment.id),
-      ),
-    [catalogue],
-  );
 
   function change(next: boolean) {
     setOpen(next);
 
     if (!next) {
       setKind("agent");
-      setName("");
-      setChosen([...scopes]);
-      setReach("organization");
-      setPicked([]);
+      setDraft(empty);
       setRefusal(undefined);
       setValue(undefined);
     }
@@ -338,17 +362,10 @@ function NewToken({ catalogue, onCreated }: { catalogue: Project[]; onCreated: (
     setKind(next);
     // The default of that kind, as the instance would apply it: everything for
     // an agent, names and read for a service.
-    setChosen(next === "agent" ? [...scopes] : ["names", "read"]);
-  }
-
-  function bindings(): { projectId: string; environmentId: string | null }[] {
-    const ids = reach === "not-production" ? away : reach === "picked" ? picked : [];
-
-    return catalogue.flatMap((project) =>
-      project.environments
-        .filter((environment) => ids.includes(environment.id))
-        .map((environment) => ({ projectId: project.id, environmentId: environment.id })),
-    );
+    setDraft((current) => ({
+      ...current,
+      scopes: next === "agent" ? [...scopes] : ["names", "read"],
+    }));
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -358,7 +375,12 @@ function NewToken({ catalogue, onCreated }: { catalogue: Project[]; onCreated: (
 
     try {
       const { data, error, response } = await api.POST("/api/v1/tokens", {
-        body: { kind, name, scopes: chosen, bindings: bindings() },
+        body: {
+          kind,
+          name: draft.name,
+          scopes: draft.scopes,
+          bindings: bindingsOf(catalogue, draft),
+        },
       });
 
       if (data === undefined) {
@@ -410,108 +432,12 @@ function NewToken({ catalogue, onCreated }: { catalogue: Project[]; onCreated: (
                 />
               </fieldset>
 
-              <Field
-                label="Name"
-                required
-                maxLength={100}
-                value={name}
-                onChange={(event) => setName(event.target.value)}
+              <TokenFields
+                catalogue={catalogue}
+                draft={draft}
+                change={(part) => setDraft((current) => ({ ...current, ...part }))}
                 hint="What a revocation list will call it, months from now."
               />
-
-              <fieldset className="grid gap-2">
-                <legend className="text-sm font-medium">Scopes</legend>
-                {scopes.map((scope) => (
-                  <label key={scope} className="flex items-start gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      name={`scope-${scope}`}
-                      className="mt-0.5 size-4 accent-primary"
-                      checked={chosen.includes(scope)}
-                      onChange={(event) =>
-                        setChosen((current) =>
-                          event.target.checked
-                            ? [...scopes].filter((one) => current.includes(one) || one === scope)
-                            : current.filter((one) => one !== scope),
-                        )
-                      }
-                    />
-                    <span>
-                      <span className="font-mono">{scope}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        {whatScopeIs[scope]}
-                      </span>
-                    </span>
-                  </label>
-                ))}
-              </fieldset>
-
-              <fieldset className="grid gap-2">
-                <legend className="text-sm font-medium">What it reaches</legend>
-                <Choice
-                  name="reach"
-                  checked={reach === "organization"}
-                  onChange={() => setReach("organization")}
-                  label="The whole organization"
-                  what="The default for an agent token: the point is attribution, not restriction."
-                />
-                <Choice
-                  name="reach"
-                  checked={reach === "not-production"}
-                  onChange={() => setReach("not-production")}
-                  label="Everything except production"
-                  what={
-                    away.length === 0
-                      ? "There is nothing outside production to bind to yet."
-                      : `Binds it to ${away.length} environments — every one not called prod or production.`
-                  }
-                />
-                <Choice
-                  name="reach"
-                  checked={reach === "picked"}
-                  onChange={() => setReach("picked")}
-                  label="Only what I pick"
-                  what="One project, one environment, or any set of them."
-                />
-
-                {reach === "picked" && (
-                  <div className="grid gap-2 rounded-lg border p-2">
-                    {catalogue.length === 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        There are no projects to bind to yet.
-                      </p>
-                    )}
-                    {catalogue.map((project) => (
-                      <div key={project.id}>
-                        <p className="font-mono text-xs text-muted-foreground">{project.name}</p>
-                        <div className="flex flex-wrap gap-x-4">
-                          {project.environments.map((environment) => (
-                            <label
-                              key={environment.id}
-                              className="flex items-center gap-1.5 text-sm"
-                            >
-                              <input
-                                type="checkbox"
-                                name={`environment-${environment.id}`}
-                                className="size-3.5 accent-primary"
-                                checked={picked.includes(environment.id)}
-                                onChange={(event) =>
-                                  setPicked((current) =>
-                                    event.target.checked
-                                      ? [...current, environment.id]
-                                      : current.filter((one) => one !== environment.id),
-                                  )
-                                }
-                              />
-                              <span className="font-mono text-xs">{environment.name}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </fieldset>
 
               {refusal !== undefined && <Refusal>{refusal}</Refusal>}
 
@@ -519,7 +445,10 @@ function NewToken({ catalogue, onCreated }: { catalogue: Project[]; onCreated: (
                 <Button variant="outline" disabled={busy} onClick={() => change(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={busy || name.trim() === "" || chosen.length === 0}>
+                <Button
+                  type="submit"
+                  disabled={busy || draft.name.trim() === "" || draft.scopes.length === 0}
+                >
                   {busy ? "Creating…" : "Create the token"}
                 </Button>
               </DialogFooter>
@@ -527,7 +456,7 @@ function NewToken({ catalogue, onCreated }: { catalogue: Project[]; onCreated: (
           ) : (
             <div className="grid gap-4">
               <DialogHeader>
-                <DialogTitle>The value of {name}</DialogTitle>
+                <DialogTitle>The value of {draft.name}</DialogTitle>
                 <DialogDescription>
                   <strong>This is the once.</strong> The instance stores a hash of it and can never
                   show it again. Copy it into wherever it is meant to live — an agent's environment
@@ -551,33 +480,116 @@ function NewToken({ catalogue, onCreated }: { catalogue: Project[]; onCreated: (
   );
 }
 
-/** One of a set of choices, with what it means under it rather than beside it. */
-function Choice({
-  name,
-  checked,
-  onChange,
-  label,
-  what,
+/**
+ * Changing one that already exists: its name, what it may do, and how far it
+ * reaches.
+ *
+ * **The value is untouched**, and the dialog says so, because that is the whole
+ * point of the act. Nothing holding this token has to be told anything: the
+ * agent keeps running, the pipeline keeps deploying, and what changed is what
+ * the instance lets the same string through for. The alternative this replaces —
+ * issue a second token, go round every machine that holds the first, revoke it —
+ * is how a credential ends up copied into more places than anybody can list.
+ *
+ * The kind is not here. A service token that became an agent token would be a
+ * different identity in the change log with the same history behind it, and
+ * nothing about "attribution, not restriction" survives that
+ * ([§6.4](../../../../Specification.md#64-permissions-in-the-mvp)). Neither is
+ * the expiry: what runs out is what a person agreed to when they issued it.
+ */
+function ChangeToken({
+  token,
+  catalogue,
+  onChanged,
 }: {
-  name: string;
-  checked: boolean;
-  onChange: () => void;
-  label: string;
-  what: string;
+  token: Token;
+  catalogue: Project[];
+  onChanged: () => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<Draft>(() => draftOf(token));
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string>();
+
+  function change(next: boolean) {
+    setOpen(next);
+
+    // Opening reads the token again rather than trusting what the last cancelled
+    // edit left behind: the list is re-asked after every act on this screen, and
+    // a dialog that opened on a stale draft would save yesterday's answer.
+    if (next) {
+      setDraft(draftOf(token));
+      setRefusal(undefined);
+    }
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setRefusal(undefined);
+
+    try {
+      const { data, error, response } = await api.PATCH("/api/v1/tokens/{id}", {
+        params: { path: { id: token.id } },
+        body: {
+          name: draft.name,
+          scopes: draft.scopes,
+          bindings: bindingsOf(catalogue, draft),
+        },
+      });
+
+      if (data === undefined) {
+        setRefusal(describe(error, response.status));
+        return;
+      }
+
+      onChanged();
+      setOpen(false);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <label className="flex items-start gap-2 text-sm">
-      <input
-        type="radio"
-        name={name}
-        className="mt-0.5 size-4 accent-primary"
-        checked={checked}
-        onChange={onChange}
-      />
-      <span>
-        {label}
-        <span className="block text-xs text-muted-foreground">{what}</span>
-      </span>
-    </label>
+    <>
+      <Button variant="ghost" size="sm" onClick={() => change(true)}>
+        Change
+      </Button>
+
+      <Dialog open={open} onOpenChange={change}>
+        <DialogContent className="max-h-[85svh] overflow-y-auto sm:max-w-lg">
+          <form className="grid gap-4" onSubmit={(event) => void submit(event)}>
+            <DialogHeader>
+              <DialogTitle>{token.name ?? "This token"}</DialogTitle>
+              <DialogDescription>
+                Its value does not change and is not shown again. Whatever is holding this token
+                keeps working; what changes is what this instance lets it do.
+              </DialogDescription>
+            </DialogHeader>
+
+            <TokenFields
+              catalogue={catalogue}
+              draft={draft}
+              change={(part) => setDraft((current) => ({ ...current, ...part }))}
+              hint="What a revocation list will call it, months from now. Renaming changes nothing else."
+            />
+
+            {refusal !== undefined && <Refusal>{refusal}</Refusal>}
+
+            <DialogFooter>
+              <Button variant="outline" disabled={busy} onClick={() => change(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={busy || draft.name.trim() === "" || draft.scopes.length === 0}
+              >
+                {busy ? "Saving…" : "Save the change"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

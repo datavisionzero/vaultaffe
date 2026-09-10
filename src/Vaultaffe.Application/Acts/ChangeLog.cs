@@ -1,5 +1,6 @@
 using Vaultaffe.Application.Ports;
 using Vaultaffe.Domain.History;
+using Vaultaffe.Domain.Identities;
 
 namespace Vaultaffe.Application.Acts;
 
@@ -52,6 +53,32 @@ public sealed class ChangeLog(
     /// records the new one because the old one is in the entry before it, and
     /// there has to <b>be</b> an entry before it.
     /// </remarks>
+    /// <summary>
+    /// The same entry under a person who is not the caller of this request.
+    /// </summary>
+    /// <remarks>
+    /// One act needs it: an enrollment's token is collected by the machine that
+    /// asked for it, on a request nothing authenticated, and the change worth
+    /// recording is the person agreeing to it minutes earlier
+    /// (<c>docs/adr/0021-an-agent-asks-for-its-own-token.md</c>). Recorded under
+    /// the token being collected it would read as a machine handing itself a key,
+    /// which is the one thing the identity type exists to stop this log saying
+    /// (§6.4).
+    /// </remarks>
+    public void RecordByPerson(User person, ChangeAction action, string? about = null) =>
+        entries.Add(new ChangeLogEntry(
+            Guid.NewGuid(),
+            person.OrganizationId,
+            clock.GetUtcNow(),
+            person.Id,
+            IdentityType.HumanSession,
+            person.Name,
+            action,
+            null,
+            null,
+            null,
+            about));
+
     public void RecordBy(
         Caller acting,
         ChangeAction action,

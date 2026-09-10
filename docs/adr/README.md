@@ -51,3 +51,4 @@ material value to understanding the decision.
 - [0018 – There is no offline cache](./0018-there-is-no-offline-cache.md)
 - [0019 – An unclaimed instance holds its own claim secret](./0019-an-unclaimed-instance-holds-its-own-claim-secret.md) — supersedes [0007](./0007-the-first-run-is-unauthenticated-and-happens-once.md)
 - [0020 – One change log, and not two](./0020-one-change-log-and-not-two.md)
+- [0021 – An agent asks for its own token](./0021-an-agent-asks-for-its-own-token.md)

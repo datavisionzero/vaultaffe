@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Changes } from "@/changes/Changes";
+import { Enroll } from "@/enrollment/Enroll";
 import { Environment } from "@/catalogue/Environment";
 import { Project } from "@/catalogue/Project";
 import { Projects } from "@/catalogue/Projects";
@@ -36,6 +37,13 @@ import { settingsPath, views } from "./views";
  * ([ADR 0008](../../../../docs/adr/0008-a-session-is-a-token-and-the-only-page-asks-for-a-password.md)),
  * so it is reached by leaving this application rather than by routing inside
  * it.
+ *
+ * `/enroll` is the opposite and is one, for the same reason turned around: a
+ * machine asking for a token of its own is decided by somebody already signed
+ * in, on a screen that needs the catalogue and the scope form the tokens screen
+ * uses ([ADR 0021](../../../../docs/adr/0021-an-agent-asks-for-its-own-token.md)).
+ * It is outside `/settings` because a person is sent there by a code printed in
+ * a terminal, and what they type into a browser should be short.
  */
 export function Shell() {
   const navigate = useNavigate();
@@ -119,6 +127,7 @@ export function Shell() {
           <Route path="/projects/:project/:environment" element={<Environment />} />
           <Route path="/projects/:project/:environment/:name" element={<Secret />} />
           <Route path="/changes" element={<Changes />} />
+          <Route path="/enroll" element={<Enroll />} />
 
           {/* The settings area, screen by screen rather than by looping over
               the list: each of these was replaced whole by the one it names. */}

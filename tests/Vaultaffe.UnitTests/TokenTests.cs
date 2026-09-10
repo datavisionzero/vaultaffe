@@ -87,6 +87,48 @@ public sealed class TokenTests
     }
 
     /// <summary>
+    /// What a token is called, what it may do and how far it reaches can all
+    /// change; the value cannot. That asymmetry is the whole reason changing one
+    /// is worth having — whatever is holding the token keeps working, because the
+    /// string it authenticates with is untouched.
+    /// </summary>
+    [Fact]
+    public void Everything_but_the_value_can_change()
+    {
+        var token = AToken(TokenKind.Agent, Scopes.Names);
+        var hash = token.ValueHash;
+
+        token.RenameTo("the agent on the webshop");
+        token.ChangeScopesTo(Scopes.Names | Scopes.Read);
+
+        Assert.Equal("the agent on the webshop", token.Name);
+        Assert.Equal(Scopes.Names | Scopes.Read, token.Scopes);
+        Assert.Same(hash, token.ValueHash);
+    }
+
+    /// <summary>
+    /// A reach is laid down again rather than added to, and what was there is
+    /// handed back: the rows a change removed are the ones somebody else has to
+    /// be told about, and an aggregate that only cleared its own list would leave
+    /// nobody able to say which those were.
+    /// </summary>
+    [Fact]
+    public void Unbinding_hands_back_what_it_took_off()
+    {
+        var token = AToken(TokenKind.Service, Scopes.ServiceDefault);
+        var project = Guid.NewGuid();
+
+        var first = token.BindTo(Guid.NewGuid(), project);
+
+        Assert.False(token.ReachesTheWholeOrganization);
+
+        var were = token.Unbind();
+
+        Assert.Equal([first], were);
+        Assert.True(token.ReachesTheWholeOrganization);
+    }
+
+    /// <summary>
     /// All three kinds exist from day one, even though at first only attribution
     /// tells them apart: a token kind is not added later without a migration
     /// (Specification §5).

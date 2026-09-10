@@ -64,7 +64,8 @@ vaultaffe secrets purge-history  remove what a key used to hold — a person onl
 
 vaultaffe projects               the catalogue: list, create, delete, restore, purge
 vaultaffe environments           the environments of a project: the same five
-vaultaffe tokens                 list; create and revoke, which are a person's alone
+vaultaffe tokens                 list; create, change, revoke and purge — all but the list a person's alone
+vaultaffe enroll                 ask a person for a token of this machine's own
 
 vaultaffe users                  the people of the organization — an administrator only
 vaultaffe users invite           write an invitation and print its link, once
@@ -343,7 +344,11 @@ not recreate it".
 vaultaffe tokens                                       # id, kind, name, scopes, standing
 vaultaffe tokens create "the deploy agent" --kind agent
 vaultaffe tokens create "ci" --kind service --project billing --environment prod --scopes names,read
+vaultaffe tokens change <id> --name "the agent on the webshop"
+vaultaffe tokens change <id> --scopes names,read --project billing
+vaultaffe tokens change <id> --organization           # take every binding off
 vaultaffe tokens revoke <id>
+vaultaffe tokens purge <id>                           # a revoked one, for good
 ```
 
 **The listing is two lists and not one**, the way the console shows them. What
@@ -362,10 +367,12 @@ the listing was ever divided. `--json` is the instance's own answer, ungrouped
 and in its order — whoever reads JSON groups it themselves.
 
 **This is how an agent gets a token at all**: a person creates one under their
-own session and hands it over in `VAULTAFFE_TOKEN`. Creating and revoking are
-human-only, because a token is itself a secret and one created under an agent's
-own token would be printed straight into that agent's context. Listing is not:
-a revocation list an agent cannot read is not one.
+own session and hands it over in `VAULTAFFE_TOKEN`. Everything but the listing
+is human-only — creating, because a token is itself a secret and one created
+under an agent's own token would be printed straight into that agent's context;
+changing, because an agent that could widen a token could widen its own;
+revoking and purging, because taking a credential back is a person's act.
+Listing is not: a revocation list an agent cannot read is not one.
 
 **The value is printed exactly once**, by the command that created it, and the
 sentence beside it says so. Scopes omitted mean the default of the kind —
@@ -376,6 +383,60 @@ restriction, and `names` plus `read` for a service token.
 **explicitly**. The directory you happen to be standing in does not silently
 narrow a token, and the names are turned into ids by a lookup, so a mistyped
 environment is answered against the ones that exist.
+
+**`change` does not touch the value**, and that is the whole reason it exists:
+the same string keeps authenticating, so a token that has to reach one more
+project is amended rather than reissued and copied round every machine that
+holds the old one. What is not passed is not changed — `--scopes` replaces the
+set rather than adding to it, and the reach is replaced the same way, with
+`--project` (and optionally `--environment`) or with `--organization`, which
+takes every binding off and is the widest a token gets. The kind and the expiry
+are not here: a service token that became an agent token would be a different
+identity in the change log with the same history behind it.
+
+**`purge` is offered on a revoked token and nothing else.** A purge is the
+second half of a revocation and not a quieter one: a row that vanished while its
+value still worked would be a credential nobody could find and nobody could take
+back. What it removes is the row; the change log keeps everything the token did,
+under its name.
+
+## Asking for a token of this machine's own
+
+```sh
+vaultaffe enroll "claude in ~/webshop"
+vaultaffe enroll "the build runner" --token-file /etc/vaultaffe/runner.token
+```
+
+`login` signs a person in; this asks for a credential of the asking machine's
+own. It is the device-code flow either way — a short code here, a person
+deciding in a browser somewhere else — and what differs is the far end: an agent
+token, with the name, the scopes and the reach that person chose
+([ADR 0021](./adr/0021-an-agent-asks-for-its-own-token.md)).
+
+**The value is never printed.** It goes straight into a file only its owner can
+read, mode `0600`, and this command says where — not to stdout, and not into
+`--json` either. That is the whole point: a token that has been printed has been
+in a terminal, in a scrollback and, where an agent ran the command, in that
+agent's own context. Nothing this command puts on a screen is worth anything to
+somebody reading over your shoulder, which is what makes it safe to run **in
+front of** the agent it is for. The short code needs a person's session to be
+worth anything; the long one never leaves the process that made it.
+
+The name is what the person deciding will see. They can change it, and what they
+settle on is what the token is called from then on. **The file is named after
+what you typed**, not after what they settled on: it has to be known before
+anybody is asked to decide, and it is the one name the person running this
+command already has. `--token-file` says exactly where instead.
+
+**Nothing about this machine's own configuration changes.** `login --token-file`
+records its path in `config.json` because a person chose to keep their session
+there; `enroll` records nothing, deliberately. That entry is a rung of this
+CLI's own token ladder, and an agent's token on it would make every command a
+person runs on this machine act as the agent — the mistake
+[`agents.md`](./agents.md) exists to prevent, in the other direction. The token
+reaches the agent the way an agent's token always does: through
+`VAULTAFFE_TOKEN` in the environment of the process that starts it, which is the
+line this command prints when it is done.
 
 ## The people of the organization, and its name
 

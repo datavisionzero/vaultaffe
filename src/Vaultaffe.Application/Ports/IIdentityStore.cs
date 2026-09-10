@@ -128,6 +128,31 @@ public interface IIdentityStore
     Task<Token?> FindTokenAsync(Guid id, CancellationToken cancellationToken);
 
     /// <summary>
+    /// A binding a token has just taken on, and one it has just dropped. Said
+    /// rather than inferred from the aggregate: a row this act created and a row
+    /// it loaded are told apart here and nowhere else, and a store left to guess
+    /// would sooner or later update a row it should have inserted.
+    /// </summary>
+    void Add(TokenBinding binding);
+
+    /// <inheritdoc cref="Add(TokenBinding)"/>
+    void Remove(TokenBinding binding);
+
+    /// <summary>
+    /// A place a person has agreed an enrollment may reach, while there is still
+    /// no token to hang it on. Said explicitly for the reason above.
+    /// </summary>
+    void Add(EnrollmentBinding binding);
+
+    /// <summary>
+    /// Remove a token's row and write. Only a revoked one ever reaches here: what
+    /// a token signed in the change log keeps its name rather than a key to this
+    /// row (<c>docs/storage.md</c>), so the entries survive the row going, and the
+    /// bindings go with it because a binding records nothing on its own.
+    /// </summary>
+    Task RemoveTokenAsync(Token token, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Begin one. Reaches past the filter, because the request that starts a
     /// login carries nothing that could have been authenticated.
     /// </summary>

@@ -198,6 +198,93 @@ describe("the tokens", () => {
     expect(await screen.findByText("No agent or service token yet.")).toBeInTheDocument();
   });
 
+  // The act that exists because the value cannot change: a token that has to
+  // reach one more project is amended, not reissued and copied round again.
+  it("changes what a token reaches without touching its value", async () => {
+    const { calls } = installInstance({
+      "GET /api/v1/tokens": [theAgent],
+      "GET /api/v1/projects": [landingPage],
+      [`PATCH /api/v1/tokens/${theAgent.id}`]: {
+        ...theAgent,
+        reachesTheWholeOrganization: false,
+        bindings: [{ projectId: landingPage.id, environmentId: null }],
+      },
+    });
+
+    renderUnderShell("/settings/tokens", <Shell />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Change" }));
+
+    const dialog = await screen.findByRole("dialog");
+
+    // It opens on what is true of the token rather than on a blank form.
+    expect(within(dialog).getByLabelText("Name")).toHaveValue("the agent in my terminal");
+    expect(within(dialog).getByLabelText(/The whole organization/)).toBeChecked();
+    expect(within(dialog).getByText(/value does not change/)).toBeInTheDocument();
+
+    await userEvent.click(within(dialog).getByLabelText(/Only what I pick/));
+    await userEvent.click(within(dialog).getByLabelText(/landing-page/));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Save the change" }));
+
+    const changed = calls.find((call) => call.method === "PATCH")!;
+
+    // The whole project, and not a list of the environments it happens to have
+    // today: one added tomorrow is covered, which is what picking a project
+    // means.
+    expect(await changed.clone().json()).toMatchObject({
+      name: "the agent in my terminal",
+      scopes: ["names", "read", "write", "delete"],
+      bindings: [{ projectId: landingPage.id, environmentId: null }],
+    });
+  });
+
+  // A revocation list that let something vanish while it still worked would be
+  // the one list nobody could trust, so the order is fixed: revoke, then delete.
+  it("offers deleting the row only once a token is revoked", async () => {
+    const { calls } = installInstance({
+      "GET /api/v1/tokens": [
+        theAgent,
+        {
+          ...theAgent,
+          id: "0199a000-0000-7000-8000-000000000031",
+          name: "an old one",
+          revokedAt: "2026-09-04T10:00:00+00:00",
+        },
+      ],
+      "GET /api/v1/projects": [landingPage],
+      "POST /api/v1/tokens/0199a000-0000-7000-8000-000000000031/purge": theAgent,
+    });
+
+    renderUnderShell("/settings/tokens", <Shell />);
+
+    const tokens = await screen.findByRole("region", { name: "Tokens" });
+    await within(tokens).findByText("an old one");
+
+    const rows = within(tokens).getAllByRole("listitem");
+    const inUse = rows.find((row) => within(row).queryByText("the agent in my terminal"))!;
+    const revoked = rows.find((row) => within(row).queryByText("an old one"))!;
+
+    // What still works can be changed and revoked, and not deleted.
+    expect(within(inUse).getByRole("button", { name: "Change" })).toBeInTheDocument();
+    expect(within(inUse).getByRole("button", { name: "Revoke" })).toBeInTheDocument();
+    expect(within(inUse).queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+
+    // What is revoked can only go. There is nothing left to arrange about a
+    // credential that authenticates nothing.
+    expect(within(revoked).queryByRole("button", { name: "Change" })).not.toBeInTheDocument();
+    expect(within(revoked).queryByRole("button", { name: "Revoke" })).not.toBeInTheDocument();
+
+    await userEvent.click(within(revoked).getByRole("button", { name: "Delete" }));
+
+    expect(await screen.findByText(/change log keeps everything it did/i)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Delete for good" }));
+
+    expect(
+      calls.some((call) => call.method === "POST" && call.url.endsWith("/purge")),
+    ).toBe(true);
+  });
+
   it("says what revoking the session of this browser would do", async () => {
     installInstance({
       "GET /api/v1/tokens": [{ ...theAgent, id: aPerson.tokenId, kind: "session", name: null }],

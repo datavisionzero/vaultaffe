@@ -12,33 +12,71 @@ because in one of them the obvious thing fails silently in exactly the way that
 matters: everything works, and every change is attributed to a human who did not
 make it.
 
-## The token first
+## The short way: let it ask
 
 ```sh
-vaultaffe tokens create "claude on the billing repo" --kind agent
+vaultaffe enroll "claude on the billing repo"
 ```
 
-A person's own act, under their own session — creating a token is human-only,
-because a token created under an agent's token would be printed straight into
-that agent's context ([`cli.md`](./cli.md)). **The value is printed exactly
-once.**
+It prints a code and waits. A person opens `/enroll` in the browser they are
+already signed in to, sees what asked, chooses what it may do and how far it
+reaches, and agrees. The token then goes straight into a file at mode `0600`, and
+this command says where
+([ADR 0021](./adr/0021-an-agent-asks-for-its-own-token.md)).
 
-An agent token's default binding is the whole organization with every scope: the
-point is attribution, not restriction (§6.4). Narrowing it is flags at creation —
-`--project billing --environment dev`, `--scopes names,read,write` — and leaving
-production out is the first one worth reaching for.
+**Nothing on the screen is a secret**, and that is the point: the value is never
+printed, so this can be run in front of the agent it is for — in its terminal,
+with it watching. The code needs a person's session to be worth anything, and
+the long one the CLI polls with never leaves the process that made it. There is
+nothing to copy, and so nothing to be tempted to paste into a chat.
+
+What the command prints at the end is the one line that hands it over:
+
+```sh
+VAULTAFFE_TOKEN="$(cat ~/.config/vaultaffe/agents/claude-on-the-billing-repo.token)" claude
+```
+
+The name is what the person deciding will read. They can change it, and what
+they settle on is what the token is called from then on. The default is the
+whole organization with every scope, because the point is attribution and not
+restriction (§6.4), and leaving production out is the first narrowing worth
+reaching for.
+
+**`enroll` changes nothing about the machine it runs on.** Your own session
+stays yours: the token it writes is for whatever you are about to start, and it
+reaches it through the environment, not through this CLI's configuration.
+
+## The long way, and when it is the right one
+
+```sh
+vaultaffe tokens create "the deploy job" --kind service --project billing --environment prod
+```
+
+A token created here has its value printed exactly once, and somebody then has
+to carry it. That is the right shape when there is nobody to poll — a CI secret
+store, a deployment's configuration, an image built once and run everywhere —
+and it is also how a token is made when the person and the machine are the same
+person at the same desk.
 
 **The one thing you do not do is give it to the agent.** It goes to the *harness*
 that starts the agent, never into a prompt or a chat: a token pasted into a
 conversation is a token in a transcript, and everything else in this product is
-arranged so that does not happen.
+arranged so that does not happen. `enroll` exists because that rule was a rule
+people had to keep, rather than one the product kept for them.
 
-Where the string then lives on that machine is the operator's decision, and it is
+**A token that turns out too narrow is changed, not replaced.** `vaultaffe
+tokens change <id> --project billing` — or the Change button on the tokens
+screen — rewrites what it may do and how far it reaches while leaving the value
+alone, so the agent holding it keeps working and nothing has to be handed over a
+second time. Every handover is a chance for the string to end up somewhere it
+should not be, and the one you do not do is the one that cannot go wrong.
+
+Where the string lives on that machine is the operator's decision, and it is
 plaintext wherever it is — that caveat is inside the threat model and is not
-worked around here (§6.4). A file at mode `0600` outside the repository, or the
-machine's own keychain read at launch. **Not** a file the repository carries: a
-token in a committed settings file is the `.env` this product exists to remove,
-with a shorter name.
+worked around here (§6.4). A file at mode `0600` outside the repository, which
+is what `enroll` writes, or the machine's own keychain read at launch. **Not** a
+file the repository carries: a token in a committed settings file is the `.env`
+this product exists to remove, with a shorter name.
 
 ## What every harness has to end up doing
 

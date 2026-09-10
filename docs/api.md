@@ -31,7 +31,8 @@ deployment have their own tickets, and this file is kept accurate as each lands.
 /api/v1/me                       who the caller turned out to be
 /api/v1/device/authorizations    beginning a device-code login
 /api/v1/device/tokens            polling one
-/api/v1/tokens                   creating, listing and revoking tokens
+/api/v1/enrollments              a machine asking for a token of its own
+/api/v1/tokens                   creating, listing, changing, revoking and purging tokens
 /api/v1/users                    the people of the organization
 /api/v1/invitations              the links that invite them, and accepting one
 /api/v1/organization             what this organization is called
@@ -245,7 +246,8 @@ the human narrows it: **the point is attribution, not restriction.**
 
 **Human-only actions** are the short list where an agent's mistake could not be
 undone or the output is itself a secret: purging value history or deleted
-objects, creating and revoking tokens, and administering the organization and its
+objects, the whole of a token's life after it is listed — creating, changing,
+revoking and purging one — and administering the organization and its
 users. **Exporting an environment is on the list too.** §6.4 does not enumerate it and
 §6.2 states it directly, and it belongs there for the list's own second reason:
 the output is itself a secret — every value of an environment at once.
@@ -254,7 +256,14 @@ They are refused with `human-only` for every token that is not a session,
 whatever its scopes — being human-only is not a permission a token can be given.
 
 The document carries `humanAction`: one of `purge`, `create-token`,
-`revoke-token`, `administer-organization`, `export`.
+`change-token`, `revoke-token`, `purge-token`, `administer-organization`,
+`export`.
+
+`change-token` and `purge-token` are their own actions rather than shades of the
+two beside them, because the command a client points a person at is a different
+one and a refusal that named the wrong one would be worse than a refusal that
+named none
+([ADR 0010](./adr/0010-a-refusal-names-the-action-and-the-client-names-the-command.md)).
 
 ```json
 {
@@ -281,16 +290,23 @@ names, so that half is asked by the act, through the same object.
 
 ### Tokens
 
+```
+POST   /api/v1/tokens              create a service or an agent token
+GET    /api/v1/tokens              every token of the organization, newest first
+PATCH  /api/v1/tokens/{id}         rename it, or change what it may do and reach
+DELETE /api/v1/tokens/{id}         revoke it
+POST   /api/v1/tokens/{id}/purge   remove a revoked one's row for good
+```
+
 `POST /api/v1/tokens` creates a `service` or an `agent` token — a session comes
 from signing in, not from being created. `GET /api/v1/tokens` lists every token of
 the organization, newest first, revoked ones included and sessions among them.
-`DELETE /api/v1/tokens/{id}` revokes one.
 
-**The value is in the answer that created it and in no listing, ever.** Creating
-and revoking are human-only: a token is itself a secret, and one an agent created
-through the CLI would be printed to stdout and thus into its own context
-([§6.1](../Specification.md#61-web-ui)). Listing is not — a revocation list an
-agent cannot read is not one.
+**The value is in the answer that created it and in no listing, ever.**
+Everything but listing is human-only: a token is itself a secret, and one an
+agent created through the CLI would be printed to stdout and thus into its own
+context ([§6.1](../Specification.md#61-web-ui)). Listing is not — a revocation
+list an agent cannot read is not one.
 
 Scopes travel as words — `["names", "read", "write", "delete"]` — and not as the
 integer of flags the column holds, so that a client never has to know which bits
@@ -298,6 +314,97 @@ those are. Omitting them means the default of that kind: **everything** for an
 agent token, because the point is attribution and not restriction
 ([§6.4](../Specification.md#64-permissions-in-the-mvp)), and `names` plus `read`
 for a service token. Bindings omitted or empty mean the whole organization.
+
+#### Changing one
+
+`PATCH /api/v1/tokens/{id}` takes `name`, `scopes` and `bindings`, all optional,
+and **the value is not among them**. It cannot be: the instance keeps a hash and
+nothing can ask it for the string again. That is what the endpoint is for —
+whatever holds this token keeps working, and only what the instance lets it
+through for has changed. The alternative it replaces is issuing a second
+credential and visiting every machine that holds the first.
+
+**Omitted is unchanged.** The reach is the one field where an empty list says
+something of its own: `[]` asks for the whole organization, and omitting
+`bindings` leaves the binding alone. At creation the two are the same thing,
+because there is nothing there to leave alone.
+
+A **session** is refused, as validation and not as nothing found: it is what a
+sign-in left behind rather than something anybody named or bound, and the way to
+be rid of one is to revoke it. So is a **revoked** token — arranging the reach
+of something that reaches nothing. Neither the kind nor the expiry can be
+changed: a service token that became an agent token would be a different
+identity in the change log with the same history behind it, and what runs out is
+what a person agreed to when they issued it.
+
+#### Revoking and purging
+
+`DELETE /api/v1/tokens/{id}` revokes one. The row stays, revoked rather than
+deleted, so that everything it ever signed in the change log keeps an author.
+
+`POST /api/v1/tokens/{id}/purge` removes that row for good, and **only a revoked
+one**: a purge is the second half of a revocation and not a quieter one, because
+a row that vanished while its value still worked would be a credential nobody
+could find and nobody could take back. A token still in use is refused as
+validation, in the same words a project still in use is.
+
+The answer is the row as it last was — the only place it exists from here on —
+and it carries no value, the way no listing ever has. **The change log keeps
+everything the token did**: it records identities by name and holds no key to
+this row, which is exactly what lets the row go without taking the history with
+it (`storage.md`). The purge itself is one more entry, under the name that has
+just stopped belonging to anything.
+
+### A machine asking for one of its own
+
+```
+POST /api/v1/enrollments                   ask: a short code for a person, a long one for the client
+POST /api/v1/enrollments/tokens            poll: the token once a person has agreed
+GET  /api/v1/enrollments/{code}            what is being asked — a session
+POST /api/v1/enrollments/{code}/approval   agree, and say what it may do — human-only
+POST /api/v1/enrollments/{code}/refusal    say no — a session
+```
+
+The device-code flow of `/device`, ending in an **agent token** rather than in a
+person's session
+([ADR 0021](./adr/0021-an-agent-asks-for-its-own-token.md)). One table and one
+protocol carry both; what differs is the far end.
+
+**The value never crosses a person.** It is answered to the poll of the machine
+that asked, and to nothing else: not to the screen where somebody agreed, and so
+not to a terminal, a scrollback or a transcript. That is what this exists for —
+`POST /api/v1/tokens` prints a value that then has to be carried by hand, and
+the carrying is where it ends up somewhere it should not be.
+
+Beginning and collecting carry **no token**, by definition: the whole flow turns
+no credential into one. What stands in for authentication is a person, signed in
+on some other machine, agreeing within the ten minutes a code lives for.
+
+**Agreeing is human-only with `create-token`** — the same action and not a new
+one, because what comes out of an approval is a token, and an agent that could
+agree to one for itself would be a credential nobody issued. Reading and
+refusing need only a session: somebody who may not decide what a machine can do
+should still be able to see what is being asked and say no.
+
+`name` on the ask is what the client calls itself. **It is a claim and the
+instance says so**: nothing can check that a machine calling itself an agent on
+somebody's laptop is one, and `/enroll` shows it as what was asked rather than
+as a fact. The approval takes a `name` of its own, and what the person settles
+on is what the token is called from then on; omitting it keeps what was asked.
+`scopes` and `bindings` are the token's, spelled exactly as they are at
+creation, and omitting them means the default of an agent token: everything, and
+the whole organization.
+
+The poll answers the same four codes a login's does — `device-pending` while
+nobody has decided, then `device-denied`, `device-expired`, and `device-expired`
+again once the token has been collected, because **a device code works once**. A
+code issued for a login is not an enrollment and is answered `not-found` here,
+which is also the only answer that does not tell whoever asked which codes
+exist.
+
+The token that comes out is recorded in the change log as `token-created`, under
+**the person who agreed** rather than under the token being collected: a person
+handed a machine a key, and the collection is the machine picking it up.
 
 ## The people of the organization
 
@@ -597,7 +704,7 @@ its subject in `about` instead
 
 `joined`, `invited`, `invitation-withdrawn`, `password-set`, `email-changed`,
 `deactivated`, `reactivated`, `person-renamed`, `organization-renamed`,
-`token-created`, `token-revoked`.
+`token-created`, `token-changed`, `token-revoked`, `token-purged`.
 
 **`about` is an identifier and never a credential.** An address, a token's name,
 the organization's new name — never a password, never a token value, never the

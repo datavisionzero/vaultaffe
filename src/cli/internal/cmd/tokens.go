@@ -22,8 +22,11 @@ func newTokens(g *globals) *cobra.Command {
 		Aliases: []string{"token"},
 		Short:   "The tokens of this organization. Never their values.",
 		Long: "Listing is not human-only: a revocation list an agent cannot read is not\n" +
-			"one. Creating and revoking are, because a token is itself a secret and one\n" +
-			"created through an agent's CLI would be printed into that agent's context.\n\n" +
+			"one. Everything else here is. Creating, because a token is itself a secret\n" +
+			"and one created through an agent's CLI would be printed into that agent's\n" +
+			"context; changing, because an agent that could widen a token could widen\n" +
+			"its own; revoking and purging, because taking a credential back is a\n" +
+			"person's act.\n\n" +
 			"**Two lists and not one**, the way the console shows them. What an agent or\n" +
 			"a service acts under is created deliberately, carries a name and is one of a\n" +
 			"few; a session is what every sign-in leaves behind, has no name, and there\n" +
@@ -68,7 +71,7 @@ func newTokens(g *globals) *cobra.Command {
 				"No session on record.", sessions)
 		},
 	}
-	command.AddCommand(newTokensCreate(g), newTokensRevoke(g))
+	command.AddCommand(newTokensCreate(g), newTokensChange(g), newTokensRevoke(g), newTokensPurge(g))
 	return command
 }
 
@@ -188,6 +191,147 @@ func newTokensRevoke(g *globals) *cobra.Command {
 				return unreadable("a token")
 			}
 			fmt.Fprintf(g.msg(), "%s is revoked and works nowhere from now on.\n",
+				valueOr(resp.JSON200.Name, resp.JSON200.Id.String()))
+			if g.json {
+				return render.JSON(g.out(), resp.JSON200)
+			}
+			return nil
+		},
+	}
+}
+
+func newTokensChange(g *globals) *cobra.Command {
+	var name string
+	var scopes []string
+	var organization bool
+
+	command := &cobra.Command{
+		Use:   "change <id>",
+		Short: "Rename a token, or change what it may do and reach. A person only.",
+		Long: "**The value does not change and is not shown again.** Whatever is holding\n" +
+			"this token keeps working — an agent mid-task, a deployment, a pipeline —\n" +
+			"and what changes is what this instance lets the same string through for.\n" +
+			"That is the whole point of the command: a token that has to reach one more\n" +
+			"project is amended here rather than reissued and copied round every machine\n" +
+			"that holds the old one.\n\n" +
+			"It is human-only for the mirror image of the reason revoking is: an agent\n" +
+			"that could widen a token could widen its own.\n\n" +
+			"What is not passed is not changed. --scopes replaces the set rather than\n" +
+			"adding to it, and the reach is replaced the same way: --project (with\n" +
+			"--environment, or without it for the whole project) binds it there, and\n" +
+			"--organization takes every binding off, which is the widest a token gets.\n" +
+			"Neither the kind nor the expiry is here: a service token that became an\n" +
+			"agent token would be a different identity with the same history behind it,\n" +
+			"and what runs out is what a person agreed to when they issued it.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(command *cobra.Command, args []string) error {
+			id, err := parseID(args[0])
+			if err != nil {
+				return err
+			}
+
+			named := command.Flags().Changed("name")
+			scoped := command.Flags().Changed("scopes")
+			bound := organization || strings.TrimSpace(g.project) != ""
+
+			if !named && !scoped && !bound {
+				return &config.UsageError{Message: "nothing to change: pass --name, --scopes, --project or --organization."}
+			}
+			if organization && strings.TrimSpace(g.project) != "" {
+				return &config.UsageError{Message: "--organization is every project at once: pass it or --project, not both."}
+			}
+			if !organization && strings.TrimSpace(g.project) == "" && strings.TrimSpace(g.environment) != "" {
+				return &config.UsageError{Message: "--environment narrows a binding inside a project: pass --project too."}
+			}
+
+			_, c, err := g.instance()
+			if err != nil {
+				return err
+			}
+
+			var request api.ChangeTokenRequest
+			if named {
+				request.Name = &name
+			}
+			if scoped {
+				request.Scopes = &scopes
+			}
+
+			// The reach is replaced whole or left alone, and never merged: a
+			// flag that added one place to a binding would make the widening a
+			// person is doing depend on what the token already reached, which is
+			// exactly the thing they came here to read off the screen.
+			switch {
+			case organization:
+				request.Bindings = &[]api.Binding{}
+			case strings.TrimSpace(g.project) != "":
+				binding, err := bindingFor(command.Context(), c, g.project, g.environment)
+				if err != nil {
+					return err
+				}
+				request.Bindings = &[]api.Binding{binding}
+			}
+
+			resp, err := c.ChangeTokenWithResponse(command.Context(), id, request)
+			if err != nil {
+				return client.Transport(err)
+			}
+			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
+				return err
+			}
+			if resp.JSON200 == nil {
+				return unreadable("a token")
+			}
+
+			changed := *resp.JSON200
+			fmt.Fprintf(g.msg(), "%s carries %s and reaches %s. Its value is unchanged.\n",
+				valueOr(changed.Name, changed.Id.String()), strings.Join(changed.Scopes, ","), reach(changed))
+
+			if g.json {
+				return render.JSON(g.out(), changed)
+			}
+			return nil
+		},
+	}
+	command.Flags().StringVar(&name, "name", "", "what to call it from now on")
+	command.Flags().StringSliceVar(&scopes, "scopes", nil, "names, read, write, delete; replaces the set")
+	command.Flags().BoolVar(&organization, "organization", false, "take every binding off: the whole organization")
+	return command
+}
+
+func newTokensPurge(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use:   "purge <id>",
+		Short: "Remove a revoked token's row for good. A person only.",
+		Long: "**Only a revoked one.** A purge is the second half of a revocation and not\n" +
+			"a quieter one: a row that vanished while its value still worked would be a\n" +
+			"credential nobody could find and nobody could take back.\n\n" +
+			"The change log keeps everything this token ever did. It records the\n" +
+			"identity by name and holds no key to the row, which is exactly so that the\n" +
+			"row can go without taking the history with it.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(command *cobra.Command, args []string) error {
+			id, err := parseID(args[0])
+			if err != nil {
+				return err
+			}
+
+			_, c, err := g.instance()
+			if err != nil {
+				return err
+			}
+
+			resp, err := c.PurgeTokenWithResponse(command.Context(), id)
+			if err != nil {
+				return client.Transport(err)
+			}
+			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
+				return err
+			}
+			if resp.JSON200 == nil {
+				return unreadable("a token")
+			}
+			fmt.Fprintf(g.msg(), "%s is gone from this list. What it changed keeps its name in the log.\n",
 				valueOr(resp.JSON200.Name, resp.JSON200.Id.String()))
 			if g.json {
 				return render.JSON(g.out(), resp.JSON200)

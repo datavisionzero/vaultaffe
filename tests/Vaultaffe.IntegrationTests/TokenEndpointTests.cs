@@ -5,8 +5,8 @@ using System.Text.Json.Nodes;
 namespace Vaultaffe.IntegrationTests;
 
 /// <summary>
-/// Token management (Specification §6.1, §6.4): create, name, revoke — the value
-/// shown exactly once, and the whole of it human-only.
+/// Token management (Specification §6.1, §6.4): create, name, change, revoke and
+/// purge — the value shown exactly once, and the whole of it human-only.
 /// </summary>
 [Collection(nameof(PostgresCollection))]
 public sealed class TokenEndpointTests(PostgresFixture postgres)
@@ -300,6 +300,349 @@ public sealed class TokenEndpointTests(PostgresFixture postgres)
             $"/api/v1/tokens/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    /// <summary>
+    /// The act that exists because the value cannot change. A token that has to
+    /// reach one more project is amended rather than reissued: the same string
+    /// keeps authenticating, so nothing holding it has to be visited, and what
+    /// changed is what this instance lets it through for.
+    /// </summary>
+    [Fact]
+    public async Task Changing_a_token_widens_it_without_touching_its_value()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        using var human = instance.ClientWith(await instance.StartAsync());
+
+        using var project = await human.PostAsJsonAsync(
+            "/api/v1/projects", new { name = "webshop-api" }, TestContext.Current.CancellationToken);
+
+        project.EnsureSuccessStatusCode();
+
+        var catalogue = JsonNode.Parse(await project.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!;
+
+        using var created = await human.PostAsJsonAsync(
+            "/api/v1/tokens",
+            new { kind = "agent", name = "the agent in this terminal", scopes = new[] { "names" } },
+            TestContext.Current.CancellationToken);
+
+        created.EnsureSuccessStatusCode();
+
+        var issued = JsonNode.Parse(await created.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!;
+
+        var id = issued["token"]!["id"]!.GetValue<string>();
+        var value = issued["value"]!.GetValue<string>();
+
+        using var agent = instance.ClientWith(value);
+
+        using var changed = await human.PatchAsJsonAsync(
+            $"/api/v1/tokens/{id}",
+            new
+            {
+                name = "the agent on the webshop",
+                scopes = new[] { "names", "read" },
+                bindings = new[] { new { projectId = catalogue["id"]!.GetValue<string>() } },
+            },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
+
+        var after = JsonNode.Parse(await changed.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!;
+
+        Assert.Equal("the agent on the webshop", after["name"]!.GetValue<string>());
+        Assert.Equal(
+            ["names", "read"],
+            after["scopes"]!.AsArray().Select(scope => scope!.GetValue<string>()));
+        Assert.False(after["reachesTheWholeOrganization"]!.GetValue<bool>());
+        Assert.Single(after["bindings"]!.AsArray());
+
+        // The value never appears again, not even in the answer that changed
+        // what it may do.
+        Assert.DoesNotContain(
+            "\"value\"",
+            await changed.Content.ReadAsStringAsync(TestContext.Current.CancellationToken),
+            StringComparison.Ordinal);
+
+        // And the same string still authenticates, carrying what it was just
+        // given: nobody had to go round the machines holding it.
+        using var me = await agent.GetAsync("/api/v1/me", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, me.StatusCode);
+
+        var caller = JsonNode.Parse(await me.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!;
+
+        Assert.Equal("the agent on the webshop", caller["tokenName"]!.GetValue<string>());
+        Assert.Equal(
+            ["names", "read"],
+            caller["scopes"]!.AsArray().Select(scope => scope!.GetValue<string>()));
+    }
+
+    /// <summary>
+    /// Omitted is unchanged, which is what makes a rename a rename. The reach is
+    /// the one field where an empty list means something of its own — the whole
+    /// organization — and that only works because omitting it says nothing.
+    /// </summary>
+    [Fact]
+    public async Task Changing_only_the_name_leaves_the_scopes_and_the_reach_alone()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        using var human = instance.ClientWith(await instance.StartAsync());
+
+        var issued = await CreateAsync(human, "service", "ci");
+        var id = issued["token"]!["id"]!.GetValue<string>();
+
+        using var changed = await human.PatchAsJsonAsync(
+            $"/api/v1/tokens/{id}",
+            new { name = "the deploy job" },
+            TestContext.Current.CancellationToken);
+
+        changed.EnsureSuccessStatusCode();
+
+        var after = JsonNode.Parse(await changed.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!;
+
+        Assert.Equal("the deploy job", after["name"]!.GetValue<string>());
+        Assert.Equal(
+            ["names", "read"],
+            after["scopes"]!.AsArray().Select(scope => scope!.GetValue<string>()));
+        Assert.True(after["reachesTheWholeOrganization"]!.GetValue<bool>());
+    }
+
+    /// <summary>
+    /// And back out again. An empty list is the deliberate request for the whole
+    /// organization, which is the one place where "nothing" is an answer rather
+    /// than a silence — omitting the field leaves the reach alone.
+    /// </summary>
+    [Fact]
+    public async Task An_empty_reach_is_the_whole_organization_and_takes_the_bindings_off()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        using var human = instance.ClientWith(await instance.StartAsync());
+
+        using var project = await human.PostAsJsonAsync(
+            "/api/v1/projects", new { name = "webshop-api" }, TestContext.Current.CancellationToken);
+
+        project.EnsureSuccessStatusCode();
+
+        var id = JsonNode.Parse(await project.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!["id"]!.GetValue<string>();
+
+        using var created = await human.PostAsJsonAsync(
+            "/api/v1/tokens",
+            new
+            {
+                kind = "service",
+                name = "ci",
+                bindings = new[] { new { projectId = id } },
+            },
+            TestContext.Current.CancellationToken);
+
+        created.EnsureSuccessStatusCode();
+
+        var bound = JsonNode.Parse(await created.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!["token"]!["id"]!.GetValue<string>();
+
+        using var changed = await human.PatchAsJsonAsync(
+            $"/api/v1/tokens/{bound}",
+            new { bindings = Array.Empty<object>() },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
+
+        var after = JsonNode.Parse(await changed.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!;
+
+        Assert.True(after["reachesTheWholeOrganization"]!.GetValue<bool>());
+        Assert.Empty(after["bindings"]!.AsArray());
+
+        // And it survived the round trip: the rows are gone rather than hidden.
+        using var listed = await human.GetAsync(
+            "/api/v1/tokens", TestContext.Current.CancellationToken);
+
+        var row = JsonNode.Parse(await listed.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!.AsArray()
+            .Single(token => token!["id"]!.GetValue<string>() == bound)!;
+
+        Assert.Empty(row["bindings"]!.AsArray());
+    }
+
+    /// <summary>
+    /// Human-only for the mirror image of the reason revoking is: an agent that
+    /// could widen a token could widen its own.
+    /// </summary>
+    [Fact]
+    public async Task An_agent_may_not_change_a_token()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        using var human = instance.ClientWith(await instance.StartAsync());
+
+        var issued = await CreateAsync(human, "agent", "the agent in this terminal");
+        var id = issued["token"]!["id"]!.GetValue<string>();
+
+        using var agent = instance.ClientWith(issued["value"]!.GetValue<string>());
+
+        using var response = await agent.PatchAsJsonAsync(
+            $"/api/v1/tokens/{id}",
+            new { scopes = new[] { "names", "read", "write", "delete" } },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("human-only", await IdentityTests.CodeOf(response));
+
+        var problem = JsonNode.Parse(await response.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!;
+
+        Assert.Equal("change-token", problem["humanAction"]!.GetValue<string>());
+    }
+
+    /// <summary>
+    /// A session is not a thing anybody named or bound, and a revoked token
+    /// reaches nothing to arrange. Both are refused as validation rather than as
+    /// nothing found: the row is there, and this is not what it is for.
+    /// </summary>
+    [Fact]
+    public async Task A_session_and_a_revoked_token_are_not_changed()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        var session = await instance.StartAsync();
+        using var human = instance.ClientWith(session);
+
+        using var listed = await human.GetAsync(
+            "/api/v1/tokens", TestContext.Current.CancellationToken);
+
+        var mine = JsonNode.Parse(await listed.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!.AsArray()
+            .Single(token => token!["kind"]!.GetValue<string>() == "session")!["id"]!
+            .GetValue<string>();
+
+        using var refusedSession = await human.PatchAsJsonAsync(
+            $"/api/v1/tokens/{mine}",
+            new { name = "my laptop" },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, refusedSession.StatusCode);
+        Assert.Equal("validation", await IdentityTests.CodeOf(refusedSession));
+
+        var issued = await CreateAsync(human, "agent", "the agent in this terminal");
+        var id = issued["token"]!["id"]!.GetValue<string>();
+
+        using var revoked = await human.DeleteAsync(
+            $"/api/v1/tokens/{id}", TestContext.Current.CancellationToken);
+
+        revoked.EnsureSuccessStatusCode();
+
+        using var refusedRevoked = await human.PatchAsJsonAsync(
+            $"/api/v1/tokens/{id}",
+            new { name = "the agent that was" },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, refusedRevoked.StatusCode);
+        Assert.Equal("validation", await IdentityTests.CodeOf(refusedRevoked));
+    }
+
+    /// <summary>
+    /// A purge is the second half of a revocation and not a quieter one: a row
+    /// that vanished while its value still worked would be a credential nobody
+    /// could find and nobody could take back.
+    /// </summary>
+    [Fact]
+    public async Task A_token_that_still_works_is_not_purged()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        using var human = instance.ClientWith(await instance.StartAsync());
+
+        var issued = await CreateAsync(human, "agent", "the agent in this terminal");
+        var id = issued["token"]!["id"]!.GetValue<string>();
+
+        using var response = await human.PostAsync(
+            $"/api/v1/tokens/{id}/purge", null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("validation", await IdentityTests.CodeOf(response));
+    }
+
+    /// <summary>
+    /// And what a purge does: the row goes, and everything the token ever did
+    /// stays in the change log under its name. That is what the log records
+    /// identities by name for — it outlives the rows it talks about.
+    /// </summary>
+    [Fact]
+    public async Task Purging_a_revoked_token_removes_the_row_and_keeps_the_history()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        using var human = instance.ClientWith(await instance.StartAsync());
+
+        var issued = await CreateAsync(human, "agent", "the agent that was");
+        var id = issued["token"]!["id"]!.GetValue<string>();
+
+        using var revoked = await human.DeleteAsync(
+            $"/api/v1/tokens/{id}", TestContext.Current.CancellationToken);
+
+        revoked.EnsureSuccessStatusCode();
+
+        using var purged = await human.PostAsync(
+            $"/api/v1/tokens/{id}/purge", null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, purged.StatusCode);
+
+        // The answer is the row as it last was, because this is the only place it
+        // exists from here on — and it carries no value, the way no listing ever
+        // has.
+        var gone = JsonNode.Parse(await purged.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!;
+
+        Assert.Equal("the agent that was", gone["name"]!.GetValue<string>());
+
+        using var listed = await human.GetAsync(
+            "/api/v1/tokens", TestContext.Current.CancellationToken);
+
+        var tokens = JsonNode.Parse(await listed.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!.AsArray();
+
+        Assert.DoesNotContain(tokens, token => token!["id"]!.GetValue<string>() == id);
+
+        // Created, revoked, purged — three entries under a name that no longer
+        // belongs to any row.
+        using var changes = await human.GetAsync(
+            "/api/v1/changes", TestContext.Current.CancellationToken);
+
+        var entries = JsonNode.Parse(await changes.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!["entries"]!.AsArray()
+            .Where(entry => entry!["about"]?.GetValue<string>() == "the agent that was")
+            .Select(entry => entry!["action"]!.GetValue<string>())
+            .ToList();
+
+        Assert.Equal(
+            ["token-created", "token-purged", "token-revoked"],
+            entries.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task An_agent_may_not_purge_a_token()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        using var human = instance.ClientWith(await instance.StartAsync());
+
+        var issued = await CreateAsync(human, "agent", "the agent in this terminal");
+
+        using var agent = instance.ClientWith(issued["value"]!.GetValue<string>());
+
+        using var response = await agent.PostAsync(
+            $"/api/v1/tokens/{issued["token"]!["id"]!.GetValue<string>()}/purge",
+            null,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("human-only", await IdentityTests.CodeOf(response));
+
+        var problem = JsonNode.Parse(await response.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!;
+
+        Assert.Equal("purge-token", problem["humanAction"]!.GetValue<string>());
     }
 
     private static async Task<JsonNode> CreateAsync(HttpClient client, string kind, string name)

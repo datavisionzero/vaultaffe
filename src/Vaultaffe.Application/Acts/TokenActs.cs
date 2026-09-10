@@ -186,6 +186,183 @@ public sealed class RevokeToken(
 }
 
 /// <summary>
+/// Changing one after it exists: what it is called, what it may do, and how far
+/// it reaches (Specification §6.1).
+/// </summary>
+/// <remarks>
+/// <b>The value is not touched.</b> Nothing holding this token has to be told
+/// anything: the same string keeps authenticating, and what changed is what the
+/// instance lets it through for. That is the whole reason this act is worth
+/// having — a name chosen before the agent existed, or a project that has to be
+/// reached now, would otherwise mean issuing a second credential and going round
+/// every machine that holds the first.
+/// <para>
+/// <b>And it is why it is human-only</b>, declared by the endpoint as
+/// <c>ChangeToken</c>: widening a token hands a wider credential to whoever
+/// already holds that value, without issuing anything and without anybody being
+/// shown a value. An agent that could do this could do it to its own token.
+/// </para>
+/// <para>
+/// Omitted means unchanged, and that is why the reach is a list that may be
+/// empty rather than a flag: <c>null</c> leaves the binding alone, and <c>[]</c>
+/// is the deliberate request for the whole organization. At creation the two are
+/// the same thing, because there is nothing to leave alone.
+/// </para>
+/// </remarks>
+public sealed class ChangeToken(
+    IIdentityStore identities, ICallerIdentity caller, ChangeLog log)
+{
+    public async Task<TokenRow> ExecuteAsync(
+        Guid id,
+        string? name,
+        Scopes? scopes,
+        IReadOnlyList<BindingRequest>? bindings,
+        CancellationToken cancellationToken)
+    {
+        _ = caller.Required;
+
+        var token = await identities.FindTokenAsync(id, cancellationToken)
+            ?? throw Refusal.NotFound("No token by that id.");
+
+        // A session is not a thing anybody named or bound; it is what a sign-in
+        // left behind, and the way to be rid of one is to revoke it. Letting a
+        // person rename a session would put a name in the one list that reads by
+        // when it appeared.
+        if (token.Kind is TokenKind.Session)
+        {
+            throw Refusal.Validation(
+                "id",
+                "A session is not named, scoped or bound by hand: it is what signing in left "
+                + "behind. Revoke it instead.");
+        }
+
+        // Changing a revoked token would be arranging the reach of something that
+        // reaches nothing. Whoever wants it back wants a new one, with a value
+        // they will be shown.
+        if (token.RevokedAt is not null)
+        {
+            throw Refusal.Validation(
+                "id",
+                "That token is revoked and authenticates nothing. Create a new one rather than "
+                + "changing this.");
+        }
+
+        if (name is null && scopes is null && bindings is null)
+        {
+            throw Refusal.Validation(
+                "name", "Nothing was asked for: send a name, a scope set or a reach.");
+        }
+
+        if (name is not null)
+        {
+            var named = name.Trim();
+
+            if (named.Length is 0 or > CreateToken.NameLimit)
+            {
+                throw Refusal.Validation(
+                    "name",
+                    $"A token needs a name of at most {CreateToken.NameLimit} characters, so that "
+                    + "a revocation list is readable.");
+            }
+
+            token.RenameTo(named);
+        }
+
+        if (scopes is not null)
+        {
+            token.ChangeScopesTo(scopes.Value);
+        }
+
+        if (bindings is not null)
+        {
+            // Which rows go and which arrive is said rather than left to be
+            // worked out from the aggregate: a store that had to tell a binding
+            // this act just made from one it loaded a moment ago would be
+            // guessing, and the wrong guess is an update where an insert
+            // belonged.
+            foreach (var was in token.Unbind())
+            {
+                identities.Remove(was);
+            }
+
+            foreach (var binding in bindings)
+            {
+                identities.Add(
+                    token.BindTo(Guid.NewGuid(), binding.ProjectId, binding.EnvironmentId));
+            }
+        }
+
+        // The name it has now, which is the one every entry after this is about —
+        // the old one is in the entry before it, exactly as a renamed project's
+        // is (ADR 0020). Never the value: there is none to record and there never
+        // was after the answer that created it.
+        log.Record(ChangeAction.TokenChanged, about: token.Name);
+
+        await identities.SaveAsync(cancellationToken);
+
+        return CreateToken.Row(token);
+    }
+}
+
+/// <summary>
+/// Removing a revoked token's row for good — <c>Purged</c> pointed at a
+/// credential rather than at the vault.
+/// </summary>
+/// <remarks>
+/// <b>Only a revoked one.</b> A purge is the second half of a revocation and not
+/// a quieter one: a row that vanished while its value still worked would be a
+/// credential nobody could find and nobody could take back. Revoking first is
+/// what makes the list of revocations honest for as long as anybody might look
+/// at it.
+/// <para>
+/// <b>The change log keeps everything this token signed.</b> It records identities
+/// by name and holds no key to this row, which is exactly so that the row can go
+/// without taking the history with it (<c>docs/storage.md</c>) — and the purge
+/// itself is one more entry, under the name that is about to stop existing.
+/// </para>
+/// <para>
+/// <b>Human-only</b>, declared by the endpoint as <c>PurgeToken</c>, for the
+/// reason every purge is: it is the one removal this product cannot undo, and in
+/// an agent's hands a credential list it can prune is anti-forensics.
+/// </para>
+/// </remarks>
+public sealed class PurgeToken(IIdentityStore identities, ICallerIdentity caller, ChangeLog log)
+{
+    public async Task<TokenRow> ExecuteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        _ = caller.Required;
+
+        var token = await identities.FindTokenAsync(id, cancellationToken)
+            ?? throw Refusal.NotFound("No token by that id.");
+
+        if (token.RevokedAt is null)
+        {
+            throw Refusal.Validation(
+                "id",
+                "That token still works. Revoke it first: a purge removes what a revocation left "
+                + "standing, it is not a quieter way of revoking.");
+        }
+
+        // A session has no name, so what went is said by its kind — the same
+        // sentence a revocation writes, for the same reason: this is the last
+        // entry that will ever mention this row.
+        log.Record(
+            ChangeAction.TokenPurged,
+            about: token.Name ?? $"a {Words.For(token.Kind)}");
+
+        // The row as it last was, which is the only place it exists from here on.
+        // Answering with it rather than with nothing is what lets a client say
+        // which token went, and it carries no value: there has been none to carry
+        // since the answer that created it.
+        var row = CreateToken.Row(token);
+
+        await identities.RemoveTokenAsync(token, cancellationToken);
+
+        return row;
+    }
+}
+
+/// <summary>
 /// The word for a token kind, where a sentence needs one. The wire spelling is
 /// the API's business (<c>docs/api.md</c>); this is what goes into a change-log
 /// entry a person reads.

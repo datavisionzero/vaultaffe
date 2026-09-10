@@ -46,6 +46,8 @@ public sealed class VaultaffeDbContext(
 
     public DbSet<DeviceAuthorization> DeviceAuthorizations => Set<DeviceAuthorization>();
 
+    public DbSet<EnrollmentBinding> EnrollmentBindings => Set<EnrollmentBinding>();
+
     public DbSet<Project> Projects => Set<Project>();
 
     public DbSet<Environment> Environments => Set<Environment>();

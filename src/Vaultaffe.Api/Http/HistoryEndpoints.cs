@@ -164,6 +164,8 @@ public static class Recorded
         ChangeAction.OrganizationRenamed => "organization-renamed",
         ChangeAction.TokenCreated => "token-created",
         ChangeAction.TokenRevoked => "token-revoked",
+        ChangeAction.TokenChanged => "token-changed",
+        ChangeAction.TokenPurged => "token-purged",
         _ => throw new ArgumentOutOfRangeException(nameof(action), action, "An action with no name."),
     };
 

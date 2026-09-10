@@ -119,9 +119,49 @@ public sealed class Token : IBelongToAnOrganization
     /// <summary>Whether this token carries every scope in <paramref name="wanted"/>.</summary>
     public bool Allows(Scopes wanted) => Scopes.Includes(wanted);
 
-    /// <summary>Narrow this token to a project, or to one environment of it.</summary>
-    public void BindTo(Guid bindingId, Guid projectId, Guid? environmentId = null) =>
-        _bindings.Add(new TokenBinding(bindingId, OrganizationId, Id, projectId, environmentId));
+    /// <summary>
+    /// Narrow this token to a project, or to one environment of it. The binding
+    /// is handed back as well as kept: a caller changing an existing token has to
+    /// be able to say which row is new, because the ones already there are not.
+    /// </summary>
+    public TokenBinding BindTo(Guid bindingId, Guid projectId, Guid? environmentId = null)
+    {
+        var binding = new TokenBinding(bindingId, OrganizationId, Id, projectId, environmentId);
+
+        _bindings.Add(binding);
+
+        return binding;
+    }
+
+    /// <summary>
+    /// Call it something else. The name is the one part of a credential that can
+    /// change without anything holding it noticing: the value is untouched, so a
+    /// token renamed here keeps working wherever it already is. What it is called
+    /// is what a revocation list reads like months from now, and a name chosen
+    /// before the agent existed should not have to outlive it.
+    /// </summary>
+    public void RenameTo(string name) => Name = name;
+
+    /// <summary>
+    /// What it may do from now on. Widening one hands a wider credential to
+    /// whoever already holds this value without issuing anything, which is why
+    /// this is a person's act and never an agent's (Specification §6.4).
+    /// </summary>
+    public void ChangeScopesTo(Scopes scopes) => Scopes = scopes;
+
+    /// <summary>
+    /// Forget every binding, so that <see cref="BindTo"/> can lay down the reach
+    /// again, and hand back the ones that were there. On its own it widens the
+    /// token to the whole organization, because that is what no bindings means.
+    /// </summary>
+    public IReadOnlyList<TokenBinding> Unbind()
+    {
+        var were = _bindings.ToList();
+
+        _bindings.Clear();
+
+        return were;
+    }
 
     /// <summary>Revoke. Repeating it does not move the moment it happened.</summary>
     public void RevokeAt(DateTimeOffset moment) => RevokedAt ??= moment;

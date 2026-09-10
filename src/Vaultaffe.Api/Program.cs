@@ -82,6 +82,13 @@ builder.Services.AddScoped<RollBackSecret>();
 builder.Services.AddScoped<CreateToken>();
 builder.Services.AddScoped<ListTokens>();
 builder.Services.AddScoped<RevokeToken>();
+builder.Services.AddScoped<ChangeToken>();
+builder.Services.AddScoped<PurgeToken>();
+builder.Services.AddScoped<BeginEnrollment>();
+builder.Services.AddScoped<ReadEnrollment>();
+builder.Services.AddScoped<ApproveEnrollment>();
+builder.Services.AddScoped<RefuseEnrollment>();
+builder.Services.AddScoped<CollectEnrollment>();
 
 builder.Services.AddHostedService<SchemaAtStartup>();
 
@@ -136,6 +143,7 @@ app.MapOrganization();
 app.MapDeviceLogin();
 app.MapDevicePage();
 app.MapTokens();
+app.MapEnrollments();
 app.MapProjects();
 app.MapSecrets();
 app.MapMissingKeys();

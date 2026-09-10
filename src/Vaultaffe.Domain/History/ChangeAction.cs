@@ -91,4 +91,21 @@ public enum ChangeAction
 
     /// <summary>A token was revoked and works nowhere from now on.</summary>
     TokenRevoked = 19,
+
+    /// <summary>
+    /// A token was changed: what it is called, what it may do, or how far it
+    /// reaches. Widening one hands a wider credential to whoever already holds
+    /// that value without issuing anything, so this is the entry that says a key
+    /// already in the world opens more doors than it did.
+    /// </summary>
+    TokenChanged = 20,
+
+    /// <summary>
+    /// A revoked token's row was removed for good. The counterpart of
+    /// <see cref="Purged"/> for a credential rather than for the vault, and
+    /// human-only for the same reason: it is the one removal this product cannot
+    /// undo. The entries the token signed keep its name, which is what
+    /// <c>identity_name</c> has always been for.
+    /// </summary>
+    TokenPurged = 21,
 }

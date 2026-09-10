@@ -104,6 +104,8 @@ var humanCommands = map[string]string{
 	"export":                  "secrets export",
 	"create-token":            "tokens create",
 	"revoke-token":            "tokens revoke",
+	"change-token":            "tokens change",
+	"purge-token":             "tokens purge",
 	"purge":                   "secrets purge-history",
 	"administer-organization": "users",
 }
@@ -152,7 +154,7 @@ func newRoot(env Env) *cobra.Command {
 		return &config.UsageError{Message: err.Error()}
 	})
 
-	root.AddCommand(newLogin(g), newLogout(g), newSetup(g), newStatus(g), newInstance(g), newRun(g), newSecrets(g), newChanges(g), newProjects(g), newEnvironments(g), newTokens(g), newUsers(g), newInvitations(g), newOrganization(g))
+	root.AddCommand(newLogin(g), newLogout(g), newEnroll(g), newSetup(g), newStatus(g), newInstance(g), newRun(g), newSecrets(g), newChanges(g), newProjects(g), newEnvironments(g), newTokens(g), newUsers(g), newInvitations(g), newOrganization(g))
 	g.root = root
 	return root
 }

@@ -63,7 +63,8 @@ more would be a promise the product does not keep.
 | `/projects/:project/:environment` | Environment | **the main screen**: the keys of this environment, their status and when each was last written; import, export and the deleted switch | two-line rows — name and status above, the moment below; no horizontal scroll |
 | `/projects/:project/:environment/:KEY` | Secret | the masked value with its reveal, the bounded version history, this key's own change log, and who has read it | one column; the value block stays above the three blocks below it |
 | `/changes` | Change log | what was changed, by whom and **by what kind of thing**, filtered by project, environment and key — and what was done to people and to tokens, which carries no place and names its subject instead ([ADR 0020](./adr/0020-one-change-log-and-not-two.md)) | the identity and its type stay; the filters open as a dismissible sheet |
-| `/settings/tokens` | Settings · Tokens | **two lists**: the named tokens an agent or a service acts under — kind, scopes, binding, standing — and, below them, the sessions every sign-in leaves; creating a token; the value of a new one, once | area list folds above the area |
+| `/enroll` | Enroll | a machine has asked for a token of its own: what asked, and the decision — the same name, scopes and reach the tokens screen offers ([ADR 0021](./adr/0021-an-agent-asks-for-its-own-token.md)) | one column, and the code is typed rather than pasted |
+| `/settings/tokens` | Settings · Tokens | **two lists**: the named tokens an agent or a service acts under — kind, scopes, binding, standing — and, below them, the sessions every sign-in leaves; creating a token; changing what one is called, may do and reaches; the value of a new one, once | area list folds above the area |
 | `/settings/users` | Settings · Users | the people of the organization, the invitation link to copy, an administrator's password reset and address change, and the invitations that are still open | area list folds above the area |
 | `/settings/organization` | Settings · Organization | the organization's name | area list folds above the area |
 | `/settings/profile` | Settings · Profile | own name, the address you sign in with, own password | area list folds above the area |
@@ -125,6 +126,60 @@ session nobody recognizes is exactly the row that has to be noticeable.
 Creating belongs to the first list, because this screen issues an agent or a
 service token and never a session. Revoked and expired rows stay visible at the
 foot of their own list: a revocation list that hides revocations is not one.
+
+**A row has three acts, and there are three of them because the value is the one
+thing that cannot change.**
+
+- **Change** arranges what a token is called, what it may do and how far it
+  reaches. The value is untouched and is not shown again, so whatever is holding
+  the token keeps working — this is the screen's answer to a credential that
+  has to reach one more project, and it is why nobody has to visit every machine
+  holding it. It is offered on what still works and never on a session: a
+  session is what a sign-in left behind rather than something anybody named or
+  bound.
+- **Revoke** stops the value and leaves the row.
+- **Delete** takes the row, and only a revoked one is offered it. That order is
+  the whole rule: a list that let something vanish while it still worked would
+  be the one list nobody could trust. The dialog says what stays — the change
+  log keeps everything the token did, because entries name the identity that
+  made them rather than pointing at a row.
+
+The kind and the expiry are not changed here. A service token that became an
+agent token would be a different identity in the change log with the same
+history behind it, and what runs out is what a person agreed to when they issued
+it.
+
+## The enroll screen
+
+A person arrives here because a machine printed a code and somebody read it out
+— from an agent's terminal, from a build log, over a desk. They type it in, and
+this screen is the whole of the decision.
+
+**It is a screen and not a dialog**, and it is outside `/settings`, because of
+how somebody gets to it: they are sent by a code in a terminal and they type an
+address into a browser. `/enroll` is short enough to retype, which
+`/settings/tokens/enrollments/…` would not be.
+
+**The name is a claim, and the screen says so.** An instance cannot tell whether
+a machine calling itself an agent on somebody's laptop is one. So what is shown
+is what was asked, with the sentence that nothing checked it, and the person is
+told the rule that follows from that: agree only if you know what asked. They
+confirm or replace the name, and what they settle on is what the token is
+called.
+
+**What they decide is the tokens screen's own form** — the same name, scopes and
+reach, from the same component. One form for both, so that what a person may
+agree to and what they may issue cannot come apart.
+
+**Nothing here has to be copied anywhere, and the screen says that too.** The
+value goes to the machine that asked; this screen never sees it. That is the
+difference between this and creating a token, and it is the reason the flow
+exists: the value that is never shown is the value that never ends up in a
+transcript.
+
+A code that somebody already decided, or that ran out, says which of the four it
+was and offers nothing to decide. A person who did not start this says so with a
+button of its own, in those words.
 
 ## The environment screen
 
@@ -195,7 +250,8 @@ and a row's acts live in that row's own menu.
 | Secret | list names and status, open one, **reveal one value**, copy one value, read the version history, read this key's change log | create, write a value, make a placeholder, delete, restore, roll back to a version | overwrite a value that is set; delete; roll back; **purge the history** |
 | Environment file | — | import a `.env`, export one | import with replace; **export**, always |
 | Change log | read, filter by project, environment and key, page | — | — |
-| Token | list with kind, name, scopes, binding and standing, tokens and sessions apart | create, revoke | revoke |
+| Token | list with kind, name, scopes, binding and standing, tokens and sessions apart | create, change its name, scopes and reach, revoke, delete a revoked one | revoke; **delete** |
+| Enrollment | what a machine asked for, and whether anybody has decided | agree with a name, scopes and a reach; refuse | — |
 | User | list the people of the organization, see who is deactivated | invite by link, withdraw an invitation, reset a password as administrator, change the address somebody signs in with, deactivate, put back | withdraw; reset a password; change an address; deactivate |
 | Organization | read the name | rename | — |
 | Profile | read own name and email | change own name, change the address you sign in with, change own password | — |
@@ -231,7 +287,7 @@ the same rules draw the screens and refuse the requests.
 | Read who has read a key | yes | with `names` | with `names` |
 | See the missing-key notice, and dismiss a line | yes | `names` to see, `write` to dismiss, over its binding | the same |
 | **Purge** a history or a deleted object | yes | **no** | **no** |
-| **Create or revoke** a token | yes | **no** | **no** |
+| **Create, change, revoke or delete** a token — or **agree** to an enrollment, which creates one | yes | **no** | **no** |
 | **Export** an environment | yes | **no** | **no** |
 | **Administer** the organization and its users | yes, administrator | **no** | **no** |
 

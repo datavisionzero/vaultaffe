@@ -15,7 +15,10 @@ change afterwards: the token value and the envelope a secret rests in
 rest of the API arrives inside: the version in the path, the handshake, the shape
 of a refusal, and the document all of it is captured into
 ([`api.md`](./api.md)) — identity: the first run, signing in, the device-code
-login with the one page it needs, and token management — the authorization
+login with the one page it needs, the same flow turned round so that a machine
+can ask for a token of its own
+([ADR 0021](./adr/0021-an-agent-asks-for-its-own-token.md)), and token
+management — the authorization
 every endpoint after it is held to: the scope set, the binding, and the short
 list only a person may do — the catalogue: projects and environments, with
 the change log that every write path since has been in — and the secrets surface
@@ -23,7 +26,8 @@ itself: names without values, one value at a time, a file in and a file out, and
 the change log and value history read back and rolled back, and what deletion
 means at the end: purge, and the sweep that enforces the deadline. Beside it the
 CLI's own skeleton — the command tree, the client generated from that contract,
-the device-code login, and the prefix table that says what a directory means
+the device-code login, `enroll` beside it, and the prefix table that says what a
+directory means
 ([`cli.md`](./cli.md)) — and the web application: the frame, the way in, the
 people of the organization, the catalogue screens the product is used on, and
 what makes a change legible and reversible — the log, the value history with its
