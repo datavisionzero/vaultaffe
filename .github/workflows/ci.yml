@@ -294,16 +294,39 @@ jobs:
           curl --fail --silent http://localhost:8080/ | grep -q 'id="root"'
 
       # An installation that has not been started says so, and starting it is
-      # the first run: the one request that needs no credential, and the one
+      # the first run: the one request that authenticates nobody, and the one
       # that refuses the second time (ADR 0007).
+      #
+      # It does need this instance's **claim secret**, which the installation
+      # makes for itself and prints to its own log until somebody claims it
+      # (ADR 0019). Read out of the log exactly the way an operator reads it —
+      # `docker compose logs vaultaffe` is the sentence `docs/operations.md`
+      # gives them — so that what is under test is the door an operator actually
+      # walks through.
+      #
+      # Masked and never echoed. A workflow that printed one would be this
+      # project's own product rule broken by its CI, the same way the master key
+      # above is written and never shown.
       - name: The first run happens, and happens once
         run: |
           set -euo pipefail
           curl --fail --silent http://localhost:8080/api/v1/instance | grep -q '"started":false'
+
+          claim="$(docker compose -f deploy/docker-compose.yml logs vaultaffe \
+            | grep -o 'vaultaffe_claim_[A-Za-z0-9_-]*' | head -1)"
+          test -n "$claim" || { echo "the installation printed no claim secret"; exit 1; }
+          echo "::add-mask::$claim"
+
           curl --fail --silent -X POST http://localhost:8080/api/v1/instance \
             -H 'content-type: application/json' \
+            -H "Vaultaffe-Claim: $claim" \
             -d '{"email":"maintainer@example.test","name":"Maintainer","password":"a-password-of-real-length"}' \
             -o /dev/null
+
+          # The second one carries no claim secret, and does not need to: a
+          # started instance answers `already-started` before the secret is
+          # looked at (`docs/api.md`), and the first run having consumed it is
+          # half of what is under test here.
           again="$(curl --silent --output /dev/null --write-out '%{http_code}' \
             -X POST http://localhost:8080/api/v1/instance \
             -H 'content-type: application/json' \
