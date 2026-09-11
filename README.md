@@ -49,7 +49,7 @@ docker compose -f deploy/docker-compose.yml up -d
 open http://localhost                 # the first person here is the administrator
 ```
 
-> **Status: released, and past the MVP.** `v0.4.0` is out — one image for
+> **Status: released, and past the MVP.** `v0.5.0` is out — one image for
 > `amd64` and `arm64`, and CLI binaries for macOS and Linux. The five success
 > criteria of
 > [`Specification.md` §11](Specification.md#11-success-criteria-for-the-mvp) were
@@ -58,11 +58,13 @@ open http://localhost                 # the first person here is the administrat
 > siblings have, first and last use of a key per identity, every administrative
 > act at the console rather than only in the browser, the sign-ins told apart
 > from the tokens somebody made, an address somebody signs in with that can be
-> changed, and — new in `v0.4.0` — a token that can be renamed, rescoped and
-> rebound without being reissued, a revoked one that can finally be removed, and
-> `vaultaffe enroll`, which lets an agent ask for a token of its own that no
-> person ever sees. An instance upgrades by pulling; a `v0.1.0` CLI still works
-> against it.
+> changed, a token that can be renamed, rescoped and rebound without being
+> reissued, a revoked one that can finally be removed, and `vaultaffe enroll`,
+> which lets an agent ask for a token of its own that no person ever sees. New
+> in `v0.5.0`: a token's value is rotated rather than only revoked and replaced
+> by hand, a listing answers what still authenticates and `--revoked` widens it,
+> and an agent may renew the token it is itself holding. An instance upgrades by
+> pulling; a `v0.1.0` CLI still works against it.
 
 .NET 10, React, PostgreSQL, Caddy for TLS. The CLI is Go, because `exec()` wants
 a system call Go exposes directly and a static binary with millisecond startup
