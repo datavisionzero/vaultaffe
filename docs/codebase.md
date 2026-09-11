@@ -26,8 +26,8 @@ itself: names without values, one value at a time, a file in and a file out, and
 the change log and value history read back and rolled back, and what deletion
 means at the end: purge, and the sweep that enforces the deadline. Beside it the
 CLI's own skeleton — the command tree, the client generated from that contract,
-the device-code login, `enroll` beside it, and the prefix table that says what a
-directory means
+the device-code login, `enroll` and `renew` beside it, and the prefix table that
+says what a directory means
 ([`cli.md`](./cli.md)) — and the web application: the frame, the way in, the
 people of the organization, the catalogue screens the product is used on, and
 what makes a change legible and reversible — the log, the value history with its

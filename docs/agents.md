@@ -219,14 +219,40 @@ which rung the token came from. If a harness filters what it forwards, it will d
 it to this variable — the name contains `TOKEN`, which is what such filters look
 for, and rightly.
 
+## When the value has to be replaced
+
+```sh
+vaultaffe renew                 # the agent, for the token it is holding
+vaultaffe tokens rotate <id>    # a person, for any of them
+```
+
+A value that reached a transcript, a screenshot or a pasted log is replaced, not
+tidied up — and a value old enough to be worth replacing is replaced the same
+way. What comes back is the same credential: the same name, the same scopes, the
+same reach, and the expiry it was given begun again. The change log goes on
+reading as one worker rather than as two names on either side of an incident
+([ADR 0022](./adr/0022-an-agent-renews-its-own-token.md)).
+
+**`renew` is the agent's own**, and the only act on a credential an agent may
+do. It replaces the token it is already holding and no other, writes the value
+into a file at mode `0600` exactly as `enroll` does, and prints nothing. What it
+cannot do is reach into the environment of the process that started it: where
+the token came from `VAULTAFFE_TOKEN`, that variable now holds a string that
+authenticates nothing, and the harness has to pick the new value up from the
+file the command names. It says so when it is done.
+
+**The old value is dead at once**, with no overlap. Whatever is still carrying
+it fails on its next request, which is the loud failure rather than the quiet
+one.
+
 ## When it is over
 
 ```sh
 vaultaffe tokens revoke <id>
 ```
 
-A token that reached a transcript, a screenshot or a pasted log is revoked and
-replaced, not tidied up. Revocation is human-only for the same reason creation
-is, listing is not — a revocation list an agent cannot read is not one — and
-nothing else about the agent has to change: the harness gets the new string in
-the same place the old one sat.
+An agent that is finished has its token revoked rather than left standing.
+Revocation is human-only for the same reason creation is, listing is not — a
+revocation list an agent cannot read is not one — and the row stays after it, so
+everything the agent did keeps its name. `vaultaffe tokens --revoked` is where
+that list is read.

@@ -26,6 +26,7 @@ type instance struct {
 type request struct {
 	Method string
 	Path   string
+	Query  string
 	Header http.Header
 	Body   []byte
 }
@@ -37,7 +38,7 @@ func startInstanceStub(t *testing.T) *instance {
 	in.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body := new(bytes.Buffer)
 		_, _ = body.ReadFrom(r.Body)
-		in.Requests = append(in.Requests, request{Method: r.Method, Path: r.URL.Path, Header: r.Header.Clone(), Body: body.Bytes()})
+		in.Requests = append(in.Requests, request{Method: r.Method, Path: r.URL.Path, Query: r.URL.RawQuery, Header: r.Header.Clone(), Body: body.Bytes()})
 
 		// Every answer carries the release, refusals included (docs/api.md).
 		w.Header().Set("Vaultaffe-Version", "0.1.0")

@@ -1,4 +1,6 @@
+using Vaultaffe.Application.Authorization;
 using Vaultaffe.Application.Ports;
+using Vaultaffe.Domain.Authorization;
 using Vaultaffe.Domain.History;
 using Vaultaffe.Domain.Refusals;
 using Vaultaffe.Domain.Tokens;
@@ -138,20 +140,42 @@ public sealed class CreateToken(
 }
 
 /// <summary>
-/// Every token of this organization, revoked ones included — a revocation list
-/// nobody can read is not one.
+/// Every token of this organization that still authenticates, and the revoked
+/// ones as well when they are asked for.
 /// </summary>
 /// <remarks>
+/// <b>Revoked is hidden and not dropped.</b> The row stays for good — everything
+/// it ever signed in the change log keeps an author that way (§6.5) — and that is
+/// a reason to keep it, not a reason to keep it in front of the ones that work.
+/// A credential retired months ago is not what anybody opening this list came to
+/// see, and on an instance that has been running a while it is most of what they
+/// would be shown. So the answer is what works, and the rest is one parameter
+/// away: a revocation list nobody can read is not one either.
+/// <para>
+/// <c>revoked</c> <b>widens rather than switches</b>, which is the one way this
+/// differs from <c>deleted</c> on the catalogue's listings. A deleted project is
+/// in a bin of its own with a deadline on it, and asking for that bin is asking
+/// for something else; a revoked token is a row of this same inventory, read
+/// beside the one that replaced it.
+/// </para>
+/// <para>
 /// Session tokens are in it: what a person needs after losing a laptop is to see
 /// their sessions and revoke one. No listing anywhere carries a value.
+/// </para>
 /// </remarks>
 public sealed class ListTokens(IIdentityStore identities, ICallerIdentity caller)
 {
-    public async Task<IReadOnlyList<TokenRow>> ExecuteAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<TokenRow>> ExecuteAsync(
+        bool revoked, CancellationToken cancellationToken)
     {
         _ = caller.Required;
 
-        return [.. (await identities.ListTokensAsync(cancellationToken)).Select(CreateToken.Row)];
+        return
+        [
+            .. (await identities.ListTokensAsync(cancellationToken))
+                .Where(token => revoked || token.RevokedAt is null)
+                .Select(CreateToken.Row),
+        ];
     }
 }
 
@@ -301,6 +325,124 @@ public sealed class ChangeToken(
         await identities.SaveAsync(cancellationToken);
 
         return CreateToken.Row(token);
+    }
+}
+
+/// <summary>
+/// Replacing the value of a token that already exists: the row it had is revoked
+/// and a successor is issued beside it, carrying the same name, the same scopes
+/// and the same reach. The new value is shown exactly once, in this answer.
+/// </summary>
+/// <remarks>
+/// <b>This is the one thing about a credential that could not be changed.</b>
+/// Everything else — what it is called, what it may do, how far it reaches — is
+/// <see cref="ChangeToken"/>, and none of it helps when what went wrong is the
+/// value itself. A value that has leaked used to mean revoking and creating a
+/// second token, and then going round every machine that held the first under a
+/// name the log now reads as somebody else.
+/// <para>
+/// <b>The row is not overwritten.</b> Writing a new hash into the row that is
+/// already there is cheaper and erases the only record that anything happened:
+/// <c>created_at</c> would go on claiming this credential dates from the day it
+/// was first issued, and nothing at all would say when the value in circulation
+/// changed. So the old row is revoked and the successor added beside it, and the
+/// date is a fact the database holds rather than one nobody wrote down (ADR 0022).
+/// </para>
+/// <para>
+/// <b>The old value is dead the moment this returns</b>, in the same transaction,
+/// with no overlap. A rotation is usually the answer to something having gone
+/// wrong, and a grace period is exactly as useful to whoever has the leaked value
+/// as it is to the run still holding the good one.
+/// </para>
+/// <para>
+/// <b>A fresh expiry, of the length the last one had.</b> A token issued to run
+/// for thirty days gets thirty days again; one issued to run until revoked keeps
+/// running until revoked. That is what makes this act a renewal and not only a
+/// replacement — and it is bounded, because the length is the one a person chose
+/// when they issued it and no caller can lengthen it here.
+/// </para>
+/// <para>
+/// <b>Human-only, with one exception.</b> The answer is a value, which is why
+/// creating is a person's act; the exception is an agent asking for the successor
+/// of the token it is holding itself, which gains it nothing it did not already
+/// have and reaches it through a file rather than a screen (ADR 0022). That
+/// question is <see cref="Authority.RequiresAHumanOrTheAgentHolding"/>, because
+/// it is a question about this object and not about this endpoint.
+/// </para>
+/// </remarks>
+public sealed class RotateToken(
+    IIdentityStore identities, Authority authority, ChangeLog log, TimeProvider clock)
+{
+    public async Task<TokenIssued> ExecuteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        authority.RequiresAHumanOrTheAgentHolding(id, HumanAction.RotateToken);
+
+        var token = await identities.FindTokenAsync(id, cancellationToken)
+            ?? throw Refusal.NotFound("No token by that id.");
+
+        // A session is what signing in left behind, and the way to a new one is
+        // to sign in again. Rotating one would hand a browser's credential to
+        // whoever asked for it over the API, which is a session for somebody
+        // else however it is worded.
+        if (token.Kind is TokenKind.Session)
+        {
+            throw Refusal.Validation(
+                "id",
+                "A session is not rotated: it is what signing in left behind, and signing in "
+                + "again is how a new one is got. Revoke this one instead.");
+        }
+
+        // Rotating a revoked token would put a credential back that somebody
+        // deliberately took away, under the name the revocation list is still
+        // showing. Whoever wants one back wants a new one, created deliberately.
+        if (token.RevokedAt is not null)
+        {
+            throw Refusal.Validation(
+                "id",
+                "That token is revoked. A rotation replaces a value that works; putting a "
+                + "withdrawn credential back is creating one, and that is its own act.");
+        }
+
+        var now = clock.GetUtcNow();
+
+        var (successor, value) = Token.Issue(
+            Guid.NewGuid(),
+            token.OrganizationId,
+            // The person accountable for it stays the person accountable for it.
+            // A rotation is the same credential with another value, and moving
+            // it to whoever happened to ask would quietly rewrite who answers
+            // for what an agent does (§6.5).
+            token.UserId,
+            token.Kind,
+            token.Name,
+            token.Scopes,
+            now,
+            // The length the last one was given, starting now. Taking the old
+            // moment would hand back a token that expires the same afternoon,
+            // and taking no expiry at all would let a caller turn a credential
+            // somebody time-boxed into one that never runs out.
+            token.ExpiresAt is { } until ? now + (until - token.CreatedAt) : null);
+
+        foreach (var binding in token.Bindings)
+        {
+            successor.BindTo(Guid.NewGuid(), binding.ProjectId, binding.EnvironmentId);
+        }
+
+        token.RevokeAt(now);
+
+        // One entry for one act. Two — a revocation and a creation — would read
+        // as two decisions in the log a person scrolls after an incident, and
+        // the one fact they are looking for is that the value changed on this
+        // day. Never the value: there is one in this answer and nowhere else.
+        log.Record(ChangeAction.TokenRotated, about: token.Name ?? $"a {Words.For(token.Kind)}");
+
+        // The successor and the revocation of what it replaces, in one write:
+        // this port carries whatever else the act changed on rows it handed out
+        // (`IIdentityStore.AddTokenAsync`), so no moment exists in which both
+        // work or neither does.
+        await identities.AddTokenAsync(successor, cancellationToken);
+
+        return new TokenIssued(CreateToken.Row(successor), value.Reveal());
     }
 }
 

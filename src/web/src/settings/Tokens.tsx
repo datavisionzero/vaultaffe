@@ -58,7 +58,11 @@ import { bindingsOf, draftOf, scopes, type Draft } from "./tokenDraft";
  * the one list nobody could trust.
  */
 export function Tokens() {
-  const [tokens, again] = useAsk<Token[]>("tokens", () => api.GET("/api/v1/tokens"));
+  const [revoked, setRevoked] = useState(false);
+
+  const [tokens, again] = useAsk<Token[]>(revoked ? "tokens:revoked" : "tokens", () =>
+    api.GET("/api/v1/tokens", { params: { query: { revoked } } }),
+  );
   const [projects] = useAsk<Project[]>("tokens:projects", () => api.GET("/api/v1/projects"));
 
   const catalogue = projects.at === "answered" ? projects.data : [];
@@ -88,12 +92,17 @@ export function Tokens() {
       <Section
         title="Tokens"
         what="What an agent or a service acts under, so the change log can say what kind of thing acted. Named, and never listed with its value."
-        action={<NewToken catalogue={catalogue} onCreated={again} />}
+        action={
+          <div className="flex items-center gap-3">
+            <ShowRevoked shown={revoked} onChange={setRevoked} />
+            <NewToken catalogue={catalogue} onCreated={again} />
+          </div>
+        }
       >
         {tokens.at === "asking" ? (
           <Rows count={3} />
         ) : issued.length === 0 ? (
-          <NoRows>No agent or service token yet.</NoRows>
+          <NoRows>{emptily(revoked, "agent or service token")}</NoRows>
         ) : (
           <List>
             {issued.map((token) => (
@@ -110,7 +119,7 @@ export function Tokens() {
         {tokens.at === "asking" ? (
           <Rows count={2} />
         ) : sessions.length === 0 ? (
-          <NoRows>No session on record.</NoRows>
+          <NoRows>{emptily(revoked, "session")}</NoRows>
         ) : (
           <List>
             {sessions.map((token) => (
@@ -121,6 +130,66 @@ export function Tokens() {
       </Section>
     </div>
   );
+}
+
+/**
+ * A dialog that can be taller than the screen, in three classes.
+ *
+ * The obvious spelling — `max-h` and `overflow-y-auto` on the popup itself —
+ * puts the footer inside the scroll container, and the footer is where the
+ * button a person came to press is. On a short window the last thing they see
+ * is half a button under the fold, with nothing saying there is more. So the
+ * popup is a fixed frame instead: one row that may shrink, holding a form or a
+ * panel that is itself three rows — a header that stays, a middle that scrolls,
+ * and a footer that stays. What grows is the middle, which is the only part
+ * that has anything to grow.
+ */
+const tall = "max-h-[85svh] grid-rows-[minmax(0,1fr)] sm:max-w-lg";
+
+/** The frame inside it: header, the part that scrolls, footer. */
+const framed = "grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-4";
+
+/** And the part that scrolls. */
+const scrolls = "grid min-h-0 gap-4 overflow-y-auto";
+
+/**
+ * Whether the screen shows what no longer authenticates.
+ *
+ * A revoked token is not deleted and never will be: the identity it names is
+ * still the author of everything that token ever wrote, and taking the row away
+ * would quietly rewrite that record. Which is a reason to keep it, and no reason
+ * at all to keep it in the way — a credential retired months ago is not what
+ * anybody opening this screen came to see, and on an instance that has been
+ * running a while it is most of what they would be shown.
+ *
+ * So both lists show what still works, and the rest is one switch away. It is
+ * one switch and not two because it is one question asked of the instance:
+ * `revoked=true` widens the answer both lists are read out of.
+ */
+function ShowRevoked({ shown, onChange }: { shown: boolean; onChange: (shown: boolean) => void }) {
+  return (
+    <label className="flex items-center gap-2 text-xs text-muted-foreground">
+      <input
+        type="checkbox"
+        name="revoked"
+        className="size-4 accent-primary"
+        checked={shown}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      Show revoked
+    </label>
+  );
+}
+
+/**
+ * The two ways a list here can have no rows, which are not the same sentence.
+ * "No session on record." to somebody whose sessions are all revoked is a lie
+ * they have no way to see through.
+ */
+function emptily(revoked: boolean, what: string) {
+  return revoked
+    ? `No ${what} on record, revoked ones included.`
+    : `No ${what} that works. Revoked ones are hidden.`;
 }
 
 /** A titled list with its own sentence, and whatever acts on it. */
@@ -250,7 +319,16 @@ function Row({
         what a dead credential may do would be a control that does nothing.
       */}
       {standing === "in use" && token.kind !== "session" && (
-        <ChangeToken token={token} catalogue={catalogue} onChanged={onChanged} />
+        <>
+          <ChangeToken token={token} catalogue={catalogue} onChanged={onChanged} />
+          {/*
+            And the one thing changing cannot touch. It is beside Change rather
+            than behind Revoke because it is what somebody reaches for instead
+            of revoking: the value they were worried about stops working either
+            way, and this way the credential goes on existing.
+          */}
+          <RotateToken token={token} onRotated={onChanged} />
+        </>
       )}
 
       {token.revokedAt === null && (
@@ -403,9 +481,9 @@ function NewToken({ catalogue, onCreated }: { catalogue: Project[]; onCreated: (
       </Button>
 
       <Dialog open={open} onOpenChange={change}>
-        <DialogContent className="max-h-[85svh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className={tall}>
           {value === undefined ? (
-            <form className="grid gap-4" onSubmit={(event) => void submit(event)}>
+            <form className={framed} onSubmit={(event) => void submit(event)}>
               <DialogHeader>
                 <DialogTitle>A new token</DialogTitle>
                 <DialogDescription>
@@ -414,32 +492,34 @@ function NewToken({ catalogue, onCreated }: { catalogue: Project[]; onCreated: (
                 </DialogDescription>
               </DialogHeader>
 
-              <fieldset className="grid gap-2">
-                <legend className="text-sm font-medium">Kind</legend>
-                <Choice
-                  name="kind"
-                  checked={kind === "agent"}
-                  onChange={() => changeKind("agent")}
-                  label="Agent"
-                  what="For an agent working in somebody's terminal. It acts under its own name so the log does not say a person's for everything it did."
-                />
-                <Choice
-                  name="kind"
-                  checked={kind === "service"}
-                  onChange={() => changeKind("service")}
-                  label="Service"
-                  what="For an application or a pipeline. Narrower by default: the names of keys, and their values."
-                />
-              </fieldset>
+              <div className={scrolls}>
+                <fieldset className="grid gap-2">
+                  <legend className="text-sm font-medium">Kind</legend>
+                  <Choice
+                    name="kind"
+                    checked={kind === "agent"}
+                    onChange={() => changeKind("agent")}
+                    label="Agent"
+                    what="For an agent working in somebody's terminal. It acts under its own name so the log does not say a person's for everything it did."
+                  />
+                  <Choice
+                    name="kind"
+                    checked={kind === "service"}
+                    onChange={() => changeKind("service")}
+                    label="Service"
+                    what="For an application or a pipeline. Narrower by default: the names of keys, and their values."
+                  />
+                </fieldset>
 
-              <TokenFields
-                catalogue={catalogue}
-                draft={draft}
-                change={(part) => setDraft((current) => ({ ...current, ...part }))}
-                hint="What a revocation list will call it, months from now."
-              />
+                <TokenFields
+                  catalogue={catalogue}
+                  draft={draft}
+                  change={(part) => setDraft((current) => ({ ...current, ...part }))}
+                  hint="What a revocation list will call it, months from now."
+                />
 
-              {refusal !== undefined && <Refusal>{refusal}</Refusal>}
+                {refusal !== undefined && <Refusal>{refusal}</Refusal>}
+              </div>
 
               <DialogFooter>
                 <Button variant="outline" disabled={busy} onClick={() => change(false)}>
@@ -454,25 +534,16 @@ function NewToken({ catalogue, onCreated }: { catalogue: Project[]; onCreated: (
               </DialogFooter>
             </form>
           ) : (
-            <div className="grid gap-4">
-              <DialogHeader>
-                <DialogTitle>The value of {draft.name}</DialogTitle>
-                <DialogDescription>
-                  <strong>This is the once.</strong> The instance stores a hash of it and can never
-                  show it again. Copy it into wherever it is meant to live — an agent's environment
-                  as <span className="font-mono">VAULTAFFE_TOKEN</span>, a deployment's secret
-                  store — and if it is lost, revoke this one and create another.
-                </DialogDescription>
-              </DialogHeader>
-              <Copyable value={value} label="token value" />
-              <p className="text-xs text-muted-foreground">
-                A token in a process environment is plaintext on that machine. That is inside this
-                product's threat model and worth knowing when choosing where to put it.
-              </p>
-              <DialogFooter>
-                <Button onClick={() => change(false)}>Done</Button>
-              </DialogFooter>
-            </div>
+            <TheValueOnce
+              title={`The value of ${draft.name}`}
+              value={value}
+              onDone={() => change(false)}
+            >
+              <strong>This is the once.</strong> The instance stores a hash of it and can never
+              show it again. Copy it into wherever it is meant to live — an agent's environment as{" "}
+              <span className="font-mono">VAULTAFFE_TOKEN</span>, a deployment's secret store — and
+              if it is lost, revoke this one and create another.
+            </TheValueOnce>
           )}
         </DialogContent>
       </Dialog>
@@ -557,8 +628,8 @@ function ChangeToken({
       </Button>
 
       <Dialog open={open} onOpenChange={change}>
-        <DialogContent className="max-h-[85svh] overflow-y-auto sm:max-w-lg">
-          <form className="grid gap-4" onSubmit={(event) => void submit(event)}>
+        <DialogContent className={tall}>
+          <form className={framed} onSubmit={(event) => void submit(event)}>
             <DialogHeader>
               <DialogTitle>{token.name ?? "This token"}</DialogTitle>
               <DialogDescription>
@@ -567,14 +638,16 @@ function ChangeToken({
               </DialogDescription>
             </DialogHeader>
 
-            <TokenFields
-              catalogue={catalogue}
-              draft={draft}
-              change={(part) => setDraft((current) => ({ ...current, ...part }))}
-              hint="What a revocation list will call it, months from now. Renaming changes nothing else."
-            />
+            <div className={scrolls}>
+              <TokenFields
+                catalogue={catalogue}
+                draft={draft}
+                change={(part) => setDraft((current) => ({ ...current, ...part }))}
+                hint="What a revocation list will call it, months from now. Renaming changes nothing else."
+              />
 
-            {refusal !== undefined && <Refusal>{refusal}</Refusal>}
+              {refusal !== undefined && <Refusal>{refusal}</Refusal>}
+            </div>
 
             <DialogFooter>
               <Button variant="outline" disabled={busy} onClick={() => change(false)}>
@@ -588,6 +661,170 @@ function ChangeToken({
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+/**
+ * A value, in the one moment it exists.
+ *
+ * Two dialogs end here — a token that was just created and one that was just
+ * rotated — and they end the same way on purpose: the instance keeps a hash,
+ * this screen is the only place the string will ever be, and a person has to be
+ * told that in the same breath they are handed it.
+ */
+function TheValueOnce({
+  title,
+  value,
+  onDone,
+  children,
+}: {
+  title: string;
+  value: string;
+  onDone: () => void;
+  /** What this particular value is, and what to do with it. */
+  children: ReactNode;
+}) {
+  return (
+    <div className={framed}>
+      <DialogHeader>
+        <DialogTitle>{title}</DialogTitle>
+        <DialogDescription>{children}</DialogDescription>
+      </DialogHeader>
+
+      <div className={scrolls}>
+        <Copyable value={value} label="token value" />
+        <p className="text-xs text-muted-foreground">
+          A token in a process environment is plaintext on that machine. That is inside this
+          product's threat model and worth knowing when choosing where to put it.
+        </p>
+      </div>
+
+      <DialogFooter>
+        <Button onClick={onDone}>Done</Button>
+      </DialogFooter>
+    </div>
+  );
+}
+
+/**
+ * Replacing the value of a token that already exists.
+ *
+ * **The one thing changing cannot touch**, and the reason this is a third act
+ * on the row rather than a field in the second: a name, a scope set and a reach
+ * are arranged without anybody being visited, and none of that helps when what
+ * went wrong is the value itself. Before this existed, a leaked value meant
+ * revoking the token and creating another — a second name in the change log for
+ * the same worker, on two sides of an incident.
+ *
+ * **It asks first, and the question says what it costs** rather than asserting
+ * that it is safe. The value in an agent's environment or a deployment's secret
+ * store is dead the moment this is confirmed, with no overlap: a rotation is
+ * usually the answer to a value having gone somewhere it should not be, and a
+ * grace period is exactly as useful to whoever has it as to the run still
+ * holding the good one.
+ *
+ * What survives is everything else. The name, the scopes and the reach come
+ * across untouched, and so does the length of the expiry — a token issued to run
+ * for thirty days gets thirty days again. The row it had stays, revoked, which
+ * is where the day the value changed is read afterwards.
+ */
+function RotateToken({ token, onRotated }: { token: Token; onRotated: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string>();
+  const [value, setValue] = useState<string>();
+
+  function change(next: boolean) {
+    // Closing on the value is the one moment this dialog is not reopenable:
+    // what it was showing is gone, and the row behind it has already been
+    // re-read.
+    setOpen(next);
+
+    if (!next) {
+      setRefusal(undefined);
+      setValue(undefined);
+    }
+  }
+
+  async function rotate() {
+    setBusy(true);
+    setRefusal(undefined);
+
+    try {
+      const { data, error, response } = await api.POST("/api/v1/tokens/{id}/rotate", {
+        params: { path: { id: token.id } },
+      });
+
+      if (data === undefined) {
+        setRefusal(describe(error, response.status));
+        return;
+      }
+
+      setValue(data.value);
+      onRotated();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <Button variant="ghost" size="sm" onClick={() => change(true)}>
+        Rotate
+      </Button>
+
+      <Dialog open={open} onOpenChange={change}>
+        <DialogContent className={tall}>
+          {value === undefined ? (
+            <div className={framed}>
+              <DialogHeader>
+                <DialogTitle>Rotate {token.name ?? "this token"}?</DialogTitle>
+                <DialogDescription>
+                  It keeps its name, its scopes and its reach, and is given a new value on the next
+                  screen.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className={scrolls}>
+                <p className="text-sm">
+                  <strong>The value it has now stops working immediately.</strong> Whatever is
+                  holding it — an agent mid-task, a deployment, a pipeline — fails on its next
+                  request until it is given the new one. There is no overlap, on purpose: a
+                  rotation is usually the answer to a value having gone somewhere it should not be.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  The row it has now stays, revoked rather than deleted, so that the day the value
+                  in circulation changed is something this instance can still tell you. Show
+                  revoked to read it.
+                </p>
+
+                {refusal !== undefined && <Refusal>{refusal}</Refusal>}
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" disabled={busy} onClick={() => change(false)}>
+                  Cancel
+                </Button>
+                <Button disabled={busy} onClick={() => void rotate()}>
+                  {busy ? "Rotating…" : "Rotate it"}
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <TheValueOnce
+              title={`The new value of ${token.name ?? "this token"}`}
+              value={value}
+              onDone={() => change(false)}
+            >
+              <strong>This is the once.</strong> The one it replaces is revoked and authenticates
+              nothing from here on. Put this where that one was — an agent's environment as{" "}
+              <span className="font-mono">VAULTAFFE_TOKEN</span>, a deployment's secret store — and
+              whatever is still carrying the old value will start working again.
+            </TheValueOnce>
+          )}
         </DialogContent>
       </Dialog>
     </>

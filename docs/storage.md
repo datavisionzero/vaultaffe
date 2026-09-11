@@ -58,7 +58,7 @@ instance_claim              (no organization: there is none yet)
 | `secret_value_version` | Values this secret used to hold, tightly bounded. |
 | `secret_access` | First and last use of this secret by one identity. Two moments, never a count. |
 | `dismissed_key` | A key the missing-key notice was told not to mention in this environment again. |
-| `token` | A credential: kind, scope set, and the hash of a value shown once. |
+| `token` | A credential: kind, scope set, and the hash of a value shown once. A rotation adds the successor beside the row it replaces rather than writing over it, so the day the value in circulation changed is a fact this table holds ([ADR 0022](./adr/0022-an-agent-renews-its-own-token.md)). |
 | `token_binding` | What a token may touch. No rows means the whole organization. |
 | `device_authorization` | One handover in progress — a `vaultaffe login` or a `vaultaffe enroll`: two codes, what it produces, and what has happened to it. |
 | `enrollment_binding` | What a person agreed an enrollment may reach, while there is still no token to hang it on. |

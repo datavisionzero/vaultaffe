@@ -64,7 +64,7 @@ more would be a promise the product does not keep.
 | `/projects/:project/:environment/:KEY` | Secret | the masked value with its reveal, the bounded version history, this key's own change log, and who has read it | one column; the value block stays above the three blocks below it |
 | `/changes` | Change log | what was changed, by whom and **by what kind of thing**, filtered by project, environment and key — and what was done to people and to tokens, which carries no place and names its subject instead ([ADR 0020](./adr/0020-one-change-log-and-not-two.md)) | the identity and its type stay; the filters open as a dismissible sheet |
 | `/enroll` | Enroll | a machine has asked for a token of its own: what asked, and the decision — the same name, scopes and reach the tokens screen offers ([ADR 0021](./adr/0021-an-agent-asks-for-its-own-token.md)) | one column, and the code is typed rather than pasted |
-| `/settings/tokens` | Settings · Tokens | **two lists**: the named tokens an agent or a service acts under — kind, scopes, binding, standing — and, below them, the sessions every sign-in leaves; creating a token; changing what one is called, may do and reaches; the value of a new one, once | area list folds above the area |
+| `/settings/tokens` | Settings · Tokens | **two lists**: the named tokens an agent or a service acts under — kind, scopes, binding, standing — and, below them, the sessions every sign-in leaves; what still works, with the revoked ones one switch away; creating a token; changing what one is called, may do and reaches; rotating its value; the value of a new one, once | area list folds above the area |
 | `/settings/users` | Settings · Users | the people of the organization, the invitation link to copy, an administrator's password reset and address change, and the invitations that are still open | area list folds above the area |
 | `/settings/organization` | Settings · Organization | the organization's name | area list folds above the area |
 | `/settings/profile` | Settings · Profile | own name, the address you sign in with, own password | area list folds above the area |
@@ -124,11 +124,17 @@ by number alone, push the credentials that matter off the screen, and the
 session nobody recognizes is exactly the row that has to be noticeable.
 
 Creating belongs to the first list, because this screen issues an agent or a
-service token and never a session. Revoked and expired rows stay visible at the
-foot of their own list: a revocation list that hides revocations is not one.
+service token and never a session. Expired rows stay visible at the foot of
+their own list; **revoked ones are one switch away.** The row of a revoked token
+stays for good — everything it signed in the change log keeps an author that way
+— and that is a reason to keep it and none at all to keep it in front of the
+credentials somebody came here to read. *Show revoked* is one switch and not two
+because it is one question asked of the instance, and both lists are read out of
+the answer. An empty list says which of the two kinds of empty it is rather than
+claiming there is nothing.
 
-**A row has three acts, and there are three of them because the value is the one
-thing that cannot change.**
+**A row has four acts, and the first two exist because the value is the one
+thing `Change` cannot touch.**
 
 - **Change** arranges what a token is called, what it may do and how far it
   reaches. The value is untouched and is not shown again, so whatever is holding
@@ -137,6 +143,16 @@ thing that cannot change.**
   holding it. It is offered on what still works and never on a session: a
   session is what a sign-in left behind rather than something anybody named or
   bound.
+- **Rotate** replaces the value, which is what somebody reaches for when the
+  value is the thing that went wrong. The credential survives: the same name,
+  the same scopes, the same reach, and the expiry it was given begun again — so
+  the change log goes on reading as one worker rather than as two names on
+  either side of an incident. It asks first, and **the question says what it
+  costs** rather than asserting that it is safe: the value in an agent's
+  environment or a deployment's secret store is dead the moment it is confirmed,
+  with no overlap, and a run still holding it fails on its next request. The new
+  value is then shown the way a new token's is — once
+  ([ADR 0022](./adr/0022-an-agent-renews-its-own-token.md)).
 - **Revoke** stops the value and leaves the row.
 - **Delete** takes the row, and only a revoked one is offered it. That order is
   the whole rule: a list that let something vanish while it still worked would
@@ -250,7 +266,7 @@ and a row's acts live in that row's own menu.
 | Secret | list names and status, open one, **reveal one value**, copy one value, read the version history, read this key's change log | create, write a value, make a placeholder, delete, restore, roll back to a version | overwrite a value that is set; delete; roll back; **purge the history** |
 | Environment file | — | import a `.env`, export one | import with replace; **export**, always |
 | Change log | read, filter by project, environment and key, page | — | — |
-| Token | list with kind, name, scopes, binding and standing, tokens and sessions apart | create, change its name, scopes and reach, revoke, delete a revoked one | revoke; **delete** |
+| Token | list with kind, name, scopes, binding and standing, tokens and sessions apart, revoked ones behind a switch | create, change its name, scopes and reach, rotate its value, revoke, delete a revoked one | rotate; revoke; **delete** |
 | Enrollment | what a machine asked for, and whether anybody has decided | agree with a name, scopes and a reach; refuse | — |
 | User | list the people of the organization, see who is deactivated | invite by link, withdraw an invitation, reset a password as administrator, change the address somebody signs in with, deactivate, put back | withdraw; reset a password; change an address; deactivate |
 | Organization | read the name | rename | — |
@@ -288,6 +304,7 @@ the same rules draw the screens and refuse the requests.
 | See the missing-key notice, and dismiss a line | yes | `names` to see, `write` to dismiss, over its binding | the same |
 | **Purge** a history or a deleted object | yes | **no** | **no** |
 | **Create, change, revoke or delete** a token — or **agree** to an enrollment, which creates one | yes | **no** | **no** |
+| **Rotate** a token — replace its value | yes | **its own, and no other** ([ADR 0022](./adr/0022-an-agent-renews-its-own-token.md)) | **no** |
 | **Export** an environment | yes | **no** | **no** |
 | **Administer** the organization and its users | yes, administrator | **no** | **no** |
 

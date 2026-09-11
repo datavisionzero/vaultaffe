@@ -5,8 +5,9 @@ using System.Text.Json.Nodes;
 namespace Vaultaffe.IntegrationTests;
 
 /// <summary>
-/// Token management (Specification §6.1, §6.4): create, name, change, revoke and
-/// purge — the value shown exactly once, and the whole of it human-only.
+/// Token management (Specification §6.1, §6.4): create, name, change, rotate,
+/// revoke and purge — a value shown exactly once, and the whole of it human-only
+/// but for the one act an agent may aim at itself (ADR 0022).
 /// </summary>
 [Collection(nameof(PostgresCollection))]
 public sealed class TokenEndpointTests(PostgresFixture postgres)
@@ -280,9 +281,10 @@ public sealed class TokenEndpointTests(PostgresFixture postgres)
         Assert.Equal(HttpStatusCode.Unauthorized, after.StatusCode);
 
         // Revoked rather than deleted, so everything it ever signed in the change
-        // log keeps an author (§6.5).
+        // log keeps an author (§6.5). Out of the default listing and not out of
+        // the record: asking for the revoked ones finds it exactly where it was.
         using var listed = await human.GetAsync(
-            "/api/v1/tokens", TestContext.Current.CancellationToken);
+            "/api/v1/tokens?revoked=true", TestContext.Current.CancellationToken);
 
         var tokens = JsonNode.Parse(await listed.Content.ReadAsStringAsync(
             TestContext.Current.CancellationToken))!.AsArray();
@@ -644,6 +646,319 @@ public sealed class TokenEndpointTests(PostgresFixture postgres)
 
         Assert.Equal("purge-token", problem["humanAction"]!.GetValue<string>());
     }
+
+    /// <summary>
+    /// The listing answers what still authenticates. The revoked row is not gone
+    /// — it never will be, because everything it signed keeps an author that way
+    /// — it is simply not what somebody opening a credential list came to see.
+    /// </summary>
+    [Fact]
+    public async Task A_listing_leaves_out_the_revoked_until_they_are_asked_for()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        using var human = instance.ClientWith(await instance.StartAsync());
+
+        var issued = await CreateAsync(human, "agent", "the agent that was");
+        var id = issued["token"]!["id"]!.GetValue<string>();
+
+        using var revoked = await human.DeleteAsync(
+            $"/api/v1/tokens/{id}", TestContext.Current.CancellationToken);
+
+        revoked.EnsureSuccessStatusCode();
+
+        Assert.DoesNotContain(await ListAsync(human, revoked: false), row => Id(row) == id);
+        Assert.Contains(await ListAsync(human, revoked: true), row => Id(row) == id);
+    }
+
+    /// <summary>
+    /// What rotation is: the same credential under another value. The name, the
+    /// scopes and the reach come across untouched, the row that was is revoked
+    /// rather than overwritten — so the date the value in circulation changed is
+    /// a fact the instance holds — and the successor is a row of its own.
+    /// </summary>
+    [Fact]
+    public async Task Rotating_issues_the_next_value_and_kills_the_one_it_replaces()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        using var human = instance.ClientWith(await instance.StartAsync());
+
+        using var project = await human.PostAsJsonAsync(
+            "/api/v1/projects", new { name = "webshop-api" }, TestContext.Current.CancellationToken);
+
+        project.EnsureSuccessStatusCode();
+
+        var catalogue = JsonNode.Parse(await project.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!;
+
+        using var created = await human.PostAsJsonAsync(
+            "/api/v1/tokens",
+            new
+            {
+                kind = "agent",
+                name = "the agent on the webshop",
+                scopes = new[] { "names", "read" },
+                bindings = new[] { new { projectId = catalogue["id"]!.GetValue<string>() } },
+            },
+            TestContext.Current.CancellationToken);
+
+        created.EnsureSuccessStatusCode();
+
+        var issued = JsonNode.Parse(await created.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!;
+
+        var id = issued["token"]!["id"]!.GetValue<string>();
+        var was = issued["value"]!.GetValue<string>();
+
+        using var rotated = await human.PostAsync(
+            $"/api/v1/tokens/{id}/rotate", null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, rotated.StatusCode);
+
+        var next = JsonNode.Parse(await rotated.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!;
+
+        var successor = next["token"]!;
+
+        Assert.NotEqual(id, successor["id"]!.GetValue<string>());
+        Assert.Equal("the agent on the webshop", successor["name"]!.GetValue<string>());
+        Assert.Equal(
+            ["names", "read"],
+            successor["scopes"]!.AsArray().Select(scope => scope!.GetValue<string>()));
+        Assert.Single(successor["bindings"]!.AsArray());
+        Assert.Null(successor["revokedAt"]);
+
+        // The value is a value, and it is not the one it replaces.
+        var now = next["value"]!.GetValue<string>();
+
+        Assert.StartsWith("vaultaffe_agent_", now, StringComparison.Ordinal);
+        Assert.NotEqual(was, now);
+
+        // The old one is dead where it stands, with no overlap: a rotation is
+        // usually the answer to something having gone wrong.
+        using var stale = instance.ClientWith(was);
+        using var refused = await stale.GetAsync(
+            "/api/v1/me", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, refused.StatusCode);
+
+        using var fresh = instance.ClientWith(now);
+        using var admitted = await fresh.GetAsync(
+            "/api/v1/me", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, admitted.StatusCode);
+
+        // Both rows are there, and only one of them works. The old one is out of
+        // the way rather than out of the record.
+        var working = await ListAsync(human, revoked: false);
+
+        Assert.DoesNotContain(working, row => Id(row) == id);
+        Assert.Contains(working, row => Id(row) == successor["id"]!.GetValue<string>());
+
+        Assert.Contains(await ListAsync(human, revoked: true), row => Id(row) == id);
+
+        // One entry for one act, under the name that continues.
+        using var changes = await human.GetAsync(
+            "/api/v1/changes", TestContext.Current.CancellationToken);
+
+        var entries = JsonNode.Parse(await changes.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!["entries"]!.AsArray()
+            .Where(entry => entry!["about"]?.GetValue<string>() == "the agent on the webshop")
+            .Select(entry => entry!["action"]!.GetValue<string>())
+            .ToList();
+
+        Assert.Equal(["token-created", "token-rotated"], entries.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// A token issued to run for a while is renewed for that while again, counted
+    /// from now. What a person agreed to is the length, and nothing here
+    /// lengthens it.
+    /// </summary>
+    [Fact]
+    public async Task Rotating_gives_back_the_expiry_it_was_given_the_first_time()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        using var human = instance.ClientWith(await instance.StartAsync());
+
+        var runs = DateTimeOffset.UtcNow.AddDays(30);
+
+        using var created = await human.PostAsJsonAsync(
+            "/api/v1/tokens",
+            new { kind = "service", name = "the deploy job", expiresAt = runs },
+            TestContext.Current.CancellationToken);
+
+        created.EnsureSuccessStatusCode();
+
+        var issued = JsonNode.Parse(await created.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!["token"]!;
+
+        using var rotated = await human.PostAsync(
+            $"/api/v1/tokens/{issued["id"]!.GetValue<string>()}/rotate",
+            null,
+            TestContext.Current.CancellationToken);
+
+        rotated.EnsureSuccessStatusCode();
+
+        var successor = JsonNode.Parse(await rotated.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!["token"]!;
+
+        var before = issued["expiresAt"]!.GetValue<DateTimeOffset>();
+        var after = successor["expiresAt"]!.GetValue<DateTimeOffset>();
+
+        // The same thirty days, begun again: never earlier than the expiry it
+        // replaces, and never a day longer than the length it was given.
+        Assert.True(after >= before);
+        Assert.True(after - before < TimeSpan.FromMinutes(1));
+    }
+
+    /// <summary>
+    /// The exception the human-only list has, and the whole of it: an agent
+    /// replacing the value of the token it is itself holding gains nothing it did
+    /// not already have (ADR 0022).
+    /// </summary>
+    [Fact]
+    public async Task An_agent_rotates_the_token_it_is_holding()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        using var human = instance.ClientWith(await instance.StartAsync());
+
+        var issued = await CreateAsync(human, "agent", "the agent in this terminal");
+        var id = issued["token"]!["id"]!.GetValue<string>();
+
+        using var agent = instance.ClientWith(issued["value"]!.GetValue<string>());
+
+        using var rotated = await agent.PostAsync(
+            $"/api/v1/tokens/{id}/rotate", null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, rotated.StatusCode);
+
+        var next = JsonNode.Parse(await rotated.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!;
+
+        using var carrying = instance.ClientWith(next["value"]!.GetValue<string>());
+        using var admitted = await carrying.GetAsync(
+            "/api/v1/me", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, admitted.StatusCode);
+
+        // Still the same agent to the log, and still accountable to the same
+        // person: a rotation is a value, not a new identity.
+        var me = JsonNode.Parse(await admitted.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!;
+
+        Assert.Equal("the agent in this terminal", me["tokenName"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task An_agent_may_not_rotate_a_token_that_is_not_its_own()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        using var human = instance.ClientWith(await instance.StartAsync());
+
+        var mine = await CreateAsync(human, "agent", "the agent in this terminal");
+        var theirs = await CreateAsync(human, "agent", "the agent in the other terminal");
+
+        using var agent = instance.ClientWith(mine["value"]!.GetValue<string>());
+
+        using var response = await agent.PostAsync(
+            $"/api/v1/tokens/{theirs["token"]!["id"]!.GetValue<string>()}/rotate",
+            null,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("human-only", await IdentityTests.CodeOf(response));
+
+        var problem = JsonNode.Parse(await response.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!;
+
+        Assert.Equal("rotate-token", problem["humanAction"]!.GetValue<string>());
+    }
+
+    /// <summary>
+    /// And a service token not even its own: its value lives in a pipeline's
+    /// secret store or a deployment's environment, neither of which this instance
+    /// can write to, so rotating itself would replace a credential that works
+    /// with one nothing is holding.
+    /// </summary>
+    [Fact]
+    public async Task A_service_token_does_not_rotate_itself()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        using var human = instance.ClientWith(await instance.StartAsync());
+
+        var issued = await CreateAsync(human, "service", "the deploy job");
+
+        using var service = instance.ClientWith(issued["value"]!.GetValue<string>());
+
+        using var response = await service.PostAsync(
+            $"/api/v1/tokens/{issued["token"]!["id"]!.GetValue<string>()}/rotate",
+            null,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("human-only", await IdentityTests.CodeOf(response));
+    }
+
+    /// <summary>
+    /// A session is what signing in left behind, and signing in again is how
+    /// another one is got.
+    /// </summary>
+    [Fact]
+    public async Task A_session_is_not_rotated()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+
+        var session = await instance.StartAsync();
+        using var human = instance.ClientWith(session);
+
+        var mine = (await ListAsync(human, revoked: false))
+            .Single(row => row!["kind"]!.GetValue<string>() == "session");
+
+        using var response = await human.PostAsync(
+            $"/api/v1/tokens/{Id(mine)}/rotate", null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("validation", await IdentityTests.CodeOf(response));
+    }
+
+    /// <summary>
+    /// Putting a withdrawn credential back is creating one, and that is its own
+    /// act — under a name the revocation list is still showing.
+    /// </summary>
+    [Fact]
+    public async Task A_revoked_token_is_not_rotated()
+    {
+        await using var instance = await AnInstance.StartedAsync(postgres);
+        using var human = instance.ClientWith(await instance.StartAsync());
+
+        var issued = await CreateAsync(human, "agent", "the agent that was");
+        var id = issued["token"]!["id"]!.GetValue<string>();
+
+        using var revoked = await human.DeleteAsync(
+            $"/api/v1/tokens/{id}", TestContext.Current.CancellationToken);
+
+        revoked.EnsureSuccessStatusCode();
+
+        using var response = await human.PostAsync(
+            $"/api/v1/tokens/{id}/rotate", null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("validation", await IdentityTests.CodeOf(response));
+    }
+
+    private static async Task<JsonArray> ListAsync(HttpClient client, bool revoked)
+    {
+        using var response = await client.GetAsync(
+            revoked ? "/api/v1/tokens?revoked=true" : "/api/v1/tokens",
+            TestContext.Current.CancellationToken);
+
+        response.EnsureSuccessStatusCode();
+
+        return JsonNode.Parse(await response.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken))!.AsArray();
+    }
+
+    private static string Id(JsonNode? row) => row!["id"]!.GetValue<string>();
 
     private static async Task<JsonNode> CreateAsync(HttpClient client, string kind, string name)
     {

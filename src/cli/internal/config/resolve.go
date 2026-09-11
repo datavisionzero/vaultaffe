@@ -49,6 +49,12 @@ const (
 	EnvClaim = "VAULTAFFE_CLAIM"
 )
 
+// FromKeychain is what ResolveToken answers as the provenance of a token it read
+// out of the machine's own keychain. It is a sentence a person reads — `status`
+// prints it — and also the one thing a caller can compare against to know that
+// the token came from somewhere that is not a file.
+const FromKeychain = "the keychain"
+
 // Address answers which instance this invocation talks to: the flag, then the
 // environment, then the instance this machine logged in to.
 func (in Input) ResolveAddress() (string, error) {
@@ -91,7 +97,7 @@ func (in Input) ResolveToken(address string) (string, string, error) {
 	if in.ReadKeychain != nil {
 		token, err := in.ReadKeychain(address)
 		if err == nil && strings.TrimSpace(token) != "" {
-			return strings.TrimSpace(token), "the keychain", nil
+			return strings.TrimSpace(token), FromKeychain, nil
 		}
 	}
 

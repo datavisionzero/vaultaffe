@@ -29,9 +29,9 @@ public sealed record ChangeTokenRequest(
     IReadOnlyList<BindingShape>? Bindings = null);
 
 /// <summary>
-/// Token management (<c>docs/api.md</c>): create, list, change, revoke, purge. The
-/// value is shown exactly once, in the answer that created it, and no act here
-/// ever produces a second one.
+/// Token management (<c>docs/api.md</c>): create, list, change, rotate, revoke,
+/// purge. A value is shown exactly once, in the answer that issued it, and
+/// nothing here ever shows the same one twice.
 /// </summary>
 /// <remarks>
 /// Everything but listing is on the short list only a person may do
@@ -43,6 +43,15 @@ public sealed record ChangeTokenRequest(
 /// undone. Each says so by declaring it — the enforcement and the refusal are
 /// <c>Authority</c>'s, and there is no check in any handler. Listing is not on
 /// that list: a revocation list an agent cannot read is not one.
+/// <para>
+/// <b>Rotating is the one that cannot be declared here</b>, and the only endpoint
+/// in this file without a <c>.HumanOnly(…)</c> line. Whether it is a person's act
+/// depends on which token was named — an agent may replace the value of the one
+/// it is itself holding and no other (ADR 0022) — so the act asks <c>Authority</c>
+/// the same question through the same object, exactly as an act that needs a
+/// binding checked does. The rule and the refusal are still in one place; what
+/// moved is where the question is asked from.
+/// </para>
 /// </remarks>
 public static class TokenEndpoints
 {
@@ -73,10 +82,12 @@ public static class TokenEndpoints
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status403Forbidden);
 
-        api.MapGet("", async (ListTokens list, CancellationToken cancellation) =>
-                (await list.ExecuteAsync(cancellation)).Select(Shapes.Token).ToList())
+        api.MapGet("", async (
+                bool? revoked, ListTokens list, CancellationToken cancellation) =>
+                (await list.ExecuteAsync(revoked ?? false, cancellation))
+                    .Select(Shapes.Token).ToList())
             .WithName("ReadTokens")
-            .WithSummary("Every token of this organization, newest first, revoked ones included.")
+            .WithSummary("Every token of this organization that still works, newest first. `revoked=true` lists the revoked ones as well.")
             .ProducesProblem(StatusCodes.Status401Unauthorized);
 
         api.MapPatch("/{id:guid}", async (
@@ -107,6 +118,20 @@ public static class TokenEndpoints
             .HumanOnly(HumanAction.RevokeToken)
             .WithName("RevokeToken")
             .WithSummary("Revoke a token. Revoked rather than deleted, so its entries keep an author.")
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        api.MapPost("/{id:guid}/rotate", async (
+                Guid id, RotateToken rotate, CancellationToken cancellation) =>
+            {
+                var issued = await rotate.ExecuteAsync(id, cancellation);
+
+                return new TokenIssuedShape(Shapes.Token(issued.Token), issued.Value);
+            })
+            .WithName("RotateToken")
+            .WithSummary("Replace a token's value. The one it had stops working at once, and the new one appears here and nowhere else.")
+            .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound);

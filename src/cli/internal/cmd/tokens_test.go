@@ -172,9 +172,74 @@ func TestAnEmptyHalfIsSaidOnStderrAndLeavesStdoutEmpty(t *testing.T) {
 	if strings.TrimSpace(got.Stdout) != "" {
 		t.Fatalf("stdout is not empty:\n%s", got.Stdout)
 	}
-	if !strings.Contains(got.Stderr, "No agent or service token yet.") ||
-		!strings.Contains(got.Stderr, "No session on record.") {
+	// And it says which of the two kinds of empty it is. "There is nothing" to
+	// somebody whose tokens are all revoked is a sentence they have no way to
+	// see through.
+	if !strings.Contains(got.Stderr, "No agent or service token that works. Revoked ones are not shown: pass --revoked.") ||
+		!strings.Contains(got.Stderr, "No session that works. Revoked ones are not shown: pass --revoked.") {
 		t.Fatalf("it did not say the halves are empty:\n%s", got.Stderr)
+	}
+}
+
+// What still authenticates, unless the revoked ones were asked for. The row of
+// a revoked token stays for good — everything it signed in the change log keeps
+// an author that way — and that is a reason to keep it, not a reason to keep it
+// in front of the credentials somebody came here to read.
+func TestTheListingAsksForWhatWorksUnlessTheRevokedAreWanted(t *testing.T) {
+	in := startInstanceStub(t)
+	in.answer("GET /api/v1/tokens", http.StatusOK, tokens())
+
+	s := bound(newSession(t, in))
+
+	if got := s.run(t, "tokens"); got.Code != exit.OK {
+		t.Fatalf("exit %d\n%s", got.Code, got.Stderr)
+	}
+	if query := in.sent("GET", "/api/v1/tokens").Query; query != "" {
+		t.Fatalf("the default listing asked for %q, and the address should say what was typed", query)
+	}
+
+	in.Requests = nil
+
+	if got := s.run(t, "tokens", "--revoked"); got.Code != exit.OK {
+		t.Fatalf("exit %d\n%s", got.Code, got.Stderr)
+	}
+	if query := in.sent("GET", "/api/v1/tokens").Query; query != "revoked=true" {
+		t.Fatalf("--revoked asked for %q", query)
+	}
+}
+
+// Rotating prints the value once, the way creating does, and says in as many
+// words that the one it replaced is dead — a run still holding it fails on its
+// next request, and somebody has to be told that before they walk away.
+func TestRotatingPrintsTheValueOnceAndSaysTheOldOneIsGone(t *testing.T) {
+	const next = "vaultaffe_agent_theonethatreplacedit"
+
+	in := startInstanceStub(t)
+	in.answer("POST /api/v1/tokens/"+deployAgentID+"/rotate", http.StatusOK, map[string]any{
+		"token": map[string]any{
+			"id": ciServiceID, "kind": "agent", "name": "a deploy agent",
+			"scopes":   []string{"names", "read", "write", "delete"},
+			"bindings": []any{}, "reachesTheWholeOrganization": true,
+			"createdAt": "2026-05-01T00:00:00Z", "expiresAt": nil, "revokedAt": nil,
+		},
+		"value": next,
+	})
+
+	got := bound(newSession(t, in)).run(t, "tokens", "rotate", deployAgentID)
+	if got.Code != exit.OK {
+		t.Fatalf("exit %d\n%s", got.Code, got.Stderr)
+	}
+
+	// The value is data and goes to stdout; everything a person reads is on
+	// stderr, so `… | pbcopy` receives the value and nothing else.
+	if strings.TrimSpace(got.Stdout) != next {
+		t.Fatalf("stdout is not the value alone:\n%s", got.Stdout)
+	}
+	if strings.Contains(got.Stderr, next) {
+		t.Fatalf("the value reached the prose as well:\n%s", got.Stderr)
+	}
+	if !strings.Contains(got.Stderr, "revoked") || !strings.Contains(got.Stderr, "fails on its next request") {
+		t.Fatalf("it did not say the old value is dead:\n%s", got.Stderr)
 	}
 }
 

@@ -247,23 +247,31 @@ the human narrows it: **the point is attribution, not restriction.**
 **Human-only actions** are the short list where an agent's mistake could not be
 undone or the output is itself a secret: purging value history or deleted
 objects, the whole of a token's life after it is listed — creating, changing,
-revoking and purging one — and administering the organization and its
-users. **Exporting an environment is on the list too.** §6.4 does not enumerate it and
-§6.2 states it directly, and it belongs there for the list's own second reason:
-the output is itself a secret — every value of an environment at once.
+rotating, revoking and purging one — and administering the organization and its
+users. **Exporting an environment is on the list too.** §6.4 does not enumerate
+it and §6.2 states it directly, and it belongs there for the list's own second
+reason: the output is itself a secret — every value of an environment at once.
 
 They are refused with `human-only` for every token that is not a session,
 whatever its scopes — being human-only is not a permission a token can be given.
 
-The document carries `humanAction`: one of `purge`, `create-token`,
-`change-token`, `revoke-token`, `purge-token`, `administer-organization`,
-`export`.
+**`rotate-token` carries the list's one exception**, and it is an exception
+about the object rather than about the action: an agent may rotate the token it
+is itself holding, and no other ([ADR
+0022](./adr/0022-an-agent-renews-its-own-token.md)). Everything else here is
+refused by the declaration on the endpoint; this one is asked by the act,
+because whether it is a person's depends on which token was named — the same
+half-and-half the binding is checked with.
 
-`change-token` and `purge-token` are their own actions rather than shades of the
-two beside them, because the command a client points a person at is a different
-one and a refusal that named the wrong one would be worse than a refusal that
-named none
-([ADR 0010](./adr/0010-a-refusal-names-the-action-and-the-client-names-the-command.md)).
+The document carries `humanAction`: one of `purge`, `create-token`,
+`change-token`, `rotate-token`, `revoke-token`, `purge-token`,
+`administer-organization`, `export`.
+
+`change-token`, `rotate-token` and `purge-token` are their own actions rather
+than shades of the ones beside them, because the command a client points a
+person at is a different one and a refusal that named the wrong one would be
+worse than a refusal that named none ([ADR
+0010](./adr/0010-a-refusal-names-the-action-and-the-client-names-the-command.md)).
 
 ```json
 {
@@ -292,15 +300,26 @@ names, so that half is asked by the act, through the same object.
 
 ```
 POST   /api/v1/tokens              create a service or an agent token
-GET    /api/v1/tokens              every token of the organization, newest first
+GET    /api/v1/tokens              every token of the organization that works, newest first
+GET    …?revoked=true              the revoked ones as well
 PATCH  /api/v1/tokens/{id}         rename it, or change what it may do and reach
+POST   /api/v1/tokens/{id}/rotate  replace its value; the one it had is revoked
 DELETE /api/v1/tokens/{id}         revoke it
 POST   /api/v1/tokens/{id}/purge   remove a revoked one's row for good
 ```
 
 `POST /api/v1/tokens` creates a `service` or an `agent` token — a session comes
-from signing in, not from being created. `GET /api/v1/tokens` lists every token of
-the organization, newest first, revoked ones included and sessions among them.
+from signing in, not from being created. `GET /api/v1/tokens` lists every token
+of the organization that still authenticates, newest first, sessions among them;
+`?revoked=true` lists the revoked ones as well.
+
+**Revoked is hidden, not dropped.** The row stays for good, because everything
+it signed in the change log keeps an author that way — which is a reason to keep
+it and none at all to keep it in front of the credentials somebody is reading.
+The parameter **widens** rather than switching, which is the one way it differs
+from `?deleted=true` on the catalogue's listings: a deleted project is a bin of
+its own with a deadline on it, and a revoked token is a row of this same
+inventory, read beside the one that replaced it.
 
 **The value is in the answer that created it and in no listing, ever.**
 Everything but listing is human-only: a token is itself a secret, and one an
@@ -336,6 +355,35 @@ of something that reaches nothing. Neither the kind nor the expiry can be
 changed: a service token that became an agent token would be a different
 identity in the change log with the same history behind it, and what runs out is
 what a person agreed to when they issued it.
+
+#### Rotating one
+
+`POST /api/v1/tokens/{id}/rotate` replaces the value. The row the token had is
+revoked and a successor is issued beside it, carrying the same name, the same
+scopes and the same reach, and **the new value is in that answer and nowhere
+else**, exactly as the first one was.
+
+It is the one thing `PATCH` cannot do, and the reason is the same one that makes
+`PATCH` worth having: the instance keeps a hash. What a credential is called and
+what it may reach are arranged without anybody being visited; when what went
+wrong is the value itself, nothing short of another value helps.
+
+**The row is not overwritten**, so that the day the value in circulation changed
+is a fact this instance holds rather than one nobody wrote down ([ADR
+0022](./adr/0022-an-agent-renews-its-own-token.md)). **The old value is dead in
+the same transaction**, with no overlap: a rotation is usually the answer to a
+value having gone somewhere it should not be. **The expiry is the length it was
+given, begun again** — thirty days becomes thirty days from now, and a token
+with no expiry keeps having none. Nothing here lengthens what a person agreed
+to.
+
+A **session** is refused as validation, as it is for `PATCH`: signing in again
+is how another one is got. So is a **revoked** token — putting a withdrawn
+credential back is creating one, and that is its own act.
+
+The change log records it as **one** entry, `token-rotated`, under the name that
+continues: it is one act, and the fact somebody looks for afterwards is that the
+value changed on this day.
 
 #### Revoking and purging
 
@@ -704,7 +752,8 @@ its subject in `about` instead
 
 `joined`, `invited`, `invitation-withdrawn`, `password-set`, `email-changed`,
 `deactivated`, `reactivated`, `person-renamed`, `organization-renamed`,
-`token-created`, `token-changed`, `token-revoked`, `token-purged`.
+`token-created`, `token-changed`, `token-rotated`, `token-revoked`,
+`token-purged`.
 
 **`about` is an identifier and never a credential.** An address, a token's name,
 the organization's new name — never a password, never a token value, never the

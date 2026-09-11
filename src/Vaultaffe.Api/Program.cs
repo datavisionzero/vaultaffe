@@ -83,6 +83,7 @@ builder.Services.AddScoped<CreateToken>();
 builder.Services.AddScoped<ListTokens>();
 builder.Services.AddScoped<RevokeToken>();
 builder.Services.AddScoped<ChangeToken>();
+builder.Services.AddScoped<RotateToken>();
 builder.Services.AddScoped<PurgeToken>();
 builder.Services.AddScoped<BeginEnrollment>();
 builder.Services.AddScoped<ReadEnrollment>();

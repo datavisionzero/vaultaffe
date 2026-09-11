@@ -12,11 +12,20 @@ namespace Vaultaffe.Domain.Authorization;
 /// <para>
 /// It is an enum rather than a handful of booleans on a permission object because
 /// it is closed: another human-only action is a change to the specification, and
-/// the compiler should say so at every place that switches on this. Three of the
-/// seven are a token's whole lifecycle after it exists — <see cref="RevokeToken"/>,
-/// <see cref="ChangeToken"/> and <see cref="PurgeToken"/> — because §6.4's
-/// clause about creating and revoking is really about who holds the pen on a
-/// credential, and renaming is the only part of that a holder could not abuse.
+/// the compiler should say so at every place that switches on this. Four of the
+/// eight are a token's whole lifecycle after it exists — <see cref="RevokeToken"/>,
+/// <see cref="ChangeToken"/>, <see cref="RotateToken"/> and
+/// <see cref="PurgeToken"/> — because §6.4's clause about creating and revoking
+/// is really about who holds the pen on a credential, and renaming is the only
+/// part of that a holder could not abuse.
+/// </para>
+/// <para>
+/// <see cref="RotateToken"/> carries the one exception this list has. Being
+/// human-only is a property of the action everywhere else here; there it is a
+/// property of the action and the object together, because an agent replacing
+/// the value of the token it is already holding gains nothing it did not have
+/// and hands the answer to nobody
+/// (<see href="../../../docs/adr/0022-an-agent-renews-its-own-token.md">ADR 0022</see>).
 /// </para>
 /// </remarks>
 public enum HumanAction
@@ -71,6 +80,21 @@ public enum HumanAction
     /// it is the one removal this product cannot undo.
     /// </summary>
     PurgeToken = 7,
+
+    /// <summary>
+    /// Replacing a token's value: the row it had is revoked and a successor is
+    /// issued beside it, carrying the same name, scopes and reach. It is here for
+    /// the reason <see cref="CreateToken"/> is — the answer is a value, and one
+    /// printed into an agent's terminal is in that agent's context.
+    /// <para>
+    /// And it is the one action on this list an agent may do to <b>one</b>
+    /// object: the token it is itself holding. That is not a hole in the rule but
+    /// the rule read carefully — the holder of a value replacing it with another
+    /// value of the same reach issues nothing it did not already have, and the
+    /// answer goes to a file rather than to a screen (ADR 0022).
+    /// </para>
+    /// </summary>
+    RotateToken = 8,
 }
 
 /// <summary>
@@ -96,6 +120,7 @@ public static class HumanActions
         HumanAction.Export => "export",
         HumanAction.ChangeToken => "change-token",
         HumanAction.PurgeToken => "purge-token",
+        HumanAction.RotateToken => "rotate-token",
         _ => throw new ArgumentOutOfRangeException(
             nameof(action), action, "A human-only action without a name."),
     };
@@ -132,6 +157,12 @@ public static class HumanActions
             "Removing a revoked token for good is reserved for a person: it is the one removal "
             + "this product cannot undo. Hand it to a human, who does it under their own "
             + "session.",
+        HumanAction.RotateToken =>
+            "Rotating a token is reserved for a person: the answer is itself a secret, and one "
+            + "made here would be printed into this context. The exception is an agent replacing "
+            + "the token it is holding itself, by the path that writes the value to a file "
+            + "instead of showing it — and this is not that. Hand it to a human, who does it "
+            + "under their own session.",
         _ => throw new ArgumentOutOfRangeException(
             nameof(action), action, "A human-only action without a refusal."),
     };

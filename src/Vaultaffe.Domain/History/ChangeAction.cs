@@ -108,4 +108,13 @@ public enum ChangeAction
     /// <c>identity_name</c> has always been for.
     /// </summary>
     TokenPurged = 21,
+
+    /// <summary>
+    /// A token's value was replaced: the row it had was revoked and a successor
+    /// issued beside it, with the same name, the same scopes and the same reach.
+    /// One entry and not two, because it is one act — and the entry somebody
+    /// looks for afterwards, since a rotation is usually the answer to something
+    /// having gone wrong and the date it happened is the fact they came for.
+    /// </summary>
+    TokenRotated = 22,
 }

@@ -30,7 +30,8 @@ func TestEveryActionTheServerCanNameHasACommandHere(t *testing.T) {
 
 	// The wire spellings of Specification §6.4, as docs/api.md lists them.
 	for _, action := range []string{
-		"purge", "create-token", "revoke-token", "administer-organization", "export",
+		"purge", "create-token", "revoke-token", "rotate-token", "administer-organization",
+		"export",
 	} {
 		said := advice(root, action)
 

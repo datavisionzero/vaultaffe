@@ -163,6 +163,7 @@ public static class Recorded
         ChangeAction.PersonRenamed => "person-renamed",
         ChangeAction.OrganizationRenamed => "organization-renamed",
         ChangeAction.TokenCreated => "token-created",
+        ChangeAction.TokenRotated => "token-rotated",
         ChangeAction.TokenRevoked => "token-revoked",
         ChangeAction.TokenChanged => "token-changed",
         ChangeAction.TokenPurged => "token-purged",

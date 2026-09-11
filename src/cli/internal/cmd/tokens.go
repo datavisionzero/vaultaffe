@@ -17,6 +17,8 @@ import (
 )
 
 func newTokens(g *globals) *cobra.Command {
+	var revoked bool
+
 	command := &cobra.Command{
 		Use:     "tokens",
 		Aliases: []string{"token"},
@@ -26,7 +28,12 @@ func newTokens(g *globals) *cobra.Command {
 			"and one created through an agent's CLI would be printed into that agent's\n" +
 			"context; changing, because an agent that could widen a token could widen\n" +
 			"its own; revoking and purging, because taking a credential back is a\n" +
-			"person's act.\n\n" +
+			"person's act. Rotating is the one with an exception, and `renew` is it.\n\n" +
+			"**What still works, unless --revoked is passed.** A revoked token keeps its\n" +
+			"row for good, because everything it signed in the change log keeps an\n" +
+			"author that way — which is a reason to keep it and none at all to keep it\n" +
+			"in front of the credentials somebody came here to read. --revoked is the\n" +
+			"revocation list, the working tokens still among them.\n\n" +
 			"**Two lists and not one**, the way the console shows them. What an agent or\n" +
 			"a service acts under is created deliberately, carries a name and is one of a\n" +
 			"few; a session is what every sign-in leaves behind, has no name, and there\n" +
@@ -40,7 +47,14 @@ func newTokens(g *globals) *cobra.Command {
 				return err
 			}
 
-			resp, err := c.ReadTokensWithResponse(command.Context())
+			// The parameter is sent only when it was asked for, so that the
+			// address in a log or a proxy says what the person typed.
+			params := api.ReadTokensParams{}
+			if revoked {
+				params.Revoked = &revoked
+			}
+
+			resp, err := c.ReadTokensWithResponse(command.Context(), &params)
 			if err != nil {
 				return client.Transport(err)
 			}
@@ -58,7 +72,7 @@ func newTokens(g *globals) *cobra.Command {
 
 			if err := section(g, "Tokens",
 				"What an agent or a service acts under. Named, and never listed with a value.",
-				"No agent or service token yet.", issued); err != nil {
+				emptily(revoked, "agent or service token"), issued); err != nil {
 				return err
 			}
 
@@ -68,11 +82,23 @@ func newTokens(g *globals) *cobra.Command {
 
 			return section(g, "Sessions",
 				"One for every sign-in. They carry no name, because nobody gives one to a login.",
-				"No session on record.", sessions)
+				emptily(revoked, "session"), sessions)
 		},
 	}
-	command.AddCommand(newTokensCreate(g), newTokensChange(g), newTokensRevoke(g), newTokensPurge(g))
+	command.Flags().BoolVar(&revoked, "revoked", false, "the revoked ones as well, not only what still works")
+	command.AddCommand(newTokensCreate(g), newTokensChange(g), newTokensRotate(g), newTokensRevoke(g), newTokensPurge(g))
 	return command
+}
+
+// emptily says which of the two kinds of empty this is. "No session on record."
+// to somebody whose three sessions are all revoked is a sentence they have no
+// way to see through, and the difference between "there is nothing" and "there
+// is nothing here that still works" is the whole of what they asked.
+func emptily(revoked bool, what string) string {
+	if revoked {
+		return fmt.Sprintf("No %s on record, revoked ones included.", what)
+	}
+	return fmt.Sprintf("No %s that works. Revoked ones are not shown: pass --revoked.", what)
 }
 
 func newTokensCreate(g *globals) *cobra.Command {
@@ -160,6 +186,67 @@ func newTokensCreate(g *globals) *cobra.Command {
 	command.Flags().StringSliceVar(&scopes, "scopes", nil, "names, read, write, delete; the kind's default when omitted")
 	command.Flags().StringVar(&expires, "expires", "", "when it stops working, as 2026-12-31T00:00:00Z")
 	return command
+}
+
+func newTokensRotate(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use:   "rotate <id>",
+		Short: "Replace a token's value, printed once. A person only; `renew` is an agent's own.",
+		Long: "The one thing about a credential that `change` cannot touch. What it is\n" +
+			"called, what it may do and how far it reaches are arranged without anybody\n" +
+			"being visited, and none of that helps when what went wrong is the value\n" +
+			"itself.\n\n" +
+			"**The value it had stops working at once**, in the same act, with no\n" +
+			"overlap: a rotation is usually the answer to a value having gone somewhere\n" +
+			"it should not be, and a grace period is exactly as useful to whoever has it\n" +
+			"as to the run still holding the good one. A deployment or an agent carrying\n" +
+			"the old value fails on its next request until it is given this one.\n\n" +
+			"The name, the scopes and the reach come across untouched, and so does the\n" +
+			"length of the expiry — a token issued to run for thirty days gets thirty\n" +
+			"days again, counted from now. The old row stays, revoked, so that the day\n" +
+			"the value in circulation changed is a fact the instance holds; `tokens\n" +
+			"--revoked` is where it is read.\n\n" +
+			"It is human-only for the reason `create` is: the answer is a secret, and one\n" +
+			"printed here under an agent's token would be in that agent's context. The\n" +
+			"exception is an agent replacing the token it is holding itself, which is\n" +
+			"`renew` and never prints anything.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(command *cobra.Command, args []string) error {
+			id, err := parseID(args[0])
+			if err != nil {
+				return err
+			}
+
+			resolved, c, err := g.instance()
+			if err != nil {
+				return err
+			}
+
+			resp, err := c.RotateTokenWithResponse(command.Context(), id)
+			if err != nil {
+				return client.Transport(err)
+			}
+			if err := client.Check(resp.HTTPResponse, resp.Body); err != nil {
+				return err
+			}
+			if resp.JSON200 == nil {
+				return unreadable("a token")
+			}
+
+			issued := *resp.JSON200
+			fmt.Fprintf(g.msg(), "%s is rotated. It is the same %s token of %s, with %s, reaching %s.\n",
+				valueOr(issued.Token.Name, issued.Token.Id.String()), issued.Token.Kind, resolved.Address,
+				strings.Join(issued.Token.Scopes, ","), reach(issued.Token))
+			fmt.Fprintln(g.msg(), "The value it had is revoked, and whatever still holds it fails on its next request.")
+			fmt.Fprintln(g.msg(), "The new one is below and this is the only time it is shown.")
+
+			if g.json {
+				return render.JSON(g.out(), issued)
+			}
+			fmt.Fprintln(g.out(), issued.Value)
+			return nil
+		},
+	}
 }
 
 func newTokensRevoke(g *globals) *cobra.Command {
@@ -378,10 +465,11 @@ func bindingFor(ctx context.Context, c *client.Client, project, environment stri
 // is an inventory and reads by name; "where am I signed in, and is one of these
 // not mine" is a question about devices and reads newest first.
 //
-// What is still usable comes first in both, and what is revoked or run out
-// stays below it rather than disappearing: a revocation list that hides
-// revocations is not one, and a session that expired is how somebody notices a
-// device they forgot.
+// What is still usable comes first in both, and what is revoked or run out —
+// where it was asked for at all — stays below it rather than being dropped: a
+// --revoked listing that buried the revocations among the working tokens would
+// be answering a question nobody asked, and a session that expired is how
+// somebody notices a device they forgot.
 func apart(all []api.Token) (issued, sessions []api.Token) {
 	for _, token := range all {
 		if token.Kind == "session" {

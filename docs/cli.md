@@ -64,8 +64,9 @@ vaultaffe secrets purge-history  remove what a key used to hold — a person onl
 
 vaultaffe projects               the catalogue: list, create, delete, restore, purge
 vaultaffe environments           the environments of a project: the same five
-vaultaffe tokens                 list; create, change, revoke and purge — all but the list a person's alone
+vaultaffe tokens                 list; create, change, rotate, revoke and purge — all but the list a person's alone
 vaultaffe enroll                 ask a person for a token of this machine's own
+vaultaffe renew                  replace the token this machine holds with the next one
 
 vaultaffe users                  the people of the organization — an administrator only
 vaultaffe users invite           write an invitation and print its link, once
@@ -342,11 +343,13 @@ not recreate it".
 
 ```sh
 vaultaffe tokens                                       # id, kind, name, scopes, standing
+vaultaffe tokens --revoked                             # the revoked ones as well
 vaultaffe tokens create "the deploy agent" --kind agent
 vaultaffe tokens create "ci" --kind service --project billing --environment prod --scopes names,read
 vaultaffe tokens change <id> --name "the agent on the webshop"
 vaultaffe tokens change <id> --scopes names,read --project billing
 vaultaffe tokens change <id> --organization           # take every binding off
+vaultaffe tokens rotate <id>                          # the next value, printed once
 vaultaffe tokens revoke <id>
 vaultaffe tokens purge <id>                           # a revoked one, for good
 ```
@@ -357,8 +360,14 @@ person chose, and there are a few of them; a session is what every sign-in
 leaves behind, has no name, and there are as many as there are devices. The
 questions differ as much: "which standing credentials exist" is an inventory and
 reads by name, "where am I signed in" is about devices and reads newest first.
-What is revoked or run out stays below what still works in both — a revocation
-list that hides revocations is not one.
+What is revoked or run out stays below what still works in both.
+
+**What still works, unless `--revoked` is passed.** A revoked token keeps its
+row for good, because everything it signed in the change log keeps an author
+that way — which is a reason to keep it and none at all to keep it in front of
+the credentials somebody came here to read. `--revoked` is the revocation list,
+the working tokens still among them; an empty listing says which of the two
+kinds of empty it is rather than claiming there is nothing.
 
 The two **headings are on stderr and every row is on stdout**, like everything
 else in this CLI: what a person reads and what a program consumes are different
@@ -373,6 +382,15 @@ under an agent's own token would be printed straight into that agent's context;
 changing, because an agent that could widen a token could widen its own;
 revoking and purging, because taking a credential back is a person's act.
 Listing is not: a revocation list an agent cannot read is not one.
+
+**`rotate` replaces the value**, which is the one thing `change` cannot touch:
+the row it had is revoked and a successor issued beside it under the same name,
+scopes and reach, with the expiry it was given begun again. The old value is
+dead at once and whatever still holds it fails on its next request, so the
+command says so twice. It is human-only like `create`, and for the same reason —
+except where an agent is replacing the token it is holding itself, which is
+`renew` and prints nothing ([ADR
+0022](./adr/0022-an-agent-renews-its-own-token.md)).
 
 **The value is printed exactly once**, by the command that created it, and the
 sentence beside it says so. Scopes omitted mean the default of the kind —
@@ -437,6 +455,40 @@ person runs on this machine act as the agent — the mistake
 reaches the agent the way an agent's token always does: through
 `VAULTAFFE_TOKEN` in the environment of the process that starts it, which is the
 line this command prints when it is done.
+
+### And the next one, asking nobody
+
+```sh
+vaultaffe renew
+vaultaffe renew --token-file /etc/vaultaffe/runner.token
+```
+
+`enroll` asks a person for a token of this machine's own; `renew` replaces it
+with the next one and asks nobody. It is the one act on a credential an agent
+may do, and it is bounded on every side: the token it replaces is the one
+already in use, the successor carries the same name, the same scopes and the
+same reach, and the expiry is the length a person agreed to, begun again ([ADR
+0022](./adr/0022-an-agent-renews-its-own-token.md)). Nothing about it widens
+anything, which is why an agent may do it at all.
+
+**The value is never printed**, the same rule `enroll` follows and for the same
+reason. It goes into the file the token came from, or — where the token came
+from `VAULTAFFE_TOKEN`, as an agent's token does — into the file `enroll` would
+have used, named after what the token is called. `--token-file` says exactly
+where instead, and a file already holding some other token is refused rather
+than written over.
+
+**The value it replaces is dead the moment this returns.** A process cannot
+change the environment of the one that started it, so where the old value came
+from `VAULTAFFE_TOKEN` that variable now holds a string that authenticates
+nothing — in this process and in every process already started from it. The
+command says so, and prints the line that picks the new value up. What runs next
+reads the file.
+
+A session is refused here with a sentence rather than a refusal about an id
+nobody typed: signing in again is how a person gets another one. A service token
+is refused by the instance, because its value lives in a pipeline's secret store
+or a deployment's environment and this one cannot write to either.
 
 ## The people of the organization, and its name
 

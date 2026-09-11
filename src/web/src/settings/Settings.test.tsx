@@ -187,7 +187,7 @@ describe("the tokens", () => {
     expect(within(tokens).getByRole("button", { name: "New token" })).toBeInTheDocument();
   });
 
-  it("says so where a list has nothing in it", async () => {
+  it("says so where a list has nothing in it, and which kind of nothing it is", async () => {
     installInstance({
       "GET /api/v1/tokens": [{ ...theAgent, id: aPerson.tokenId, kind: "session", name: null }],
       "GET /api/v1/projects": [],
@@ -195,7 +195,82 @@ describe("the tokens", () => {
 
     renderUnderShell("/settings/tokens", <Shell />);
 
-    expect(await screen.findByText("No agent or service token yet.")).toBeInTheDocument();
+    // Not "there is nothing": what is hidden is said, because somebody whose
+    // tokens are all revoked has no way to see through the shorter sentence.
+    expect(
+      await screen.findByText("No agent or service token that works. Revoked ones are hidden."),
+    ).toBeInTheDocument();
+  });
+
+  // A revoked token keeps its row for good — everything it signed in the change
+  // log keeps an author that way — and that is a reason to keep it, not a reason
+  // to keep it in front of the credentials somebody came here to read.
+  it("leaves the revoked out until they are asked for", async () => {
+    const retired = {
+      ...theAgent,
+      id: "0199a000-0000-7000-8000-000000000034",
+      name: "the agent that was",
+      revokedAt: "2026-09-01T09:00:00+00:00",
+    };
+
+    const { calls } = installInstance({
+      "GET /api/v1/tokens": (request: Request) =>
+        new URL(request.url).searchParams.get("revoked") === "true"
+          ? [theAgent, retired]
+          : [theAgent],
+      "GET /api/v1/projects": [],
+    });
+
+    renderUnderShell("/settings/tokens", <Shell />);
+
+    expect(await screen.findByText("the agent in my terminal")).toBeInTheDocument();
+    expect(screen.queryByText("the agent that was")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "Show revoked" }));
+
+    // The screen asks the instance again rather than filtering what it already
+    // holds: what the instance holds is what the screen shows.
+    expect(await screen.findByText("the agent that was")).toBeInTheDocument();
+    expect(
+      calls.some((call) => new URL(call.url).searchParams.get("revoked") === "true"),
+    ).toBe(true);
+  });
+
+  // The one thing changing cannot touch. What survives is the credential: the
+  // name, the scopes and the reach come across, and what goes is the value that
+  // somebody had reason to worry about.
+  it("rotates a token and shows the new value once", async () => {
+    const { calls } = installInstance({
+      "GET /api/v1/tokens": [theAgent],
+      "GET /api/v1/projects": [],
+      [`POST /api/v1/tokens/${theAgent.id}/rotate`]: {
+        token: { ...theAgent, id: "0199a000-0000-7000-8000-000000000035" },
+        value: "vaultaffe_agent_theonethatreplacesit",
+      },
+    });
+
+    renderUnderShell("/settings/tokens", <Shell />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Rotate" }));
+
+    // It asks first, and the question says what it costs rather than asserting
+    // that it is safe.
+    expect(
+      await screen.findByText(/The value it has now stops working immediately/),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Rotate it" }));
+
+    expect(await screen.findByText("vaultaffe_agent_theonethatreplacesit")).toBeInTheDocument();
+    expect(
+      calls.some(
+        (call) =>
+          call.method === "POST" && call.url.endsWith(`/api/v1/tokens/${theAgent.id}/rotate`),
+      ),
+    ).toBe(true);
+
+    // And the way out of that screen is a button, not a scrollbar.
+    expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument();
   });
 
   // The act that exists because the value cannot change: a token that has to

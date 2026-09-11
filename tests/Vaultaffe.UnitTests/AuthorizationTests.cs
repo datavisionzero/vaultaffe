@@ -220,6 +220,59 @@ public sealed class AuthorizationTests
         Assert.Equal(RefusalCode.Unauthenticated, refusal.Code);
     }
 
+    /// <summary>
+    /// The one entry on the human-only list whose answer depends on which object
+    /// was named: an agent may replace the value of the token it is itself
+    /// holding (ADR 0022). It gains nothing by it — the successor carries the
+    /// same scopes and the same reach — and the answer reaches it through a file
+    /// rather than through a terminal.
+    /// </summary>
+    [Fact]
+    public void An_agent_rotates_the_token_it_is_holding()
+    {
+        var authority = Acting(A.Agent());
+
+        authority.RequiresAHumanOrTheAgentHolding(
+            authority.Caller.TokenId, HumanAction.RotateToken);
+    }
+
+    /// <summary>
+    /// And no other. An agent that could rotate somebody else's token could take
+    /// a credential away from whoever is holding it and read the replacement.
+    /// </summary>
+    [Fact]
+    public void And_no_other_token_than_that_one()
+    {
+        var authority = Acting(A.Agent());
+
+        var refusal = Assert.Throws<Refusal>(() => authority.RequiresAHumanOrTheAgentHolding(
+            Guid.NewGuid(), HumanAction.RotateToken));
+
+        Assert.Equal(RefusalCode.HumanOnly, refusal.Code);
+    }
+
+    /// <summary>
+    /// A service token not even its own: its value lives in a pipeline's secret
+    /// store or a deployment's environment, and this instance cannot write to
+    /// either, so what it would be left holding is a value nothing knows.
+    /// </summary>
+    [Fact]
+    public void A_service_token_does_not_rotate_itself()
+    {
+        var authority = Acting(A.Service());
+
+        Assert.Throws<Refusal>(() => authority.RequiresAHumanOrTheAgentHolding(
+            authority.Caller.TokenId, HumanAction.RotateToken));
+    }
+
+    [Fact]
+    public void A_person_rotates_any_of_them()
+    {
+        var authority = Acting(A.Session());
+
+        authority.RequiresAHumanOrTheAgentHolding(Guid.NewGuid(), HumanAction.RotateToken);
+    }
+
     private static Authority Acting(Caller caller) => new(new Whoever(caller));
 
     /// <summary>Callers, as the three kinds of token produce them.</summary>

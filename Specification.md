@@ -193,11 +193,16 @@ an opt-in action the user triggers, it is a plausible next step (§12).
 - Token management: create, name, revoke; for agent tokens also the binding and
   scope set (§6.4). The value is shown exactly once. A token that already exists
   can be **renamed, rescoped and rebound** afterwards, and a revoked one removed
-  from the list for good — the value is the one part that never changes, which
-  is what makes amending a token better than issuing a second one and going
-  round every machine holding the first. Token management is **human-only**: a
-  token is itself a secret, and one created by an agent through the CLI would
-  land on stdout — and thus in its context.
+  from the list for good — amending a token is better than issuing a second one
+  and going round every machine holding the first, and it works because the
+  value is untouched. Where the value itself is the problem, it is **rotated**:
+  the row it had is revoked and a successor issued beside it under the same
+  name, scopes and reach, with the expiry it was given begun again. The listing
+  shows what still authenticates and the revoked ones on request, because a
+  credential retired months ago is not what anybody opening that screen came to
+  see. Token management is **human-only**: a token is itself a secret, and one
+  created by an agent through the CLI would land on stdout — and thus in its
+  context.
 - Per-secret change history: who changed what, when — and whether "who" was a
   person or an agent.
 - The organization name is editable; exactly one organization ("Default") in the
@@ -210,6 +215,7 @@ The centerpiece. The target state for the secrets surface:
 ```bash
 vaultaffe login                       # device-code flow, session token into the OS keychain
 vaultaffe enroll "claude in ~/repo"   # the same flow for an agent's own token, never printed
+vaultaffe renew                       # and the successor to that token, asking nobody
 vaultaffe setup                       # binds the current directory to project + environment
 vaultaffe run -- npm run dev          # replaces itself with the process, secrets in the env
 vaultaffe secrets                     # lists names and status (set / empty) — never values
@@ -371,14 +377,24 @@ switch offered. Whether an agent may delete is a scope, not a doctrine.
 
 **Human-only actions** are the short list where an agent's mistake cannot be
 undone or where the output is itself a secret: **purging value history or
-deleted objects, the whole of a token's life — creating, changing, revoking and
-removing one — and administering the organization and its users.** Changing is
-on the list for the mirror image of the reason revoking is: an agent that could
-widen a token could widen its own, and a credential that grants itself scopes is
-not one anybody issued. These require a session token. The agent gets an error
-naming the human command or UI action. Everything else — reading, running,
-setting, recoverable deletion, restoring, creating projects and environments,
-rolling back — an agent may do by default.
+deleted objects, the whole of a token's life — creating, changing, rotating,
+revoking and removing one — and administering the organization and its users.**
+Changing is on the list for the mirror image of the reason revoking is: an agent
+that could widen a token could widen its own, and a credential that grants
+itself scopes is not one anybody issued. These require a session token. The
+agent gets an error naming the human command or UI action. Everything else —
+reading, running, setting, recoverable deletion, restoring, creating projects
+and environments, rolling back — an agent may do by default.
+
+**The list has one exception, and it is about an object rather than an action.**
+An agent may rotate the token it is itself holding: the successor carries the
+same name, the same scopes and the same reach, the value reaches it through the
+file `enroll` already writes rather than through a terminal, and the expiry is
+the length a person agreed to, begun again. Nothing about it widens anything,
+which is the whole of why it is allowed — an agent that could rotate somebody
+else's token could take a credential away from whoever holds it and read the
+replacement, and that is refused like every other act on a token that is not its
+own ([ADR 0022](docs/adr/0022-an-agent-renews-its-own-token.md)).
 
 The honest caveat: an agent token in the agent's process environment is plaintext
 on that machine. That is inside the threat model (§4). The human's session token,

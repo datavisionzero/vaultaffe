@@ -72,6 +72,40 @@ public sealed class Authority(ICallerIdentity identity)
                 + "else in this organization is yours to change; this is the one line there is.");
     }
 
+    /// <summary>
+    /// A person — or the very token being acted on, where the act is one a
+    /// holder may do to itself and to nothing else. The only such act is
+    /// rotation, and the only holder is an agent (ADR 0022).
+    /// </summary>
+    /// <remarks>
+    /// This is the one requirement an endpoint cannot declare, for the reason
+    /// the binding cannot be: whether it is met depends on which object the
+    /// request names, and that is the act's business. So the act asks it here,
+    /// through the same object, rather than growing a rule of its own — the
+    /// refusal is then the one every other human-only endpoint gives, naming the
+    /// same action.
+    /// <para>
+    /// A service token is deliberately not the holder this admits. It has
+    /// nowhere to put the answer: its value lives in a pipeline's secret store
+    /// or a deployment's environment, neither of which this instance can write
+    /// to, so a service token rotating itself would replace a credential that
+    /// works with one nothing is holding.
+    /// </para>
+    /// </remarks>
+    public Caller RequiresAHumanOrTheAgentHolding(Guid tokenId, HumanAction action)
+    {
+        var acting = Caller;
+
+        if (acting.IsHumanSession)
+        {
+            return acting;
+        }
+
+        return acting.TokenKind is TokenKind.Agent && acting.TokenId == tokenId
+            ? acting
+            : throw Refusal.HumanOnly(action);
+    }
+
     /// <summary>Every scope in <paramref name="wanted"/>, or a refusal naming what is missing.</summary>
     public Caller Requires(Scopes wanted)
     {
